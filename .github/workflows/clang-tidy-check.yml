@@ -1,0 +1,34 @@
+name: clang-tidy check
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tidy-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y cmake curl g++ git libgtest-dev libgmock-dev libbenchmark-dev libsdl2-dev libsodium-dev libpng-dev libbz2-dev wget
+
+    - name: CMake Configure
+      run: cmake -S. -Bbuild
+
+    - name: clang-tidy Check
+      uses: cpp-linter/cpp-linter-action@v2
+      id: linter
+      with:
+        database: build # directory containing compile_commands.json
+        style: '' # using an empty string here disables clang-format checks. We leave the existing clang-format-check workflow to run clang-format instead
+        tidy-checks: '' # using an empty string here instructs the action to use only checks from the .clang-tidy file
+        ignore-tidy: '3rdParty'

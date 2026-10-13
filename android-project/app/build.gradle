@@ -1,0 +1,123 @@
+def buildAsLibrary = project.hasProperty('BUILD_AS_LIBRARY')
+def buildAsApplication = !buildAsLibrary
+def webgpuBuild = project.hasProperty('webgpu')
+// -Pwebgpu builds DamnationX (SDL3 + Dawn, HD art) under its own identity so it installs beside stock DevilutionX.
+def appIdBase = webgpuBuild ? 'net.damnationx' : 'org.diasurgical.devilutionx'
+def appLabel = webgpuBuild ? 'DamnationX' : '@string/app_name'
+// Release signing: pass -PreleaseStoreFile=... -PreleaseStorePassword=... -PreleaseKeyAlias=... -PreleaseKeyPassword=...
+// (or put them in ~/.gradle/gradle.properties, or set DX_RELEASE_STORE_FILE etc.). Without them assembleRelease is unsigned.
+def releaseSigning = { String name, String env -> project.findProperty(name) ?: System.env[env] }
+def releaseStoreFile = releaseSigning('releaseStoreFile', 'DX_RELEASE_STORE_FILE')
+if (buildAsApplication) {
+	apply plugin: 'com.android.application'
+} else {
+	apply plugin: 'com.android.library'
+}
+
+android {
+	ndkVersion '29.0.14206865'
+	compileSdk 35
+	defaultConfig {
+		buildConfigField 'boolean', 'WEBGPU', webgpuBuild ? 'true' : 'false'
+		if (buildAsApplication) {
+			applicationId appIdBase
+		}
+		minSdkVersion webgpuBuild ? 24 : 21
+		targetSdkVersion 35
+		versionCode 29
+		versionName project.file('../../VERSION').text.trim()
+		manifestPlaceholders = [
+			appLabel: appLabel,
+			appShortcuts: webgpuBuild ? '@xml/shortcuts_damnationx' : '@xml/shortcuts',
+		]
+		externalNativeBuild {
+			cmake {
+				arguments "-DANDROID_STL=c++_static"
+				if (webgpuBuild) {
+					arguments "-DUSE_SDL3=ON", "-DDEVILUTIONX_WEBGPU=ON", "-DDEVILUTIONX_SYSTEM_SDL3=OFF", "-DDEVILUTIONX_STATIC_SDL3=OFF"
+					// The one-time Dawn build is memory-hungry: -PdawnJobs=N (default 6).
+					arguments "-DDEVILUTIONX_DAWN_JOBS=" + (project.findProperty('dawnJobs') ?: '6')
+					// -PdawnBuildRoot=DIR shares the fetched/built Dawn between checkouts (install-<rev>-Android-<abi>-static).
+					if (project.hasProperty('dawnBuildRoot')) {
+						arguments "-DDEVILUTIONX_DAWN_BUILD_ROOT=" + project.property('dawnBuildRoot')
+					}
+				}
+				if (webgpuBuild) {
+					abiFilters 'arm64-v8a', 'x86_64'
+				} else {
+					abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+				}
+			}
+		}
+	}
+	signingConfigs {
+		if (releaseStoreFile) {
+			release {
+				storeFile file(releaseStoreFile)
+				storePassword releaseSigning('releaseStorePassword', 'DX_RELEASE_STORE_PASSWORD')
+				keyAlias releaseSigning('releaseKeyAlias', 'DX_RELEASE_KEY_ALIAS')
+				keyPassword releaseSigning('releaseKeyPassword', 'DX_RELEASE_KEY_PASSWORD')
+			}
+		}
+	}
+	buildTypes {
+		debug {
+			applicationIdSuffix ".dev"
+			manifestPlaceholders = [
+				appLabel: webgpuBuild ? 'DamnationX (Dev)' : '@string/app_name',
+				appShortcuts: webgpuBuild ? '@xml/shortcuts_damnationx_dev' : '@xml/shortcuts',
+			]
+		}
+		release {
+			if (releaseStoreFile) {
+				signingConfig signingConfigs.release
+			}
+			minifyEnabled false
+			proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+		}
+	}
+	namespace 'org.diasurgical.devilutionx'
+	if (webgpuBuild) {
+		sourceSets.main.java.srcDirs = [
+			'src/main/java/org/diasurgical/devilutionx',
+			'src/webgpu/java'
+		]
+	}
+	buildFeatures {
+		buildConfig true
+	}
+	applicationVariants.all { variant ->
+		tasks["merge${variant.name.capitalize()}Assets"]
+			.dependsOn("externalNativeBuild${variant.name.capitalize()}")
+	}
+	if (!project.hasProperty('EXCLUDE_NATIVE_LIBS')) {
+		sourceSets.main {
+			jniLibs.srcDir 'libs'
+		}
+		externalNativeBuild {
+			cmake {
+				path '../../CMakeLists.txt'
+				version "3.31.0+"
+				buildStagingDirectory System.env.DevilutionX_Android_StagingDirectory
+			}
+		}
+
+	}
+
+	if (buildAsLibrary) {
+		libraryVariants.all { variant ->
+			variant.outputs.each { output ->
+				def outputFile = output.outputFile
+				if (outputFile != null && outputFile.name.endsWith(".aar")) {
+					def fileName = "org.diasurgical.devilutionx.aar"
+					output.outputFile = new File(outputFile.parent, fileName)
+				}
+			}
+		}
+	}
+}
+
+dependencies {
+	implementation fileTree(include: ['*.jar'], dir: 'libs')
+	implementation 'com.android.support.constraint:constraint-layout:2.0.4'
+}

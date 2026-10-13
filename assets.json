@@ -1,0 +1,39 @@
+{
+ "schema": 1,
+ "terrain": [
+  {"id": "dungeon.floor", "material": "floor", "pivot": {"x": 8, "y": 8},
+   "frames": [{"path": "assets/samples/dungeon/floor.png", "width": 16, "height": 16}]},
+  {"id": "dungeon.wall", "material": "wall", "pivot": {"x": 8, "y": 15},
+   "frames": [{"path": "assets/samples/dungeon/wall.png", "width": 16, "height": 16}]},
+  {"id": "dungeon.lava", "material": "lava", "pivot": {"x": 8, "y": 8},
+   "frames": [{"path": "assets/samples/dungeon/lava-0.png", "width": 16, "height": 16},
+              {"path": "assets/samples/dungeon/lava-1.png", "width": 16, "height": 16},
+              {"path": "assets/samples/dungeon/lava-2.png", "width": 16, "height": 16}]}
+ ],
+ "player": [],
+ "equipment": [],
+ "monster": [
+  {"id": "monster.gloomling", "material": "gloomling", "pivot": {"x": 8, "y": 15},
+   "frames": [{"path": "assets/samples/monster/gloomling-idle-0.png", "width": 16, "height": 16, "direction": "s"},
+              {"path": "assets/samples/monster/gloomling-idle-1.png", "width": 16, "height": 16, "direction": "s"},
+              {"path": "assets/samples/monster/gloomling-idle-2.png", "width": 16, "height": 16, "direction": "s"},
+              {"path": "assets/samples/monster/gloomling-idle-3.png", "width": 16, "height": 16, "direction": "s"}]}
+ ],
+ "item": [
+  {"id": "item.starshard", "material": "starshard", "pivot": {"x": 8, "y": 8},
+   "frames": [{"path": "assets/samples/item/starshard.png", "width": 16, "height": 16}]}
+ ],
+ "spell": [],
+ "materials": [
+  {"id": "floor", "normal": "assets/samples/dungeon/floor.normal.png"},
+  {"id": "wall", "normal": "assets/samples/dungeon/wall.normal.png"},
+  {"id": "lava", "normal": "assets/samples/dungeon/lava.normal.png", "emission": "assets/samples/dungeon/lava.emissive.png"},
+  {"id": "gloomling", "normal": "assets/samples/monster/gloomling.normal.png", "emission": "assets/samples/monster/gloomling.emissive.png"},
+  {"id": "starshard", "normal": "assets/samples/item/starshard.normal.png", "emission": "assets/samples/item/starshard.emissive.png"},
+  {"id": "ui"}
+ ],
+ "ui_frames": [
+  {"id": "ui.spellbook", "material": "ui",
+   "frames": [{"path": "assets/samples/ui/spellbook.png", "width": 16, "height": 16}]}
+ ]
+}

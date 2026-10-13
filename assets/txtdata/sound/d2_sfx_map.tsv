@@ -1,0 +1,479 @@
+diablo	d2	d2hd	note
+# Non-speech Diablo -> Diablo II sound map. d2 = classic path (no ext; .wav in MPQ, .flac in D2R CASC).
+# d2hd = D2R advanced path (no ext); empty = insert hd after data in d2, fall back to classic.
+monsters\acid\acida1.wav	data\global\sfx\monster\frogdemon\attack1	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_attack_1_hd	acid beast -> frog demon attack 1
+monsters\acid\acida2.wav	data\global\sfx\monster\frogdemon\attack2	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_attack_2_hd	acid beast -> frog demon attack 2
+monsters\acid\acidd1.wav	data\global\sfx\monster\frogdemon\death1	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_death_1_hd	acid beast -> frog demon death 1
+monsters\acid\acidd2.wav	data\global\sfx\monster\frogdemon\death2	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_death_2_hd	acid beast -> frog demon death 2
+monsters\acid\acidh1.wav	data\global\sfx\monster\frogdemon\gethit1	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_gethit_1_hd	acid beast -> frog demon hit 1
+monsters\acid\acidh2.wav	data\global\sfx\monster\frogdemon\gethit2	data\hd\global\sfx\monster\frogdemon\monster_frogdemon_gethit_2_hd	acid beast -> frog demon hit 2
+monsters\acid\acids1.wav	data\global\sfx\monster\sandmaggot\spit3	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_spit_3_hd	acid beast -> frog demon special 1
+monsters\acid\acids2.wav	data\global\sfx\monster\sandmaggot\spit1	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_spit_1_hd	acid beast -> frog demon special 2
+monsters\bat\bata1.wav	data\global\sfx\monster\batdemon\attack1	data\hd\global\sfx\monster\batdemon\monster_batdemon_attack_1_hd	fiend -> bat demon attack 1
+monsters\bat\bata2.wav	data\global\sfx\monster\batdemon\attack2	data\hd\global\sfx\monster\batdemon\monster_batdemon_attack_2_hd	fiend -> bat demon attack 2
+monsters\bat\batd1.wav	data\global\sfx\monster\batdemon\death1	data\hd\global\sfx\monster\batdemon\monster_batdemon_death_1_hd	fiend -> bat demon death 1
+monsters\bat\batd2.wav	data\global\sfx\monster\batdemon\death2	data\hd\global\sfx\monster\batdemon\monster_batdemon_death_2_hd	fiend -> bat demon death 2
+monsters\bat\bath1.wav	data\global\sfx\monster\batdemon\gethit1	data\hd\global\sfx\monster\batdemon\monster_batdemon_gethit_1_hd	fiend -> bat demon hit 1
+monsters\bat\bath2.wav	data\global\sfx\monster\batdemon\gethit2	data\hd\global\sfx\monster\batdemon\monster_batdemon_gethit_2_hd	fiend -> bat demon hit 2
+monsters\black\blacka1.wav	data\global\sfx\monster\undeadhorror\attack1	data\hd\global\sfx\monster\undeadhorror\attack1_hd	black knight -> doom knight attack 1
+monsters\black\blacka2.wav	data\global\sfx\monster\undeadhorror\attack2	data\hd\global\sfx\monster\undeadhorror\attack2_hd	black knight -> doom knight attack 2
+monsters\black\blackd1.wav	data\global\sfx\monster\undeadhorror\death1	data\hd\global\sfx\monster\undeadhorror\death1_hd	black knight -> doom knight death 1
+monsters\black\blackd2.wav	data\global\sfx\monster\undeadhorror\death2	data\hd\global\sfx\monster\undeadhorror\death2_hd	black knight -> doom knight death 2
+monsters\black\blackh1.wav	data\global\sfx\monster\undeadhorror\gethit1	data\hd\global\sfx\monster\undeadhorror\gethit1_hd	black knight -> doom knight hit 1
+monsters\black\blackh2.wav	data\global\sfx\monster\undeadhorror\gethit2	data\hd\global\sfx\monster\undeadhorror\gethit2_hd	black knight -> doom knight hit 2
+monsters\darkmage\dmaga1.wav	data\global\sfx\monster\zakarumhighpriest\attack3	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_attack_3_hd	malignus -> council member attack 1
+monsters\darkmage\dmaga2.wav	data\global\sfx\monster\zakarumhighpriest\attack4	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_attack_4_hd	malignus -> council member attack 2
+monsters\darkmage\dmagd1.wav	data\global\sfx\monster\zakarumhighpriest\death3	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_death_3_hd	malignus -> council member death 1
+monsters\darkmage\dmagd2.wav	data\global\sfx\monster\zakarumhighpriest\death4	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_death_4_hd	malignus -> council member death 2
+monsters\darkmage\dmagh1.wav	data\global\sfx\monster\zakarumhighpriest\gethit3	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_gethit_3_hd	malignus -> council member hit 1
+monsters\darkmage\dmagh2.wav	data\global\sfx\monster\zakarumhighpriest\gethit4	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_gethit_4_hd	malignus -> council member hit 2
+monsters\demskel\demskla1.wav	data\global\sfx\combat\weapon\bigswish1	data\hd\global\sfx\combat\weapon\weapon_giant_1_hd	bone demon (unused) attack 1
+monsters\demskel\demskla2.wav	data\global\sfx\combat\weapon\bigswish2	data\hd\global\sfx\combat\weapon\weapon_giant_2_hd	bone demon (unused) attack 2
+monsters\demskel\demskld1.wav	data\global\sfx\monster\skeleton\death5	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_5_hd	bone demon (unused) death 1
+monsters\demskel\demskld2.wav	data\global\sfx\monster\skeleton\death1	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_1_hd	bone demon (unused) death 2
+monsters\demskel\demsklh1.wav	data\global\sfx\monster\skeleton\gethit6	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_6_hd	bone demon (unused) hit 1
+monsters\demskel\demsklh2.wav	data\global\sfx\monster\skeleton\gethit7	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_7_hd	bone demon (unused) hit 2
+monsters\demskel\demskls1.wav	data\global\sfx\monster\skeleton\raiseskeleton	data\hd\global\sfx\monster\bonefetish\raiseskeleton1_hd	bone demon (unused) special 1
+monsters\demskel\demskls2.wav	data\global\sfx\monster\skeleton\raiseskeleton	data\hd\global\sfx\monster\bonefetish\raiseskeleton1_hd	bone demon (unused) special 2
+monsters\diablo\diabloa1.wav	data\global\sfx\monster\diablo\attack1	data\hd\global\sfx\monster\diablo\attack1_hd	diablo attack 1
+monsters\diablo\diabloa2.wav	data\global\sfx\monster\diablo\attack2	data\hd\global\sfx\monster\diablo\attack2_hd	diablo attack 2
+monsters\diablo\diablod1.wav	data\global\sfx\monster\diablo\death	data\hd\global\sfx\monster\diablo\death_hd	diablo death 1
+monsters\diablo\diablod2.wav	data\global\sfx\monster\diablo\deathhit	data\hd\global\sfx\monster\diablo\deathhit_hd	diablo death 2
+monsters\diablo\diabloh1.wav	data\global\sfx\monster\diablo\gethit1	data\hd\global\sfx\monster\diablo\gethit1_hd	diablo hit 1
+monsters\diablo\diabloh2.wav	data\global\sfx\monster\diablo\gethit2	data\hd\global\sfx\monster\diablo\gethit2_hd	diablo hit 2
+monsters\diablo\diablos1.wav	data\global\sfx\monster\diablo\laugh1	data\hd\global\sfx\monster\diablo\laugh1_hd	diablo special 1
+monsters\diablo\diablos2.wav	data\global\sfx\monster\diablo\yell	data\hd\global\sfx\monster\diablo\yell_hd	diablo special 2
+monsters\falspear\phalla1.wav	data\global\sfx\monster\fallen\roar1	data\hd\global\sfx\monster\fallen\roar1_hd	fallen (spear) attack 1
+monsters\falspear\phalla2.wav	data\global\sfx\monster\fallen\roar3	data\hd\global\sfx\monster\fallen\roar3_hd	fallen (spear) attack 2
+monsters\falspear\phalld1.wav	data\global\sfx\monster\fallen\death1	data\hd\global\sfx\monster\fallen\death1_hd	fallen (spear) death 1
+monsters\falspear\phalld2.wav	data\global\sfx\monster\fallen\death2	data\hd\global\sfx\monster\fallen\death2_hd	fallen (spear) death 2
+monsters\falspear\phallh1.wav	data\global\sfx\monster\fallen\gethit1	data\hd\global\sfx\monster\fallen\gethit1_hd	fallen (spear) hit 1
+monsters\falspear\phallh2.wav	data\global\sfx\monster\fallen\gethit2	data\hd\global\sfx\monster\fallen\gethit2_hd	fallen (spear) hit 2
+monsters\falspear\phalls1.wav	data\global\sfx\monster\fallen\warcry1	data\hd\global\sfx\monster\fallen\warcry1_hd	fallen (spear) special 1
+monsters\falspear\phalls2.wav	data\global\sfx\monster\fallen\warcry2	data\hd\global\sfx\monster\fallen\warcry2_hd	fallen (spear) special 2
+monsters\falsword\falla1.wav	data\global\sfx\monster\fallen\roar5	data\hd\global\sfx\monster\fallen\roar5_hd	fallen (sword) attack 1
+monsters\falsword\falla2.wav	data\global\sfx\monster\fallen\roar6	data\hd\global\sfx\monster\fallen\roar6_hd	fallen (sword) attack 2
+monsters\falsword\falld1.wav	data\global\sfx\monster\fallen\death3	data\hd\global\sfx\monster\fallen\death3_hd	fallen (sword) death 1
+monsters\falsword\falld2.wav	data\global\sfx\monster\fallen\death4	data\hd\global\sfx\monster\fallen\death4_hd	fallen (sword) death 2
+monsters\falsword\fallh1.wav	data\global\sfx\monster\fallen\gethit3	data\hd\global\sfx\monster\fallen\gethit3_hd	fallen (sword) hit 1
+monsters\falsword\fallh2.wav	data\global\sfx\monster\fallen\gethit6	data\hd\global\sfx\monster\fallen\gethit6_hd	fallen (sword) hit 2
+monsters\falsword\falls1.wav	data\global\sfx\monster\fallen\warcry3	data\hd\global\sfx\monster\fallen\warcry3_hd	fallen (sword) special 1
+monsters\falsword\falls2.wav	data\global\sfx\monster\fallen\warcry4	data\hd\global\sfx\monster\fallen\warcry4_hd	fallen (sword) special 2
+monsters\fat\fata1.wav	data\global\sfx\monster\pinhead\attack1	data\hd\global\sfx\monster\pinhead\monster_pinhead_attack_1_hd	overlord -> blunderbore attack 1
+monsters\fat\fata2.wav	data\global\sfx\monster\pinhead\attack2	data\hd\global\sfx\monster\pinhead\monster_pinhead_attack_2_hd	overlord -> blunderbore attack 2
+monsters\fat\fatd1.wav	data\global\sfx\monster\pinhead\death1	data\hd\global\sfx\monster\pinhead\monster_pinhead_death_1_hd	overlord -> blunderbore death 1
+monsters\fat\fatd2.wav	data\global\sfx\monster\pinhead\death2	data\hd\global\sfx\monster\pinhead\monster_pinhead_death_2_hd	overlord -> blunderbore death 2
+monsters\fat\fath1.wav	data\global\sfx\monster\pinhead\gethit1	data\hd\global\sfx\monster\pinhead\monster_pinhead_gethit_1_hd	overlord -> blunderbore hit 1
+monsters\fat\fath2.wav	data\global\sfx\monster\pinhead\gethit2	data\hd\global\sfx\monster\pinhead\monster_pinhead_gethit_2_hd	overlord -> blunderbore hit 2
+monsters\fatc\fatca1.wav	data\global\sfx\monster\smith\attack1	data\hd\global\sfx\monster\smith\monster_smith_attack_1_hd	butcher -> the smith attack 1
+monsters\fatc\fatca2.wav	data\global\sfx\monster\smith\attack2	data\hd\global\sfx\monster\smith\monster_smith_attack_2_hd	butcher -> the smith attack 2
+monsters\fatc\fatcd1.wav	data\global\sfx\monster\smith\death	data\hd\global\sfx\monster\smith\monster_smith_death_hd	butcher -> the smith death 1
+monsters\fatc\fatcd2.wav	data\global\sfx\monster\smith\death	data\hd\global\sfx\monster\smith\monster_smith_death_hd	butcher -> the smith death 2
+monsters\fatc\fatch1.wav	data\global\sfx\monster\smith\gethit1	data\hd\global\sfx\monster\smith\monster_smith_gethit_1_hd	butcher -> the smith hit 1
+monsters\fatc\fatch2.wav	data\global\sfx\monster\smith\gethit2	data\hd\global\sfx\monster\smith\monster_smith_gethit_2_hd	butcher -> the smith hit 2
+monsters\fireman\firema1.wav	data\global\sfx\monster\golemfire\attack1	data\hd\global\sfx\monster\golemfire\attack1_hd	incinerator -> fire golem attack 1
+monsters\fireman\firema2.wav	data\global\sfx\monster\golemfire\attack2	data\hd\global\sfx\monster\golemfire\attack2_hd	incinerator -> fire golem attack 2
+monsters\fireman\firemd1.wav	data\global\sfx\monster\golemfire\firegolemdeath	data\hd\global\sfx\monster\golemfire\firegolemdeath_hd	incinerator -> fire golem death 1
+monsters\fireman\firemd2.wav	data\global\sfx\monster\golemfire\firegolemdeath	data\hd\global\sfx\monster\golemfire\firegolemdeath_hd	incinerator -> fire golem death 2
+monsters\fireman\firemh1.wav	data\global\sfx\monster\golemfire\gethit1	data\hd\global\sfx\monster\golemfire\gethit1_hd	incinerator -> fire golem hit 1
+monsters\fireman\firemh2.wav	data\global\sfx\monster\golemfire\gethit2	data\hd\global\sfx\monster\golemfire\gethit2_hd	incinerator -> fire golem hit 2
+monsters\gargoyle\gargoa1.wav	data\global\sfx\monster\vulturedemon\attack1	data\hd\global\sfx\monster\vulturedemon\monster_vulturedemon_attack_1_hd	gargoyle -> vulture demon / stone death attack 1
+monsters\gargoyle\gargoa2.wav	data\global\sfx\monster\vulturedemon\attack2	data\hd\global\sfx\monster\vulturedemon\monster_vulturedemon_attack_2_hd	gargoyle -> vulture demon / stone death attack 2
+monsters\gargoyle\gargod1.wav	data\global\sfx\monster\gargoyletrap\death2	data\hd\global\sfx\monster\gargoyletrap\monster_gargoyletrap_death_2_hd	gargoyle -> vulture demon / stone death death 1
+monsters\gargoyle\gargod2.wav	data\global\sfx\monster\gargoyletrap\death4	data\hd\global\sfx\monster\gargoyletrap\monster_gargoyletrap_death_4_hd	gargoyle -> vulture demon / stone death death 2
+monsters\gargoyle\gargoh1.wav	data\global\sfx\monster\vulturedemon\gethit1	data\hd\global\sfx\monster\vulturedemon\monster_vulturedemon_gethit_1_hd	gargoyle -> vulture demon / stone death hit 1
+monsters\gargoyle\gargoh2.wav	data\global\sfx\monster\vulturedemon\gethit2	data\hd\global\sfx\monster\vulturedemon\monster_vulturedemon_gethit_2_hd	gargoyle -> vulture demon / stone death hit 2
+monsters\goatbow\goatba1.wav	data\global\sfx\monster\goatman\attack3	data\hd\global\sfx\monster\goatman\monster_goatman_attack_3_hd	goat archer attack 1
+monsters\goatbow\goatba2.wav	data\global\sfx\monster\goatman\attack4	data\hd\global\sfx\monster\goatman\monster_goatman_attack_4_hd	goat archer attack 2
+monsters\goatbow\goatbd1.wav	data\global\sfx\monster\goatman\death3	data\hd\global\sfx\monster\goatman\monster_goatman_death_3_hd	goat archer death 1
+monsters\goatbow\goatbd2.wav	data\global\sfx\monster\goatman\death4	data\hd\global\sfx\monster\goatman\monster_goatman_death_4_hd	goat archer death 2
+monsters\goatbow\goatbh1.wav	data\global\sfx\monster\goatman\gethit3	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_3_hd	goat archer hit 1
+monsters\goatbow\goatbh2.wav	data\global\sfx\monster\goatman\gethit4	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_4_hd	goat archer hit 2
+monsters\goatmace\goata1.wav	data\global\sfx\monster\goatman\attack1	data\hd\global\sfx\monster\goatman\monster_goatman_attack_1_hd	goat man attack 1
+monsters\goatmace\goata2.wav	data\global\sfx\monster\goatman\attack2	data\hd\global\sfx\monster\goatman\monster_goatman_attack_2_hd	goat man attack 2
+monsters\goatmace\goatd1.wav	data\global\sfx\monster\goatman\death1	data\hd\global\sfx\monster\goatman\monster_goatman_death_1_hd	goat man death 1
+monsters\goatmace\goatd2.wav	data\global\sfx\monster\goatman\death2	data\hd\global\sfx\monster\goatman\monster_goatman_death_2_hd	goat man death 2
+monsters\goatmace\goath1.wav	data\global\sfx\monster\goatman\gethit1	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_1_hd	goat man hit 1
+monsters\goatmace\goath2.wav	data\global\sfx\monster\goatman\gethit2	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_2_hd	goat man hit 2
+monsters\golem\golma1.wav	data\global\sfx\monster\golemclay\attack1	data\hd\global\sfx\monster\golemclay\attack1_hd	golem -> clay golem attack 1
+monsters\golem\golma2.wav	data\global\sfx\monster\golemclay\attack2	data\hd\global\sfx\monster\golemclay\attack2_hd	golem -> clay golem attack 2
+monsters\golem\golmd1.wav	data\global\sfx\monster\golemclay\claygolemdeath	data\hd\global\sfx\monster\golemclay\claygolemdeath_hd	golem -> clay golem death 1
+monsters\golem\golmd2.wav	data\global\sfx\monster\golemclay\claygolemdeath	data\hd\global\sfx\monster\golemclay\claygolemdeath_hd	golem -> clay golem death 2
+monsters\golem\golmh1.wav	data\global\sfx\monster\golemclay\gethit1	data\hd\global\sfx\monster\golemclay\gethit1_hd	golem -> clay golem hit 1
+monsters\golem\golmh2.wav	data\global\sfx\monster\golemclay\gethit2	data\hd\global\sfx\monster\golemclay\gethit2_hd	golem -> clay golem hit 2
+monsters\mage\magea1.wav	data\global\sfx\monster\zakarumhighpriest\attack1	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_attack_1_hd	counselor -> council member attack 1
+monsters\mage\magea2.wav	data\global\sfx\monster\zakarumhighpriest\attack2	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_attack_2_hd	counselor -> council member attack 2
+monsters\mage\maged1.wav	data\global\sfx\monster\zakarumhighpriest\death1	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_death_1_hd	counselor -> council member death 1
+monsters\mage\maged2.wav	data\global\sfx\monster\zakarumhighpriest\death2	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_death_2_hd	counselor -> council member death 2
+monsters\mage\mageh1.wav	data\global\sfx\monster\zakarumhighpriest\gethit1	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_gethit_1_hd	counselor -> council member hit 1
+monsters\mage\mageh2.wav	data\global\sfx\monster\zakarumhighpriest\gethit2	data\hd\global\sfx\monster\zakarumhighpriest\monster_zakarumhighpriest_gethit_2_hd	counselor -> council member hit 2
+monsters\magma\magmaa1.wav	data\global\sfx\monster\imp\attack1	data\hd\global\sfx\monster\imp\monster_imp_attack_1_hd	magma demon -> imp attack 1
+monsters\magma\magmaa2.wav	data\global\sfx\monster\imp\attack2	data\hd\global\sfx\monster\imp\monster_imp_attack_2_hd	magma demon -> imp attack 2
+monsters\magma\magmad1.wav	data\global\sfx\monster\imp\death1	data\hd\global\sfx\monster\imp\monster_imp_death_1_hd	magma demon -> imp death 1
+monsters\magma\magmad2.wav	data\global\sfx\monster\imp\death2	data\hd\global\sfx\monster\imp\monster_imp_death_2_hd	magma demon -> imp death 2
+monsters\magma\magmah1.wav	data\global\sfx\monster\imp\gethit1	data\hd\global\sfx\monster\imp\monster_imp_gethit_1_hd	magma demon -> imp hit 1
+monsters\magma\magmah2.wav	data\global\sfx\monster\imp\gethit2	data\hd\global\sfx\monster\imp\monster_imp_gethit_2_hd	magma demon -> imp hit 2
+monsters\magma\magmas1.wav	data\global\sfx\monster\imp\cast3	data\hd\global\sfx\monster\imp\monster_imp_cast_3_hd	magma demon -> imp special 1
+monsters\magma\magmas2.wav	data\global\sfx\monster\imp\impmissile	data\hd\global\sfx\monster\imp\monster_imp_impmissile_hd	magma demon -> imp special 2
+monsters\mega\megaa1.wav	data\global\sfx\monster\megademon\attack1	data\hd\global\sfx\monster\megademon\attack1_hd	balrog -> megademon (Balrog) attack 1
+monsters\mega\megaa2.wav	data\global\sfx\monster\megademon\attack2	data\hd\global\sfx\monster\megademon\attack2_hd	balrog -> megademon (Balrog) attack 2
+monsters\mega\megad1.wav	data\global\sfx\monster\megademon\death1	data\hd\global\sfx\monster\megademon\death1_hd	balrog -> megademon (Balrog) death 1
+monsters\mega\megad2.wav	data\global\sfx\monster\megademon\death2	data\hd\global\sfx\monster\megademon\death2_hd	balrog -> megademon (Balrog) death 2
+monsters\mega\megah1.wav	data\global\sfx\monster\megademon\gethit1	data\hd\global\sfx\monster\megademon\gethit1_hd	balrog -> megademon (Balrog) hit 1
+monsters\mega\megah2.wav	data\global\sfx\monster\megademon\gethit2	data\hd\global\sfx\monster\megademon\gethit2_hd	balrog -> megademon (Balrog) hit 2
+monsters\mega\megas1.wav	data\global\sfx\monster\megademon\neutral1	data\hd\global\sfx\monster\megademon\neutral1_hd	balrog -> megademon (Balrog) special 1
+monsters\mega\megas2.wav	data\global\sfx\monster\megademon\neutral2	data\hd\global\sfx\monster\megademon\neutral2_hd	balrog -> megademon (Balrog) special 2
+monsters\newsfx\biclopa1.wav	data\global\sfx\monster\yeti\attack1	data\hd\global\sfx\monster\yeti\monster_yeti_attack_1_hd	biclops -> yeti/brute attack 1
+monsters\newsfx\biclopa2.wav	data\global\sfx\monster\yeti\attack2	data\hd\global\sfx\monster\yeti\monster_yeti_attack_2_hd	biclops -> yeti/brute attack 2
+monsters\newsfx\biclopd1.wav	data\global\sfx\monster\yeti\death1	data\hd\global\sfx\monster\yeti\monster_yeti_death_1_hd	biclops -> yeti/brute death 1
+monsters\newsfx\biclopd2.wav	data\global\sfx\monster\yeti\death2	data\hd\global\sfx\monster\yeti\monster_yeti_death_2_hd	biclops -> yeti/brute death 2
+monsters\newsfx\bicloph1.wav	data\global\sfx\monster\yeti\gethit1	data\hd\global\sfx\monster\yeti\monster_yeti_gethit_1_hd	biclops -> yeti/brute hit 1
+monsters\newsfx\bicloph2.wav	data\global\sfx\monster\yeti\gethit2	data\hd\global\sfx\monster\yeti\monster_yeti_gethit_2_hd	biclops -> yeti/brute hit 2
+monsters\newsfx\crypta1.wav	data\global\sfx\monster\deathmauler\attack1	data\hd\global\sfx\monster\deathmauler\attack1_hd	crypt demon -> death mauler attack 1
+monsters\newsfx\crypta2.wav	data\global\sfx\monster\deathmauler\attack2	data\hd\global\sfx\monster\deathmauler\attack2_hd	crypt demon -> death mauler attack 2
+monsters\newsfx\cryptd1.wav	data\global\sfx\monster\deathmauler\death1	data\hd\global\sfx\monster\deathmauler\death1_hd	crypt demon -> death mauler death 1
+monsters\newsfx\cryptd2.wav	data\global\sfx\monster\deathmauler\death2	data\hd\global\sfx\monster\deathmauler\death2_hd	crypt demon -> death mauler death 2
+monsters\newsfx\crypth1.wav	data\global\sfx\monster\deathmauler\gethit1	data\hd\global\sfx\monster\deathmauler\gethit1_hd	crypt demon -> death mauler hit 1
+monsters\newsfx\crypth2.wav	data\global\sfx\monster\deathmauler\gethit2	data\hd\global\sfx\monster\deathmauler\gethit2_hd	crypt demon -> death mauler hit 2
+monsters\newsfx\crypts1.wav	data\global\sfx\monster\deathmauler\special1	data\hd\global\sfx\monster\deathmauler\special1_hd	crypt demon -> death mauler special 1
+monsters\newsfx\crypts2.wav	data\global\sfx\monster\deathmauler\special2	data\hd\global\sfx\monster\deathmauler\special2_hd	crypt demon -> death mauler special 2
+monsters\newsfx\defilea1.wav	data\global\sfx\monster\putriddefiler\attack1	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_attack_1_hd	hell bug -> putrid defiler attack 1
+monsters\newsfx\defilea2.wav	data\global\sfx\monster\putriddefiler\attack2	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_attack_2_hd	hell bug -> putrid defiler attack 2
+monsters\newsfx\defiled1.wav	data\global\sfx\monster\putriddefiler\death1	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_death_1_hd	hell bug -> putrid defiler death 1
+monsters\newsfx\defiled2.wav	data\global\sfx\monster\putriddefiler\death2	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_death_2_hd	hell bug -> putrid defiler death 2
+monsters\newsfx\defileh1.wav	data\global\sfx\monster\putriddefiler\gethit1	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_gethit_1_hd	hell bug -> putrid defiler hit 1
+monsters\newsfx\defileh2.wav	data\global\sfx\monster\putriddefiler\gethit2	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_gethit_2_hd	hell bug -> putrid defiler hit 2
+monsters\newsfx\defiles1.wav	data\global\sfx\monster\putriddefiler\impregnate	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_impregnate_1_hd	hell bug -> putrid defiler special 1
+monsters\newsfx\defiles2.wav	data\global\sfx\monster\putriddefiler\zap	data\hd\global\sfx\monster\putriddefiler\monster_putriddefiler_zap_1_hd	hell bug -> putrid defiler special 2
+monsters\newsfx\fleshta1.wav	data\global\sfx\monster\regurgitator\attack1	data\hd\global\sfx\monster\regurgitator\attack1_hd	flesh thing -> regurgitator attack 1
+monsters\newsfx\fleshta2.wav	data\global\sfx\monster\regurgitator\attack2	data\hd\global\sfx\monster\regurgitator\attack2_hd	flesh thing -> regurgitator attack 2
+monsters\newsfx\fleshtd1.wav	data\global\sfx\monster\regurgitator\death1	data\hd\global\sfx\monster\regurgitator\death1_hd	flesh thing -> regurgitator death 1
+monsters\newsfx\fleshtd2.wav	data\global\sfx\monster\regurgitator\death2	data\hd\global\sfx\monster\regurgitator\death2_hd	flesh thing -> regurgitator death 2
+monsters\newsfx\fleshth1.wav	data\global\sfx\monster\regurgitator\gethit1	data\hd\global\sfx\monster\regurgitator\gethit1_hd	flesh thing -> regurgitator hit 1
+monsters\newsfx\fleshth2.wav	data\global\sfx\monster\regurgitator\gethit2	data\hd\global\sfx\monster\regurgitator\gethit2_hd	flesh thing -> regurgitator hit 2
+monsters\newsfx\fleshts1.wav	data\global\sfx\monster\regurgitator\eat1	data\hd\global\sfx\monster\regurgitator\eat1_hd	flesh thing -> regurgitator special 1
+monsters\newsfx\fleshts2.wav	data\global\sfx\monster\regurgitator\eat2	data\hd\global\sfx\monster\regurgitator\eat2_hd	flesh thing -> regurgitator special 2
+monsters\newsfx\ftwina1.wav	data\global\sfx\monster\sandraider\attack1	data\hd\global\sfx\monster\sandraider\attack1_hd	felltwin -> sand raider attack 1
+monsters\newsfx\ftwina2.wav	data\global\sfx\monster\sandraider\attack2	data\hd\global\sfx\monster\sandraider\attack2_hd	felltwin -> sand raider attack 2
+monsters\newsfx\ftwind1.wav	data\global\sfx\monster\sandraider\death1	data\hd\global\sfx\monster\sandraider\death1_hd	felltwin -> sand raider death 1
+monsters\newsfx\ftwind2.wav	data\global\sfx\monster\sandraider\death2	data\hd\global\sfx\monster\sandraider\death2_hd	felltwin -> sand raider death 2
+monsters\newsfx\ftwinh1.wav	data\global\sfx\monster\sandraider\gethit1	data\hd\global\sfx\monster\sandraider\gethit1_hd	felltwin -> sand raider hit 1
+monsters\newsfx\ftwinh2.wav	data\global\sfx\monster\sandraider\gethit2	data\hd\global\sfx\monster\sandraider\gethit2_hd	felltwin -> sand raider hit 2
+monsters\newsfx\gdiggra1.wav	data\global\sfx\monster\mummy\attack1	data\hd\global\sfx\monster\mummy\monster_mummy_attack_1_hd	gravedigger -> mummy attack 1
+monsters\newsfx\gdiggra2.wav	data\global\sfx\monster\mummy\attack2	data\hd\global\sfx\monster\mummy\monster_mummy_attack_2_hd	gravedigger -> mummy attack 2
+monsters\newsfx\gdiggrd1.wav	data\global\sfx\monster\mummy\death1	data\hd\global\sfx\monster\mummy\monster_mummy_death_1_hd	gravedigger -> mummy death 1
+monsters\newsfx\gdiggrd2.wav	data\global\sfx\monster\mummy\death2	data\hd\global\sfx\monster\mummy\monster_mummy_death_2_hd	gravedigger -> mummy death 2
+monsters\newsfx\gdiggrh1.wav	data\global\sfx\monster\mummy\gethit1	data\hd\global\sfx\monster\mummy\monster_mummy_gethit_1_hd	gravedigger -> mummy hit 1
+monsters\newsfx\gdiggrh2.wav	data\global\sfx\monster\mummy\gethit2	data\hd\global\sfx\monster\mummy\monster_mummy_gethit_2_hd	gravedigger -> mummy hit 2
+monsters\newsfx\gdiggrs1.wav	data\global\sfx\monster\mummy\neutral1	data\hd\global\sfx\monster\mummy\monster_mummy_neutral_1_hd	gravedigger -> mummy special 1
+monsters\newsfx\gdiggrs2.wav	data\global\sfx\monster\mummy\neutral2	data\hd\global\sfx\monster\mummy\monster_mummy_neutral_2_hd	gravedigger -> mummy special 2
+monsters\newsfx\hboara1.wav	data\global\sfx\monster\minion\attack1	data\hd\global\sfx\monster\minion\monster_minion_attack_1_hd	hellboar -> fire boar (minion) attack 1
+monsters\newsfx\hboara2.wav	data\global\sfx\monster\minion\attack2	data\hd\global\sfx\monster\minion\monster_minion_attack_2_hd	hellboar -> fire boar (minion) attack 2
+monsters\newsfx\hboard1.wav	data\global\sfx\monster\minion\deatha1	data\hd\global\sfx\monster\minion\monster_minion_deatha_1_hd	hellboar -> fire boar (minion) death 1
+monsters\newsfx\hboard2.wav	data\global\sfx\monster\minion\deatha2	data\hd\global\sfx\monster\minion\monster_minion_deatha_2_hd	hellboar -> fire boar (minion) death 2
+monsters\newsfx\hboarh1.wav	data\global\sfx\monster\minion\gethit1	data\hd\global\sfx\monster\minion\monster_minion_gethit_1_hd	hellboar -> fire boar (minion) hit 1
+monsters\newsfx\hboarh2.wav	data\global\sfx\monster\minion\gethit2	data\hd\global\sfx\monster\minion\monster_minion_gethit_2_hd	hellboar -> fire boar (minion) hit 2
+monsters\newsfx\hdemona1.wav	data\global\sfx\monster\vilemother\attack1	data\hd\global\sfx\monster\vilemother\attack1_hd	hork demon -> vile mother attack 1
+monsters\newsfx\hdemona2.wav	data\global\sfx\monster\vilemother\attack2	data\hd\global\sfx\monster\vilemother\attack2_hd	hork demon -> vile mother attack 2
+monsters\newsfx\hdemond1.wav	data\global\sfx\monster\vilemother\death1	data\hd\global\sfx\monster\vilemother\death1_hd	hork demon -> vile mother death 1
+monsters\newsfx\hdemond2.wav	data\global\sfx\monster\vilemother\death2	data\hd\global\sfx\monster\vilemother\death2_hd	hork demon -> vile mother death 2
+monsters\newsfx\hdemonh1.wav	data\global\sfx\monster\vilemother\gethit1	data\hd\global\sfx\monster\vilemother\gethit1_hd	hork demon -> vile mother hit 1
+monsters\newsfx\hdemonh2.wav	data\global\sfx\monster\vilemother\gethit2	data\hd\global\sfx\monster\vilemother\gethit2_hd	hork demon -> vile mother hit 2
+monsters\newsfx\hdemons1.wav	data\global\sfx\monster\vilemother\birth1	data\hd\global\sfx\monster\vilemother\birth1_hd	hork demon -> vile mother special 1
+monsters\newsfx\hdemons2.wav	data\global\sfx\monster\vilemother\birth2	data\hd\global\sfx\monster\vilemother\birth2_hd	hork demon -> vile mother special 2
+monsters\newsfx\helbata1.wav	data\global\sfx\monster\batdemon\attack3	data\hd\global\sfx\monster\batdemon\monster_batdemon_attack_3_hd	firebat/hellbat -> bat demon attack 1
+monsters\newsfx\helbata2.wav	data\global\sfx\monster\batdemon\attack4	data\hd\global\sfx\monster\batdemon\monster_batdemon_attack_4_hd	firebat/hellbat -> bat demon attack 2
+monsters\newsfx\helbatd1.wav	data\global\sfx\monster\batdemon\death3	data\hd\global\sfx\monster\batdemon\monster_batdemon_death_3_hd	firebat/hellbat -> bat demon death 1
+monsters\newsfx\helbatd2.wav	data\global\sfx\monster\batdemon\death4	data\hd\global\sfx\monster\batdemon\monster_batdemon_death_4_hd	firebat/hellbat -> bat demon death 2
+monsters\newsfx\helbath1.wav	data\global\sfx\monster\batdemon\gethit3	data\hd\global\sfx\monster\batdemon\monster_batdemon_gethit_3_hd	firebat/hellbat -> bat demon hit 1
+monsters\newsfx\helbath2.wav	data\global\sfx\monster\batdemon\gethit4	data\hd\global\sfx\monster\batdemon\monster_batdemon_gethit_4_hd	firebat/hellbat -> bat demon hit 2
+monsters\newsfx\hspawna1.wav	data\global\sfx\monster\vilechild\attack1	data\hd\global\sfx\monster\vilechild\attack1_hd	hork spawn -> vile child attack 1
+monsters\newsfx\hspawna2.wav	data\global\sfx\monster\vilechild\attack2	data\hd\global\sfx\monster\vilechild\attack2_hd	hork spawn -> vile child attack 2
+monsters\newsfx\hspawnd1.wav	data\global\sfx\monster\vilechild\death1	data\hd\global\sfx\monster\vilechild\death1_hd	hork spawn -> vile child death 1
+monsters\newsfx\hspawnd2.wav	data\global\sfx\monster\vilechild\death2	data\hd\global\sfx\monster\vilechild\death2_hd	hork spawn -> vile child death 2
+monsters\newsfx\hspawnh1.wav	data\global\sfx\monster\vilechild\gethit1	data\hd\global\sfx\monster\vilechild\gethit1_hd	hork spawn -> vile child hit 1
+monsters\newsfx\hspawnh2.wav	data\global\sfx\monster\vilechild\gethit2	data\hd\global\sfx\monster\vilechild\gethit2_hd	hork spawn -> vile child hit 2
+monsters\newsfx\hspawns1.wav	data\global\sfx\monster\vilechild\walk1	data\hd\global\sfx\monster\vilechild\walk1_hd	hork spawn -> vile child special 1
+monsters\newsfx\hspawns2.wav	data\global\sfx\monster\vilechild\walk2	data\hd\global\sfx\monster\vilechild\walk2_hd	hork spawn -> vile child special 2
+monsters\newsfx\kbrutea1.wav	data\global\sfx\monster\fallen\roar6	data\hd\global\sfx\monster\fallen\roar6_hd	devil kin brute (unused) -> fallen attack 1
+monsters\newsfx\kbrutea2.wav	data\global\sfx\monster\fallen\roar7	data\hd\global\sfx\monster\fallen\roar7_hd	devil kin brute (unused) -> fallen attack 2
+monsters\newsfx\kbruted1.wav	data\global\sfx\monster\fallen\death6	data\hd\global\sfx\monster\fallen\death6_hd	devil kin brute (unused) -> fallen death 1
+monsters\newsfx\kbruted2.wav	data\global\sfx\monster\fallen\death7	data\hd\global\sfx\monster\fallen\death7_hd	devil kin brute (unused) -> fallen death 2
+monsters\newsfx\kbruteh1.wav	data\global\sfx\monster\fallen\gethit6	data\hd\global\sfx\monster\fallen\gethit6_hd	devil kin brute (unused) -> fallen hit 1
+monsters\newsfx\kbruteh2.wav	data\global\sfx\monster\fallen\gethit7	data\hd\global\sfx\monster\fallen\gethit7_hd	devil kin brute (unused) -> fallen hit 2
+monsters\newsfx\licha1.wav	data\global\sfx\monster\vampire\attack1	data\hd\global\sfx\monster\vampire\monster_vampire_attack_1_hd	lich/arch lich -> vampire attack 1
+monsters\newsfx\licha2.wav	data\global\sfx\monster\vampire\attack2	data\hd\global\sfx\monster\vampire\monster_vampire_attack_2_hd	lich/arch lich -> vampire attack 2
+monsters\newsfx\lichd1.wav	data\global\sfx\monster\vampire\death1	data\hd\global\sfx\monster\vampire\monster_vampire_death_1_hd	lich/arch lich -> vampire death 1
+monsters\newsfx\lichd2.wav	data\global\sfx\monster\vampire\death2	data\hd\global\sfx\monster\vampire\monster_vampire_death_2_hd	lich/arch lich -> vampire death 2
+monsters\newsfx\lichh1.wav	data\global\sfx\monster\vampire\gethit1	data\hd\global\sfx\monster\vampire\monster_vampire_gethit_1_hd	lich/arch lich -> vampire hit 1
+monsters\newsfx\lichh2.wav	data\global\sfx\monster\vampire\gethit2	data\hd\global\sfx\monster\vampire\monster_vampire_gethit_2_hd	lich/arch lich -> vampire hit 2
+monsters\newsfx\lichs1.wav	data\global\sfx\monster\vampire\cast	data\hd\global\sfx\monster\vampire\monster_vampire_cast_hd	lich/arch lich -> vampire special 1
+monsters\newsfx\lichs2.wav	data\global\sfx\monster\vampire\cast	data\hd\global\sfx\monster\vampire\monster_vampire_cast_hd	lich/arch lich -> vampire special 2
+monsters\newsfx\lworma1.wav	data\global\sfx\monster\tentacle\attack1	data\hd\global\sfx\monster\tentacle\monster_tentacle_attack_1_hd	lashworm -> tentacle attack 1
+monsters\newsfx\lworma2.wav	data\global\sfx\monster\tentacle\attack2	data\hd\global\sfx\monster\tentacle\monster_tentacle_attack_2_hd	lashworm -> tentacle attack 2
+monsters\newsfx\lwormd1.wav	data\global\sfx\monster\tentacle\death1	data\hd\global\sfx\monster\tentacle\monster_tentacle_death_1_hd	lashworm -> tentacle death 1
+monsters\newsfx\lwormd2.wav	data\global\sfx\monster\tentacle\death2	data\hd\global\sfx\monster\tentacle\monster_tentacle_death_2_hd	lashworm -> tentacle death 2
+monsters\newsfx\lwormh1.wav	data\global\sfx\monster\tentacle\gethit1	data\hd\global\sfx\monster\tentacle\monster_tentacle_gethit_1_hd	lashworm -> tentacle hit 1
+monsters\newsfx\lwormh2.wav	data\global\sfx\monster\tentacle\gethit2	data\hd\global\sfx\monster\tentacle\monster_tentacle_gethit_2_hd	lashworm -> tentacle hit 2
+monsters\newsfx\nakrula1.wav	data\global\sfx\monster\izual\attack1	data\hd\global\sfx\monster\izual\attack1_hd	na-krul -> izual attack 1
+monsters\newsfx\nakrula2.wav	data\global\sfx\monster\izual\attack2	data\hd\global\sfx\monster\izual\attack2_hd	na-krul -> izual attack 2
+monsters\newsfx\nakruld1.wav	data\global\sfx\monster\izual\death	data\hd\global\sfx\monster\izual\death_hd	na-krul -> izual death 1
+monsters\newsfx\nakruld2.wav	data\global\sfx\monster\izual\death	data\hd\global\sfx\monster\izual\death_hd	na-krul -> izual death 2
+monsters\newsfx\nakrulh1.wav	data\global\sfx\monster\izual\gethit1	data\hd\global\sfx\monster\izual\gethit1_hd	na-krul -> izual hit 1
+monsters\newsfx\nakrulh2.wav	data\global\sfx\monster\izual\gethit2	data\hd\global\sfx\monster\izual\gethit2_hd	na-krul -> izual hit 2
+monsters\newsfx\nakruls1.wav	data\global\sfx\monster\izual\fadein	data\hd\global\sfx\monster\izual\fadein_hd	na-krul -> izual special 1
+monsters\newsfx\nakruls2.wav	data\global\sfx\monster\izual\fadeout	data\hd\global\sfx\monster\izual\fadeout_hd	na-krul -> izual special 2
+monsters\newsfx\psycoa1.wav	data\global\sfx\monster\willowisp\attack1	data\hd\global\sfx\monster\willowisp\monster_willowisp_attack_1_hd	psychorb/necromorb -> gloam attack 1
+monsters\newsfx\psycoa2.wav	data\global\sfx\monster\willowisp\attack2	data\hd\global\sfx\monster\willowisp\monster_willowisp_attack_2_hd	psychorb/necromorb -> gloam attack 2
+monsters\newsfx\psycod1.wav	data\global\sfx\monster\willowisp\death1	data\hd\global\sfx\monster\willowisp\monster_willowisp_death_1_hd	psychorb/necromorb -> gloam death 1
+monsters\newsfx\psycod2.wav	data\global\sfx\monster\willowisp\death2	data\hd\global\sfx\monster\willowisp\monster_willowisp_death_2_hd	psychorb/necromorb -> gloam death 2
+monsters\newsfx\psycoh1.wav	data\global\sfx\monster\willowisp\gethit1	data\hd\global\sfx\monster\willowisp\monster_willowisp_gethit_1_hd	psychorb/necromorb -> gloam hit 1
+monsters\newsfx\psycoh2.wav	data\global\sfx\monster\willowisp\gethit2	data\hd\global\sfx\monster\willowisp\monster_willowisp_gethit_2_hd	psychorb/necromorb -> gloam hit 2
+monsters\newsfx\reapera1.wav	data\global\sfx\monster\reanimatedhorde\attack3	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_attack_3_hd	reaper -> reanimated horde attack 1
+monsters\newsfx\reapera2.wav	data\global\sfx\monster\reanimatedhorde\attack4	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_attack_4_hd	reaper -> reanimated horde attack 2
+monsters\newsfx\reaperd1.wav	data\global\sfx\monster\reanimatedhorde\death3	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_death_3_hd	reaper -> reanimated horde death 1
+monsters\newsfx\reaperd2.wav	data\global\sfx\monster\reanimatedhorde\death4	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_death_4_hd	reaper -> reanimated horde death 2
+monsters\newsfx\reaperh1.wav	data\global\sfx\monster\reanimatedhorde\gethit3	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_gethit_3_hd	reaper -> reanimated horde hit 1
+monsters\newsfx\reaperh2.wav	data\global\sfx\monster\reanimatedhorde\gethit4	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_gethit_4_hd	reaper -> reanimated horde hit 2
+monsters\newsfx\satyra1.wav	data\global\sfx\monster\goatman\attack3	data\hd\global\sfx\monster\goatman\monster_goatman_attack_3_hd	satyr lord (unused) -> goatman attack 1
+monsters\newsfx\satyra2.wav	data\global\sfx\monster\goatman\attack4	data\hd\global\sfx\monster\goatman\monster_goatman_attack_4_hd	satyr lord (unused) -> goatman attack 2
+monsters\newsfx\satyrd1.wav	data\global\sfx\monster\goatman\death3	data\hd\global\sfx\monster\goatman\monster_goatman_death_3_hd	satyr lord (unused) -> goatman death 1
+monsters\newsfx\satyrd2.wav	data\global\sfx\monster\goatman\death4	data\hd\global\sfx\monster\goatman\monster_goatman_death_4_hd	satyr lord (unused) -> goatman death 2
+monsters\newsfx\satyrh1.wav	data\global\sfx\monster\goatman\gethit3	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_3_hd	satyr lord (unused) -> goatman hit 1
+monsters\newsfx\satyrh2.wav	data\global\sfx\monster\goatman\gethit4	data\hd\global\sfx\monster\goatman\monster_goatman_gethit_4_hd	satyr lord (unused) -> goatman hit 2
+monsters\newsfx\shreda1.wav	data\global\sfx\monster\reanimatedhorde\attack1	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_attack_1_hd	the shredded (unused) -> reanimated horde attack 1
+monsters\newsfx\shreda2.wav	data\global\sfx\monster\reanimatedhorde\attack2	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_attack_2_hd	the shredded (unused) -> reanimated horde attack 2
+monsters\newsfx\shredd1.wav	data\global\sfx\monster\reanimatedhorde\death1	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_death_1_hd	the shredded (unused) -> reanimated horde death 1
+monsters\newsfx\shredd2.wav	data\global\sfx\monster\reanimatedhorde\death2	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_death_2_hd	the shredded (unused) -> reanimated horde death 2
+monsters\newsfx\shredh1.wav	data\global\sfx\monster\reanimatedhorde\gethit1	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_gethit_1_hd	the shredded (unused) -> reanimated horde hit 1
+monsters\newsfx\shredh2.wav	data\global\sfx\monster\reanimatedhorde\gethit2	data\hd\global\sfx\monster\reanimatedhorde\monster_reanimatedhorde_gethit_2_hd	the shredded (unused) -> reanimated horde hit 2
+monsters\newsfx\slorda1.wav	data\global\sfx\monster\spider\attack1	data\hd\global\sfx\monster\spider\monster_giantspider_attack_1_hd	arachnon/spider lord -> spider attack 1
+monsters\newsfx\slorda2.wav	data\global\sfx\monster\spider\attack2	data\hd\global\sfx\monster\spider\monster_giantspider_attack_2_hd	arachnon/spider lord -> spider attack 2
+monsters\newsfx\slordd1.wav	data\global\sfx\monster\spider\death1	data\hd\global\sfx\monster\spider\monster_giantspider_death_1_hd	arachnon/spider lord -> spider death 1
+monsters\newsfx\slordd2.wav	data\global\sfx\monster\spider\death2	data\hd\global\sfx\monster\spider\monster_giantspider_death_2_hd	arachnon/spider lord -> spider death 2
+monsters\newsfx\slordh1.wav	data\global\sfx\monster\spider\gethit1	data\hd\global\sfx\monster\spider\monster_giantspider_gethit_1_hd	arachnon/spider lord -> spider hit 1
+monsters\newsfx\slordh2.wav	data\global\sfx\monster\spider\gethit2	data\hd\global\sfx\monster\spider\monster_giantspider_gethit_2_hd	arachnon/spider lord -> spider hit 2
+monsters\newsfx\slords1.wav	data\global\sfx\monster\spider\goo01	data\hd\global\sfx\monster\spider\monster_giantspider_goo_1_hd	arachnon/spider lord -> spider special 1
+monsters\newsfx\slords2.wav	data\global\sfx\monster\spider\goo02	data\hd\global\sfx\monster\spider\monster_giantspider_goo_2_hd	arachnon/spider lord -> spider special 2
+monsters\newsfx\stingra1.wav	data\global\sfx\monster\beetle\attack1	data\hd\global\sfx\monster\beetle\monster_beetle_attack_1_hd	stinger/venomtail -> scarab attack 1
+monsters\newsfx\stingra2.wav	data\global\sfx\monster\beetle\attack2	data\hd\global\sfx\monster\beetle\monster_beetle_attack_2_hd	stinger/venomtail -> scarab attack 2
+monsters\newsfx\stingrd1.wav	data\global\sfx\monster\beetle\death1	data\hd\global\sfx\monster\beetle\monster_beetle_death_1_hd	stinger/venomtail -> scarab death 1
+monsters\newsfx\stingrd2.wav	data\global\sfx\monster\beetle\death2	data\hd\global\sfx\monster\beetle\monster_beetle_death_2_hd	stinger/venomtail -> scarab death 2
+monsters\newsfx\stingrh1.wav	data\global\sfx\monster\beetle\gethit1	data\hd\global\sfx\monster\beetle\monster_beetle_gethit_1_hd	stinger/venomtail -> scarab hit 1
+monsters\newsfx\stingrh2.wav	data\global\sfx\monster\beetle\gethit2	data\hd\global\sfx\monster\beetle\monster_beetle_gethit_2_hd	stinger/venomtail -> scarab hit 2
+monsters\newsfx\swinga1.wav	data\global\sfx\combat\weapon\bigswish3	data\hd\global\sfx\combat\weapon\weapon_giant_3_hd	skullwing/bone demon -> skeleton attack 1
+monsters\newsfx\swinga2.wav	data\global\sfx\combat\weapon\bigswish4	data\hd\global\sfx\combat\weapon\weapon_giant_4_hd	skullwing/bone demon -> skeleton attack 2
+monsters\newsfx\swingd1.wav	data\global\sfx\monster\skeleton\death2	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_2_hd	skullwing/bone demon -> skeleton death 1
+monsters\newsfx\swingd2.wav	data\global\sfx\monster\skeleton\death3	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_3_hd	skullwing/bone demon -> skeleton death 2
+monsters\newsfx\swingh1.wav	data\global\sfx\monster\skeleton\gethit3	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_3_hd	skullwing/bone demon -> skeleton hit 1
+monsters\newsfx\swingh2.wav	data\global\sfx\monster\skeleton\gethit4	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_4_hd	skullwing/bone demon -> skeleton hit 2
+monsters\newsfx\swings1.wav	data\global\sfx\monster\skeleton\raiseskeleton	data\hd\global\sfx\monster\bonefetish\raiseskeleton1_hd	skullwing/bone demon -> skeleton special 1
+monsters\newsfx\swings2.wav	data\global\sfx\monster\skeleton\raiseskeleton	data\hd\global\sfx\monster\bonefetish\raiseskeleton1_hd	skullwing/bone demon -> skeleton special 2
+monsters\newsfx\tchanta1.wav	data\global\sfx\monster\sandmaggotbaby\attack1	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_attack_1_hd	torchant -> young sand maggot attack 1
+monsters\newsfx\tchanta2.wav	data\global\sfx\monster\sandmaggotbaby\attack2	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_attack_2_hd	torchant -> young sand maggot attack 2
+monsters\newsfx\tchantd1.wav	data\global\sfx\monster\sandmaggotbaby\death1	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_death_1_hd	torchant -> young sand maggot death 1
+monsters\newsfx\tchantd2.wav	data\global\sfx\monster\sandmaggotbaby\death2	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_death_2_hd	torchant -> young sand maggot death 2
+monsters\newsfx\tchanth1.wav	data\global\sfx\monster\sandmaggotbaby\gethit1	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_gethit_1_hd	torchant -> young sand maggot hit 1
+monsters\newsfx\tchanth2.wav	data\global\sfx\monster\sandmaggotbaby\gethit2	data\hd\global\sfx\monster\sandmaggotbaby\monster_sandmaggotbaby_gethit_2_hd	torchant -> young sand maggot hit 2
+monsters\newsfx\tmbrata1.wav	data\global\sfx\monster\spikefiend\attack1	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_attack_1_hd	tomb rat -> quill rat attack 1
+monsters\newsfx\tmbrata2.wav	data\global\sfx\monster\spikefiend\attack2	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_attack_2_hd	tomb rat -> quill rat attack 2
+monsters\newsfx\tmbratd1.wav	data\global\sfx\monster\spikefiend\death1	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_death_1_hd	tomb rat -> quill rat death 1
+monsters\newsfx\tmbratd2.wav	data\global\sfx\monster\spikefiend\death2	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_death_2_hd	tomb rat -> quill rat death 2
+monsters\newsfx\tmbrath1.wav	data\global\sfx\monster\spikefiend\gethit1	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_gethit_1_hd	tomb rat -> quill rat hit 1
+monsters\newsfx\tmbrath2.wav	data\global\sfx\monster\spikefiend\gethit2	data\hd\global\sfx\monster\spikefiend\monster_spikefiend_gethit_2_hd	tomb rat -> quill rat hit 2
+monsters\rhino\rhinoa1.wav	data\global\sfx\monster\siegebeast\attack1	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_attack_1_hd	horned demon -> siege beast attack 1
+monsters\rhino\rhinoa2.wav	data\global\sfx\monster\siegebeast\attack2	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_attack_2_hd	horned demon -> siege beast attack 2
+monsters\rhino\rhinod1.wav	data\global\sfx\monster\siegebeast\death1	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_death_1_hd	horned demon -> siege beast death 1
+monsters\rhino\rhinod2.wav	data\global\sfx\monster\siegebeast\death2	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_death_2_hd	horned demon -> siege beast death 2
+monsters\rhino\rhinoh1.wav	data\global\sfx\monster\siegebeast\gethit1	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_gethit_1_hd	horned demon -> siege beast hit 1
+monsters\rhino\rhinoh2.wav	data\global\sfx\monster\siegebeast\gethit2	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_gethit_2_hd	horned demon -> siege beast hit 2
+monsters\rhino\rhinos1.wav	data\global\sfx\monster\siegebeast\neutral1	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_neutral_1_hd	horned demon -> siege beast special 1
+monsters\rhino\rhinos2.wav	data\global\sfx\monster\siegebeast\neutral2	data\hd\global\sfx\monster\siegebeast\monster_siegebeast_neutral_2_hd	horned demon -> siege beast special 2
+monsters\scav\scava1.wav	data\global\sfx\monster\leaper\attack1	data\hd\global\sfx\monster\leaper\monster_leaper_attack_1_hd	scavenger -> sand leaper attack 1
+monsters\scav\scava2.wav	data\global\sfx\monster\leaper\attack2	data\hd\global\sfx\monster\leaper\monster_leaper_attack_2_hd	scavenger -> sand leaper attack 2
+monsters\scav\scavd1.wav	data\global\sfx\monster\leaper\death1	data\hd\global\sfx\monster\leaper\monster_leaper_death_1_hd	scavenger -> sand leaper death 1
+monsters\scav\scavd2.wav	data\global\sfx\monster\leaper\death2	data\hd\global\sfx\monster\leaper\monster_leaper_death_2_hd	scavenger -> sand leaper death 2
+monsters\scav\scavh1.wav	data\global\sfx\monster\leaper\gethit1	data\hd\global\sfx\monster\leaper\monster_leaper_gethit_1_hd	scavenger -> sand leaper hit 1
+monsters\scav\scavh2.wav	data\global\sfx\monster\leaper\gethit2	data\hd\global\sfx\monster\leaper\monster_leaper_gethit_2_hd	scavenger -> sand leaper hit 2
+monsters\skelaxe\sklaxa1.wav	data\global\sfx\combat\weapon\one_hand_swing_large13	data\hd\global\sfx\combat\weapon\weapon_onehandswinglarge_13_hd	skeleton (axe) attack 1
+monsters\skelaxe\sklaxa2.wav	data\global\sfx\combat\weapon\one_hand_swing_large14	data\hd\global\sfx\combat\weapon\weapon_onehandswinglarge_14_hd	skeleton (axe) attack 2
+monsters\skelaxe\sklaxd1.wav	data\global\sfx\monster\skeleton\death1	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_1_hd	skeleton (axe) death 1
+monsters\skelaxe\sklaxd2.wav	data\global\sfx\monster\skeleton\death2	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_2_hd	skeleton (axe) death 2
+monsters\skelaxe\sklaxh1.wav	data\global\sfx\monster\skeleton\gethit1	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_1_hd	skeleton (axe) hit 1
+monsters\skelaxe\sklaxh2.wav	data\global\sfx\monster\skeleton\gethit2	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_2_hd	skeleton (axe) hit 2
+monsters\skelbow\sklbwa1.wav	data\global\sfx\combat\weapon\bow3	data\hd\global\sfx\combat\weapon\weapon_bow_3_hd	skeleton archer attack 1
+monsters\skelbow\sklbwa2.wav	data\global\sfx\combat\weapon\bow4	data\hd\global\sfx\combat\weapon\weapon_bow_4_hd	skeleton archer attack 2
+monsters\skelbow\sklbwd1.wav	data\global\sfx\monster\skeleton\death3	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_3_hd	skeleton archer death 1
+monsters\skelbow\sklbwd2.wav	data\global\sfx\monster\skeleton\death4	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_4_hd	skeleton archer death 2
+monsters\skelbow\sklbwh1.wav	data\global\sfx\monster\skeleton\gethit3	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_3_hd	skeleton archer hit 1
+monsters\skelbow\sklbwh2.wav	data\global\sfx\monster\skeleton\gethit4	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_4_hd	skeleton archer hit 2
+monsters\skelsd\sklsra1.wav	data\global\sfx\combat\weapon\one_hand_swing_small03	data\hd\global\sfx\combat\weapon\weapon_onehandswingsmall_3_hd	skeleton captain attack 1
+monsters\skelsd\sklsra2.wav	data\global\sfx\combat\weapon\one_hand_swing_small04	data\hd\global\sfx\combat\weapon\weapon_onehandswingsmall_4_hd	skeleton captain attack 2
+monsters\skelsd\sklsrd1.wav	data\global\sfx\monster\skeleton\death4	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_4_hd	skeleton captain death 1
+monsters\skelsd\sklsrd2.wav	data\global\sfx\monster\skeleton\death5	data\hd\global\sfx\monster\skeleton\monster_skeleton_death_5_hd	skeleton captain death 2
+monsters\skelsd\sklsrh1.wav	data\global\sfx\monster\skeleton\gethit5	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_5_hd	skeleton captain hit 1
+monsters\skelsd\sklsrh2.wav	data\global\sfx\monster\skeleton\gethit6	data\hd\global\sfx\monster\skeleton\monster_skeleton_gethit_6_hd	skeleton captain hit 2
+monsters\skelsd\sklsrs1.wav	data\global\sfx\monster\skeleton\skeleton_neutral1	data\hd\global\sfx\monster\skeleton\skeleton_neutral_hd1	skeleton captain special 1
+monsters\skelsd\sklsrs2.wav	data\global\sfx\monster\skeleton\skeleton_neutral2	data\hd\global\sfx\monster\skeleton\skeleton_neutral_hd2	skeleton captain special 2
+monsters\sking\skinga1.wav	data\global\sfx\monster\greatermummy\attack1	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_attack_1_hd	skeleton king -> radament (greater mummy) attack 1
+monsters\sking\skinga2.wav	data\global\sfx\monster\greatermummy\attack2	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_attack_2_hd	skeleton king -> radament (greater mummy) attack 2
+monsters\sking\skingd1.wav	data\global\sfx\monster\greatermummy\death1	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_death_1_hd	skeleton king -> radament (greater mummy) death 1
+monsters\sking\skingd2.wav	data\global\sfx\monster\greatermummy\death2	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_death_2_hd	skeleton king -> radament (greater mummy) death 2
+monsters\sking\skingh1.wav	data\global\sfx\monster\greatermummy\gethit1	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_gethit_1_hd	skeleton king -> radament (greater mummy) hit 1
+monsters\sking\skingh2.wav	data\global\sfx\monster\greatermummy\gethit2	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_gethit_2_hd	skeleton king -> radament (greater mummy) hit 2
+monsters\sking\skings1.wav	data\global\sfx\monster\greatermummy\unholycast	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_unholycast_hd	skeleton king -> radament (greater mummy) special 1
+monsters\sking\skings2.wav	data\global\sfx\monster\greatermummy\spell1	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_spell_1_hd	skeleton king -> radament (greater mummy) special 2
+monsters\snake\snakea1.wav	data\global\sfx\monster\serpentdemon\attack1	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_attack_1_hd	viper/drake -> serpent demon attack 1
+monsters\snake\snakea2.wav	data\global\sfx\monster\serpentdemon\attack2	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_attack_2_hd	viper/drake -> serpent demon attack 2
+monsters\snake\snaked1.wav	data\global\sfx\monster\serpentdemon\death1	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_death_1_hd	viper/drake -> serpent demon death 1
+monsters\snake\snaked2.wav	data\global\sfx\monster\serpentdemon\death2	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_death_2_hd	viper/drake -> serpent demon death 2
+monsters\snake\snakeh1.wav	data\global\sfx\monster\serpentdemon\gethit1	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_gethit_1_hd	viper/drake -> serpent demon hit 1
+monsters\snake\snakeh2.wav	data\global\sfx\monster\serpentdemon\gethit2	data\hd\global\sfx\monster\serpentdemon\monster_serpentdemon_gethit_2_hd	viper/drake -> serpent demon hit 2
+monsters\sneak\sneaka1.wav	data\global\sfx\monster\wraith\attack1	data\hd\global\sfx\monster\wraith\monster_wraith_attack_1_hd	hidden -> wraith attack 1
+monsters\sneak\sneaka2.wav	data\global\sfx\monster\wraith\attack2	data\hd\global\sfx\monster\wraith\monster_wraith_attack_2_hd	hidden -> wraith attack 2
+monsters\sneak\sneakd1.wav	data\global\sfx\monster\wraith\death1	data\hd\global\sfx\monster\wraith\monster_wraith_death_1_hd	hidden -> wraith death 1
+monsters\sneak\sneakd2.wav	data\global\sfx\monster\wraith\death2	data\hd\global\sfx\monster\wraith\monster_wraith_death_2_hd	hidden -> wraith death 2
+monsters\sneak\sneakh1.wav	data\global\sfx\monster\wraith\gethit1	data\hd\global\sfx\monster\wraith\monster_wraith_gethit_1_hd	hidden -> wraith hit 1
+monsters\sneak\sneakh2.wav	data\global\sfx\monster\wraith\gethit2	data\hd\global\sfx\monster\wraith\monster_wraith_gethit_2_hd	hidden -> wraith hit 2
+monsters\succ\scbsa1.wav	data\global\sfx\monster\succubus\attack1	data\hd\global\sfx\monster\succubus\monster_succubus_attack_1_hd	succubus attack 1
+monsters\succ\scbsa2.wav	data\global\sfx\monster\succubus\attack2	data\hd\global\sfx\monster\succubus\monster_succubus_attack_2_hd	succubus attack 2
+monsters\succ\scbsd1.wav	data\global\sfx\monster\succubus\death1	data\hd\global\sfx\monster\succubus\monster_succubus_death_1_hd	succubus death 1
+monsters\succ\scbsd2.wav	data\global\sfx\monster\succubus\death2	data\hd\global\sfx\monster\succubus\monster_succubus_death_2_hd	succubus death 2
+monsters\succ\scbsh1.wav	data\global\sfx\monster\succubus\gethit1	data\hd\global\sfx\monster\succubus\monster_succubus_gethit_1_hd	succubus hit 1
+monsters\succ\scbsh2.wav	data\global\sfx\monster\succubus\gethit2	data\hd\global\sfx\monster\succubus\monster_succubus_gethit_2_hd	succubus hit 2
+monsters\thin\thina1.wav	data\global\sfx\monster\bighead\attack1	data\hd\global\sfx\monster\bighead\monster_bighead_attack_1_hd	storm demon -> bighead (lightning) attack 1
+monsters\thin\thina2.wav	data\global\sfx\monster\bighead\attack2	data\hd\global\sfx\monster\bighead\monster_bighead_attack_2_hd	storm demon -> bighead (lightning) attack 2
+monsters\thin\thind1.wav	data\global\sfx\monster\bighead\death1	data\hd\global\sfx\monster\bighead\monster_bighead_death_1_hd	storm demon -> bighead (lightning) death 1
+monsters\thin\thind2.wav	data\global\sfx\monster\bighead\death2	data\hd\global\sfx\monster\bighead\monster_bighead_death_2_hd	storm demon -> bighead (lightning) death 2
+monsters\thin\thinh1.wav	data\global\sfx\monster\bighead\gethit1	data\hd\global\sfx\monster\bighead\monster_bighead_gethit_1_hd	storm demon -> bighead (lightning) hit 1
+monsters\thin\thinh2.wav	data\global\sfx\monster\bighead\gethit2	data\hd\global\sfx\monster\bighead\monster_bighead_gethit_2_hd	storm demon -> bighead (lightning) hit 2
+monsters\thin\thins1.wav	data\global\sfx\monster\bighead\launch	data\hd\global\sfx\monster\bighead\monster_bighead_launch_hd	storm demon -> bighead (lightning) special 1
+monsters\thin\thins2.wav	data\global\sfx\monster\bighead\launch	data\hd\global\sfx\monster\bighead\monster_bighead_launch_hd	storm demon -> bighead (lightning) special 2
+monsters\tsneak\tsneaka1.wav	data\global\sfx\monster\wraith\attack3	data\hd\global\sfx\monster\wraith\monster_wraith_attack_3_hd	invisible lord -> wraith attack 1
+monsters\tsneak\tsneaka2.wav	data\global\sfx\monster\wraith\attack4	data\hd\global\sfx\monster\wraith\monster_wraith_attack_4_hd	invisible lord -> wraith attack 2
+monsters\tsneak\tsneakd1.wav	data\global\sfx\monster\wraith\death3	data\hd\global\sfx\monster\wraith\monster_wraith_death_3_hd	invisible lord -> wraith death 1
+monsters\tsneak\tsneakd2.wav	data\global\sfx\monster\wraith\death4	data\hd\global\sfx\monster\wraith\monster_wraith_death_4_hd	invisible lord -> wraith death 2
+monsters\tsneak\tsneakh1.wav	data\global\sfx\monster\wraith\gethit3	data\hd\global\sfx\monster\wraith\monster_wraith_gethit_3_hd	invisible lord -> wraith hit 1
+monsters\tsneak\tsneakh2.wav	data\global\sfx\monster\wraith\gethit4	data\hd\global\sfx\monster\wraith\monster_wraith_gethit_4_hd	invisible lord -> wraith hit 2
+monsters\worm\worma1.wav	data\global\sfx\monster\sandmaggot\attack1	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_attack_1_hd	wyrm -> sand maggot attack 1
+monsters\worm\worma2.wav	data\global\sfx\monster\sandmaggot\attack2	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_attack_2_hd	wyrm -> sand maggot attack 2
+monsters\worm\wormd1.wav	data\global\sfx\monster\sandmaggot\death1	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_death_1_hd	wyrm -> sand maggot death 1
+monsters\worm\wormd2.wav	data\global\sfx\monster\sandmaggot\death2	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_death_2_hd	wyrm -> sand maggot death 2
+monsters\worm\wormh1.wav	data\global\sfx\monster\sandmaggot\gethit1	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_gethit_1_hd	wyrm -> sand maggot hit 1
+monsters\worm\wormh2.wav	data\global\sfx\monster\sandmaggot\gethit2	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_gethit_2_hd	wyrm -> sand maggot hit 2
+monsters\zombie\zombiea1.wav	data\global\sfx\monster\zombie\attack1	data\hd\global\sfx\monster\zombie\monster_zombie_attack_1_hd	zombie attack 1
+monsters\zombie\zombiea2.wav	data\global\sfx\monster\zombie\attack2	data\hd\global\sfx\monster\zombie\monster_zombie_attack_2_hd	zombie attack 2
+monsters\zombie\zombied1.wav	data\global\sfx\monster\zombie\death1	data\hd\global\sfx\monster\zombie\monster_zombie_death_1_hd	zombie death 1
+monsters\zombie\zombied2.wav	data\global\sfx\monster\zombie\death2	data\hd\global\sfx\monster\zombie\monster_zombie_death_2_hd	zombie death 2
+monsters\zombie\zombieh1.wav	data\global\sfx\monster\zombie\gethit1	data\hd\global\sfx\monster\zombie\monster_zombie_gethit_1_hd	zombie hit 1
+monsters\zombie\zombieh2.wav	data\global\sfx\monster\zombie\gethit2	data\hd\global\sfx\monster\zombie\monster_zombie_gethit_2_hd	zombie hit 2
+sfx\items\barlfire.wav	data\global\sfx\object\barrelexplode	data\hd\global\sfx\object\object_barrelexplode_1_hd	explosive barrel
+sfx\items\barrel.wav	data\global\sfx\object\woodbreak1	data\hd\global\sfx\object\object_woodbreak_1_hd	barrel smash
+sfx\items\chest.wav	data\global\sfx\object\chestbig	data\hd\global\sfx\object\object_chestbig_1_hd	chest open
+sfx\items\crclos.wav	data\global\sfx\object\doormetalclose	data\hd\global\sfx\object\object_doormetalclose_1_hd	crypt door close (hellfire)
+sfx\items\cropen.wav	data\global\sfx\object\tombdoor	data\hd\global\sfx\object\object_tombdoor_1_hd	crypt door open (hellfire)
+sfx\items\doorclos.wav	data\global\sfx\object\doorwoodclose	data\hd\global\sfx\object\object_doorwoodclose_1_hd	door close
+sfx\items\dooropen.wav	data\global\sfx\object\doorwoodopen	data\hd\global\sfx\object\object_doorwoodopen_1_hd	door open
+sfx\items\flipanvl.wav	data\global\sfx\item\largemetalweapon	data\hd\global\sfx\item\item_largemetalweapon_hd	anvil drop
+sfx\items\flipaxe.wav	data\global\sfx\item\largemetalweapon	data\hd\global\sfx\item\item_largemetalweapon_hd	axe drop
+sfx\items\flipblst.wav	data\global\sfx\item\gem	data\hd\global\sfx\item\item_gem_hd	blood stone drop
+sfx\items\flipbody.wav	data\global\sfx\item\monsterguts	data\hd\global\sfx\item\item_monsterguts_hd	body part drop
+sfx\items\flipbook.wav	data\global\sfx\item\book	data\hd\global\sfx\item\item_book_hd	book drop
+sfx\items\flipbow.wav	data\global\sfx\item\bow	data\hd\global\sfx\item\item_bow_hd	bow drop
+sfx\items\flipcap.wav	data\global\sfx\item\cap	data\hd\global\sfx\item\item_cap_hd	cap/helm drop
+sfx\items\flipharm.wav	data\global\sfx\item\platearmor	data\hd\global\sfx\item\item_platearmor_hd	heavy armor drop
+sfx\items\fliplarm.wav	data\global\sfx\item\lightarmor	data\hd\global\sfx\item\item_lightarmor_hd	light armor drop
+sfx\items\flipmush.wav	data\global\sfx\item\herb	data\hd\global\sfx\item\item_herb_hd	mushroom drop
+sfx\items\flippot.wav	data\global\sfx\item\potion	data\hd\global\sfx\item\item_potion_hd	potion drop
+sfx\items\flipring.wav	data\global\sfx\item\ring	data\hd\global\sfx\item\item_ring_hd	ring/amulet drop
+sfx\items\fliprock.wav	data\global\sfx\item\gem	data\hd\global\sfx\item\item_gem_hd	magic rock drop
+sfx\items\flipscrl.wav	data\global\sfx\item\scroll	data\hd\global\sfx\item\item_scroll_hd	scroll drop
+sfx\items\flipshld.wav	data\global\sfx\item\metalshield	data\hd\global\sfx\item\item_metalshield_hd	shield drop
+sfx\items\flipsign.wav	data\global\sfx\item\woodshield	data\hd\global\sfx\item\item_woodshield_hd	tavern sign drop
+sfx\items\flipstaf.wav	data\global\sfx\item\staff	data\hd\global\sfx\item\item_staff_hd	staff drop
+sfx\items\flipswor.wav	data\global\sfx\item\sword	data\hd\global\sfx\item\item_sword_hd	sword drop
+sfx\items\gold.wav	data\global\sfx\item\gold	data\hd\global\sfx\item\item_gold_hd	gold
+sfx\items\invanvl.wav	data\global\sfx\item\largemetalweapon	data\hd\global\sfx\item\item_largemetalweapon_hd	anvil inventory place
+sfx\items\invaxe.wav	data\global\sfx\item\largemetalweapon	data\hd\global\sfx\item\item_largemetalweapon_hd	axe inventory place
+sfx\items\invblst.wav	data\global\sfx\item\gem	data\hd\global\sfx\item\item_gem_hd	blood stone inventory place
+sfx\items\invbody.wav	data\global\sfx\item\monsterguts	data\hd\global\sfx\item\item_monsterguts_hd	body part inventory place
+sfx\items\invbook.wav	data\global\sfx\item\book	data\hd\global\sfx\item\item_book_hd	book inventory place
+sfx\items\invbow.wav	data\global\sfx\item\bow	data\hd\global\sfx\item\item_bow_hd	bow inventory place
+sfx\items\invcap.wav	data\global\sfx\item\cap	data\hd\global\sfx\item\item_cap_hd	cap/helm inventory place
+sfx\items\invgrab.wav	data\global\sfx\cursor\pickup	data\hd\global\sfx\cursor\cursor_item_pickup_1_hd	item pick up to cursor
+sfx\items\invharm.wav	data\global\sfx\item\platearmor	data\hd\global\sfx\item\item_platearmor_hd	heavy armor inventory place
+sfx\items\invlarm.wav	data\global\sfx\item\lightarmor	data\hd\global\sfx\item\item_lightarmor_hd	light armor inventory place
+sfx\items\invmush.wav	data\global\sfx\item\herb	data\hd\global\sfx\item\item_herb_hd	mushroom inventory place
+sfx\items\invpot.wav	data\global\sfx\item\potionui	data\hd\global\sfx\item\item_potionui_hd	potion inventory place
+sfx\items\invring.wav	data\global\sfx\item\ring	data\hd\global\sfx\item\item_ring_hd	ring/amulet inventory place
+sfx\items\invrock.wav	data\global\sfx\item\gem	data\hd\global\sfx\item\item_gem_hd	magic rock inventory place
+sfx\items\invscrol.wav	data\global\sfx\item\scroll	data\hd\global\sfx\item\item_scroll_hd	scroll inventory place
+sfx\items\invshiel.wav	data\global\sfx\item\metalshield	data\hd\global\sfx\item\item_metalshield_hd	shield inventory place
+sfx\items\invsign.wav	data\global\sfx\item\woodshield	data\hd\global\sfx\item\item_woodshield_hd	tavern sign inventory place
+sfx\items\invstaf.wav	data\global\sfx\item\staff	data\hd\global\sfx\item\item_staff_hd	staff inventory place
+sfx\items\invsword.wav	data\global\sfx\item\sword	data\hd\global\sfx\item\item_sword_hd	sword inventory place
+sfx\items\lever.wav	data\global\sfx\object\sewerlever	data\hd\global\sfx\object\object_sewerlever_hd	lever
+sfx\items\magic.wav	data\global\sfx\object\shrine\experience	data\hd\global\sfx\object\shrine\experience_hd	shrine activate 1
+sfx\items\magic1.wav	data\global\sfx\object\shrine\skill	data\hd\global\sfx\object\shrine\skill_hd	shrine activate 2
+sfx\items\podpop5.wav	data\global\sfx\object\goopile2	data\hd\global\sfx\object\object_goopile_2_hd	pod pop (hellfire)
+sfx\items\podpop8.wav	data\global\sfx\combat\explosion\explosionsmall3	data\hd\global\sfx\combat\explosion\explosionsmall_3_hd	pod explode (hellfire)
+sfx\items\readbook.wav	data\global\sfx\object\towertome	data\hd\global\sfx\object\object_towertome_hd	read book on lectern/bookcase
+sfx\items\sarc.wav	data\global\sfx\object\casket	data\hd\global\sfx\object\object_casket_1_hd	sarcophagus open
+sfx\items\titlemov.wav	data\global\sfx\cursor\button	data\hd\global\sfx\cursor\cursor_button_3_hd	menu move
+sfx\items\titlslct.wav	data\global\sfx\cursor\select	data\hd\global\sfx\cursor\cursor_select_hd	menu select
+sfx\items\trap.wav	data\global\sfx\object\traprelease	data\hd\global\sfx\object\object_traprelease_hd	trap triggered
+sfx\items\urnpop2.wav	data\global\sfx\object\jarbreak2	data\hd\global\sfx\object\object_jarbreak_2_hd	urn break (hellfire)
+sfx\items\urnpop3.wav	data\global\sfx\combat\explosion\explosionmed1	data\hd\global\sfx\combat\explosion\explosionmed_1_hd	urn explode (hellfire)
+sfx\misc\acids1.wav	data\global\sfx\monster\sandmaggot\spit1	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_spit_1_hd	acid spit 1
+sfx\misc\acids2.wav	data\global\sfx\monster\sandmaggot\spit2	data\hd\global\sfx\monster\sandmaggot\monster_sandmaggot_spit_2_hd	acid spit 2
+sfx\misc\apoc.wav	data\global\sfx\skill\sorceress\meteorimpact	data\hd\global\sfx\skill\sorceress\sorceress_meteorimpact_hd	apocalypse
+sfx\misc\bfire.wav	data\global\sfx\combat\weapon\bow1	data\hd\global\sfx\combat\weapon\weapon_bow_1_hd	bow shot
+sfx\misc\blodstar.wav	data\global\sfx\monster\greatermummy\unholybolt	data\hd\global\sfx\monster\greatermummy\monster_greatermummy_unholybolt_1_hd	blood star launch
+sfx\misc\blsimpt.wav	data\global\sfx\combat\explosion\explosionsmall2	data\hd\global\sfx\combat\explosion\explosionsmall_2_hd	blood star impact
+sfx\misc\bonesp.wav	data\global\sfx\skill\necromancer\bonespirit1	data\hd\global\sfx\skill\necromancer\necromancer_bonespirit_1_hd	bone spirit
+sfx\misc\bsimpct.wav	data\global\sfx\skill\necromancer\bonespirit3	data\hd\global\sfx\skill\necromancer\necromancer_bonespirit_3_hd	bone spirit impact
+sfx\misc\caldron.wav	data\global\sfx\object\bubbles	data\hd\global\sfx\object\object_bubbles_hd	cauldron
+sfx\misc\cast2.wav	data\global\sfx\skill\sorceress\firecast	data\hd\global\sfx\skill\sorceress\sorceress_cast_fire_1_hd	spell cast (most spells)
+sfx\misc\cast4.wav	data\global\sfx\skill\sorceress\eleccast	data\hd\global\sfx\skill\sorceress\sorceress_cast_lightning_2_hd	lightning spell cast
+sfx\misc\cast6.wav	data\global\sfx\skill\sorceress\coldcast	data\hd\global\sfx\skill\sorceress\sorceress_cast_cold_1_hd	utility spell cast (identify/portal/teleport)
+sfx\misc\cast8.wav	data\global\sfx\skill\paladin\prayer	data\hd\global\sfx\skill\paladin\prayer_hd	healing spell cast
+sfx\misc\cbolt.wav	data\global\sfx\skill\sorceress\chargedbolt1	data\hd\global\sfx\skill\sorceress\sorceress_chargedbolt_1_hd	charged bolt
+sfx\misc\dead.wav	data\global\sfx\combat\player\barbarian\death1	data\hd\global\sfx\combat\player\barbarian\barbarian_death_1_hd	warrior death cry
+sfx\misc\dserp.wav	data\global\sfx\skill\necromancer\poisonnova	data\hd\global\sfx\skill\necromancer\necromancer_poisonnova_1_hd	doom serpents
+sfx\misc\elecimp1.wav	data\global\sfx\combat\impact\zap1	data\hd\global\sfx\combat\impact\impact_lightning_1_hd	lightning impact
+sfx\misc\elementl.wav	data\global\sfx\skill\sorceress\fireball1	data\hd\global\sfx\skill\sorceress\sorceress_fireball_1_hd	elemental
+sfx\misc\ethereal.wav	data\global\sfx\skill\assassin\fade	data\hd\global\sfx\skill\assassin\fade_hd	etherealize
+sfx\misc\fballbow.wav	data\global\sfx\skill\amazon\firearrow1	data\hd\global\sfx\skill\amazon\firearrow_hd1	fire arrow (hellfire)
+sfx\misc\fbolt1.wav	data\global\sfx\skill\sorceress\firebolt1	data\hd\global\sfx\skill\sorceress\sorceress_firebolt_1_hd	firebolt/fireball launch
+sfx\misc\firimp2.wav	data\global\sfx\skill\sorceress\largefireimpact1	data\hd\global\sfx\skill\sorceress\sorceress_largefireimpact_1_hd	fire impact
+sfx\misc\flamwave.wav	data\global\sfx\skill\druid\firecasta	data\hd\global\sfx\skill\druid\firecasta_hd	flame wave
+sfx\misc\fountain.wav	data\global\sfx\object\fountain	data\hd\global\sfx\object\object_fountain_hd	fountain
+sfx\misc\golum.wav	data\global\sfx\monster\golemclay\spawnclay	data\hd\global\sfx\monster\golemclay\spawnclay_hd	golem summon
+sfx\misc\gshrine.wav	data\global\sfx\object\hellshrine1	data\hd\global\sfx\object\object_hellshrine1_1_hd	goat shrine
+sfx\misc\guard.wav	data\global\sfx\monster\hydra\appear1	data\hd\global\sfx\monster\hydra\monster_hydra_appear_1_hd	guardian (hydra) appears
+sfx\misc\holybolt.wav	data\global\sfx\skill\paladin\holybolt1	data\hd\global\sfx\skill\paladin\holybolt1_hd	holy bolt
+sfx\misc\infravis.wav	data\global\sfx\skill\necromancer\dimvision	data\hd\global\sfx\skill\necromancer\necromancer_dimvision_hd	infravision
+sfx\misc\invisibl.wav	data\global\sfx\skill\assassin\cloak	data\hd\global\sfx\skill\assassin\cloak_hd	invisibility
+sfx\misc\lmag.wav	data\global\sfx\skill\sorceress\thundercast	data\hd\global\sfx\skill\sorceress\sorceress_thundercast_hd	lightning wall (hellfire)
+sfx\misc\lning1.wav	data\global\sfx\skill\sorceress\lightning1	data\hd\global\sfx\skill\sorceress\sorceress_lightning_1_hd	lightning / chain lightning
+sfx\misc\mshield.wav	data\global\sfx\skill\sorceress\energyshield	data\hd\global\sfx\skill\sorceress\sorceress_energyshield_hd	mana shield
+sfx\misc\nestxpld.wav	data\global\sfx\combat\explosion\explosionlarge2	data\hd\global\sfx\combat\explosion\explosionlarge_2_hd	nest explosion (hellfire)
+sfx\misc\nova.wav	data\global\sfx\skill\sorceress\novaelec	data\hd\global\sfx\skill\sorceress\sorceress_nova_hd	nova / flash
+sfx\misc\puddle.wav	data\global\sfx\object\goopile1	data\hd\global\sfx\object\object_goopile_1_hd	acid puddle / blood pedestal
+sfx\misc\questdon.wav	data\global\sfx\cursor\questdone	data\hd\global\sfx\cursor\cursor_questdone_1_hd	quest complete
+sfx\misc\repair.wav	data\global\sfx\cursor\repair	data\hd\global\sfx\cursor\cursor_repair_item_1_hd	item repair
+sfx\misc\resur.wav	data\global\sfx\skill\paladin\redemption	data\hd\global\sfx\skill\paladin\redemption_hd	resurrect
+sfx\misc\scurimp.wav	data\global\sfx\combat\impact\stone1	data\hd\global\sfx\combat\impact\impact_stone_1_hd	stone curse
+sfx\misc\sentinel.wav	data\global\sfx\skill\misc\portalcast	data\hd\global\sfx\skill\misc\portalcast_hd	town portal
+sfx\misc\spoutstr.wav	data\global\sfx\skill\sorceress\infernoloop	data\hd\global\sfx\skill\sorceress\sorceress_inferno_hd	inferno
+sfx\misc\sting1.wav	data\global\sfx\combat\weapon\bow2	data\hd\global\sfx\combat\weapon\weapon_bow_2_hd	bow shot 2 (hellfire)
+sfx\misc\swing.wav	data\global\sfx\combat\weapon\one_hand_swing_small01	data\hd\global\sfx\combat\weapon\weapon_onehandswingsmall_1_hd	melee swing 1
+sfx\misc\swing2.wav	data\global\sfx\combat\weapon\one_hand_swing_small02	data\hd\global\sfx\combat\weapon\weapon_onehandswingsmall_2_hd	melee swing 2
+sfx\misc\teleport.wav	data\global\sfx\skill\sorceress\teleport	data\hd\global\sfx\skill\sorceress\sorceress_teleport_2_hd	teleport / phasing
+sfx\misc\tmag.wav	data\global\sfx\skill\sorceress\enchant	data\hd\global\sfx\skill\sorceress\sorceress_enchant_hd	generic spell cast (town)
+sfx\misc\trapdis.wav	data\global\sfx\object\traptick	data\hd\global\sfx\object\object_traptick_hd	trap disarm
+sfx\misc\walk1.wav	data\global\sfx\ambient\footstep\medistone1	data\hd\global\sfx\ambient\footstep\medistone1_hd	footstep (stone floor)
+sfx\misc\wallloop.wav	data\global\sfx\skill\druid\firecastb	data\hd\global\sfx\skill\druid\firecastb_hd	fire wall
+sfx\monsters\diablod.wav	data\global\sfx\monster\diablo\death	data\hd\global\sfx\monster\diablo\death_hd	diablo death
+sfx\towners\cow1.wav	data\global\sfx\ambient\creature\cow1	data\hd\global\sfx\ambient\creature\cow1_hd	town cow 1
+sfx\towners\cow2.wav	data\global\sfx\ambient\creature\cow2	data\hd\global\sfx\ambient\creature\cow2_hd	town cow 2

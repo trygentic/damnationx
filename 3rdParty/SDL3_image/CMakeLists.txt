@@ -1,0 +1,70 @@
+include(functions/dependency_options)
+
+if(NOT DEFINED DEVILUTIONX_SYSTEM_LIBPNG)
+  find_package(PNG QUIET)
+  if(PNG_FOUND)
+    message("-- Found png ${PNG_VERSION_STRING}")
+  else()
+    message("-- Suitable system png package not found, will use png from source")
+    set(DEVILUTIONX_SYSTEM_LIBPNG OFF)
+  endif()
+endif()
+dependency_options("libpng" DEVILUTIONX_SYSTEM_LIBPNG ON DEVILUTIONX_STATIC_LIBPNG)
+if(DEVILUTIONX_SYSTEM_LIBPNG)
+  find_package(PNG REQUIRED)
+else()
+  add_subdirectory(../libpng libpng)
+endif()
+
+include(functions/FetchContent_ExcludeFromAll_backport)
+include(FetchContent)
+
+if(DEVILUTIONX_STATIC_SDL_IMAGE)
+  set(BUILD_SHARED_LIBS OFF)
+else()
+  set(BUILD_SHARED_LIBS ON)
+endif()
+
+# Preserve indexed PNG pixels and palettes in native builds via libpng.
+# The browser's source-built libpng is not discovered by SDL_image's separate
+# FindPNG call, so use its bundled PNG decoder for browser RGBA assets.
+if(EMSCRIPTEN AND DEVILUTIONX_WEBGPU)
+  set(SDLIMAGE_BACKEND_STB ON CACHE BOOL "Browser PNG decoder" FORCE)
+  set(SDLIMAGE_PNG ON CACHE BOOL "Support loading browser PNG images" FORCE)
+else()
+  set(SDLIMAGE_BACKEND_STB OFF)
+endif()
+set(SDLIMAGE_BACKEND_IMAGEIO OFF)
+if(MSVC AND NOT DEVILUTIONX_SYSTEM_LIBPNG)
+  # SDL_image's MSVC default expects its download-script externals; use the libpng/zlib targets above.
+  set(SDLIMAGE_VENDORED OFF)
+endif()
+set(SDLIMAGE_BACKEND_WIC OFF)
+# Link the selected PNG target rather than dlopen an unqualified library name.
+set(SDLIMAGE_PNG_SHARED OFF)
+set(SDLIMAGE_AVIF OFF)
+set(SDLIMAGE_BMP OFF)
+set(SDLIMAGE_GIF OFF)
+set(SDLIMAGE_JPG OFF)
+set(SDLIMAGE_JXL OFF)
+set(SDLIMAGE_LBM OFF)
+set(SDLIMAGE_PCX OFF)
+set(SDLIMAGE_PNG ON)
+set(SDLIMAGE_PNM OFF)
+set(SDLIMAGE_QOI OFF)
+set(SDLIMAGE_SVG OFF)
+set(SDLIMAGE_TGA OFF)
+set(SDLIMAGE_TIF OFF)
+set(SDLIMAGE_WEBP OFF)
+set(SDLIMAGE_XCF OFF)
+set(SDLIMAGE_XPM OFF)
+set(SDLIMAGE_XV OFF)
+set(SDLIMAGE_AVIF_SAVE OFF)
+set(SDLIMAGE_JPG_SAVE OFF)
+set(SDLIMAGE_PNG_SAVE ON)
+
+FetchContent_Declare_ExcludeFromAll(SDL_image
+  URL https://github.com/libsdl-org/SDL_image/releases/download/release-3.2.4/SDL3_image-3.2.4.tar.gz
+  URL_HASH SHA256=a725bd6d04261fdda0dd8d950659e1dc15a8065d025275ef460d32ae7dcfc182
+)
+FetchContent_MakeAvailable_ExcludeFromAll(SDL_image)

@@ -5,7 +5,7 @@
 
 DamnationX is a build of [DevilutionX](https://github.com/diasurgical/devilutionX), the open source port of Diablo. It adds optional HD art drawn with WebGPU, a lobby for playing online, and sound packs you can import from your own copy of Diablo II or Diablo II: Resurrected.
 
-This repository only hosts the release builds. Download them from the [Releases](https://github.com/trygentic/damnationx/releases) page.
+This repository holds the source code and the release builds. Download the builds from the [Releases](https://github.com/trygentic/damnationx/releases) page.
 
 ## Latest beta
 
@@ -104,6 +104,12 @@ DamnationX can replace Diablo's sounds with the ones from Diablo II or Diablo II
 - In the browser, choose a Sound Pack in Settings > Audio, then pick the game folder in the dialog that opens. Use Chrome or Edge for Diablo II: Resurrected. Only the sounds are saved, in your browser.
 
 Nothing from Diablo II is uploaded anywhere.
+
+## Building from source
+
+DamnationX builds the same way as DevilutionX. See [docs/building.md](docs/building.md) for each platform. The HD art needs the WebGPU build. On Windows, macOS and Linux, configure CMake with `-DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON`. The first configure downloads and builds Dawn, which takes a while. For Android, run `./gradlew assembleDebug -Pwebgpu` in `android-project`. The browser build has its own section on that page.
+
+The lobby and relay servers that online games connect to are not part of this repository.
 
 ## Reporting problems
 

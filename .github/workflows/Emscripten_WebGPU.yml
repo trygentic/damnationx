@@ -1,0 +1,155 @@
+name: Emscripten WebGPU
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  pull_request:
+    types: [ opened, synchronize ]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Must match DEVILUTIONX_WEBGPU_EMSCRIPTEN_VERSION in CMake/Dependencies.cmake.
+  EMSDK_VERSION: 4.0.11
+  NAGA_CLI_VERSION: 30.0.1
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y cmake curl git ninja-build python3 unzip
+
+    - name: Cache emsdk
+      id: cache-emsdk
+      uses: actions/cache@v6
+      with:
+        path: ~/emsdk
+        key: ${{ github.workflow }}-emsdk-${{ env.EMSDK_VERSION }}-v1
+
+    # A dedicated clone pinned to the WebGPU toolchain; the Wasm mod host stays on its own
+    # 3.1.74 pin (DEVILUTIONX_EMSCRIPTEN_VERSION) and must never share an activated emsdk.
+    - name: Install Emscripten ${{ env.EMSDK_VERSION }}
+      if: steps.cache-emsdk.outputs.cache-hit != 'true'
+      run: |
+        git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+        ~/emsdk/emsdk install "$EMSDK_VERSION"
+        ~/emsdk/emsdk activate "$EMSDK_VERSION"
+
+    - name: Cache naga-cli
+      id: cache-naga
+      uses: actions/cache@v6
+      with:
+        path: ~/.cargo/bin/naga
+        key: ${{ github.workflow }}-naga-cli-${{ env.NAGA_CLI_VERSION }}-v1
+
+    - name: Install naga-cli
+      if: steps.cache-naga.outputs.cache-hit != 'true'
+      run: cargo install naga-cli --version "$NAGA_CLI_VERSION" --locked
+
+    - name: Cache CMake build folder
+      uses: actions/cache@v6
+      with:
+        path: build-em
+        key: ${{ github.workflow }}-build-v1-${{ github.sha }}
+        restore-keys: ${{ github.workflow }}-build-v1-
+
+    # BUILD_TESTING is forced off under Emscripten (CMake/platforms/emscripten.cmake), so this
+    # job only configures and links; the checks below cover what the browser build pins.
+    # -DDEVILUTIONX_DISABLE_EXCEPTIONS=OFF: Source/lua/modules/render.cpp throws sol::error and
+    # does not compile with exceptions disabled (the default when DISABLE_ZERO_TIER is on).
+    - name: Configure
+      run: |
+        # GitHub's default `bash -e {0}` has no pipefail; without it a configure failure
+        # would be masked by `tee` and only surface in the next step.
+        set -o pipefail
+        source ~/emsdk/emsdk_env.sh
+        emcc --version | head -n 1
+        mkdir -p build-em
+        emcmake cmake -S. -Bbuild-em -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEVILUTIONX_WEBGPU=ON -DDEVILUTIONX_DISABLE_EXCEPTIONS=OFF 2>&1 | tee build-em/configure.log
+
+    - name: Check the pinned Emdawnwebgpu port was selected
+      run: |
+        grep -F "Emdawnwebgpu port: pinned" build-em/configure.log
+        grep -F "emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py" build-em/build.ninja > /dev/null
+        test -f build-em/emdawnwebgpu/emdawnwebgpu_pkg/emdawnwebgpu.port.py
+
+    - name: Build
+      run: |
+        source ~/emsdk/emsdk_env.sh
+        cmake --build build-em -j $(nproc)
+
+    # -sINITIAL_MEMORY=512MB (CMakeLists.txt): the wasm memory section must declare
+    # 8192 initial 64 KiB pages so the lighting buffers never trigger a mid-play heap growth.
+    - name: Check INITIAL_MEMORY is 512 MB
+      run: |
+        python3 - build-em/devilutionx.wasm 512 <<'PY'
+        import sys
+
+        path, expect_mb = sys.argv[1], int(sys.argv[2])
+        data = open(path, "rb").read()
+        if data[:8] != b"\0asm\x01\0\0\0":
+            sys.exit(f"{path}: not a WebAssembly 1.0 module")
+
+        def leb_u(pos):
+            result = shift = 0
+            while True:
+                byte = data[pos]
+                pos += 1
+                result |= (byte & 0x7F) << shift
+                shift += 7
+                if not byte & 0x80:
+                    return result, pos
+
+        pos = 8
+        while pos < len(data):
+            section_id = data[pos]
+            size, pos = leb_u(pos + 1)
+            if section_id == 5:  # memory section: count, then limits (flags, initial[, max])
+                count, p = leb_u(pos)
+                if count == 0:
+                    sys.exit(f"{path}: memory section declares no memories")
+                initial, _ = leb_u(p + 1)
+                print(f"initial memory: {initial} pages = {initial * 64 // 1024} MB (expected {expect_mb} MB)")
+                sys.exit(0 if initial * 65536 == expect_mb * 1024 * 1024 else 1)
+            pos += size
+        sys.exit(f"{path}: no memory section (memory is imported or absent)")
+        PY
+
+    - name: Pre-js unit test
+      run: node --test Packaging/emscripten/emscripten_pre.test.mjs
+
+    - name: Validate WGSL
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        naga --version
+        python3 tools/wgsl_validate.py Source/engine/render/webgpu_shaders.hpp
+
+    - name: Upload browser build
+      uses: actions/upload-artifact@v7
+      with:
+        name: devilutionx-emscripten-webgpu
+        path: |
+          build-em/index.html
+          build-em/file-manager.js
+          build-em/devilutionx.js
+          build-em/devilutionx.wasm
+          build-em/devilutionx.data
+        if-no-files-found: error

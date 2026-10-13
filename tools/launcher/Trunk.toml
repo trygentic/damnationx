@@ -1,0 +1,6 @@
+[build]
+target = "index.html"
+dist = "../../build-webgpu/launcher"
+release = true
+# The game page imports launcher/launcher.js by name.
+filehash = false

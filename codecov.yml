@@ -1,0 +1,19 @@
+codecov:
+  require_ci_to_pass: no
+  notify:
+    wait_for_ci: no
+comment: no
+coverage:
+  range: "45...85"
+  status:
+    project:
+      default:
+        target: 0%
+        threshold: 0.02%
+    patch: no
+ignore:
+  - "3rdParty"
+  - "test"
+flag_management:
+  default_rules:
+    carryforward: false

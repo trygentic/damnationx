@@ -1,0 +1,7 @@
+{
+ "schema": 1,
+ "terrain": [{"id": "dungeon.floor"}],
+ "monster": [{"id": "monster.gloomling"}],
+ "item": [{"id": "item.starshard"}],
+ "ui_frames": [{"id": "ui.spellbook"}]
+}

@@ -1,0 +1,58 @@
+name: Windows XP MinGW
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Create Build Environment
+      run: >
+        sudo apt-get update &&
+        sudo apt-get install -y cmake build-essential flex bison pkg-config patch gettext dpkg-dev curl xz-utils bzip2 git smpq
+
+    - name: Cache mingwxp toolchain
+      id: cache-mingwxp
+      uses: actions/cache@v6
+      with:
+        path: /opt/mingwxp
+        key: mingwxp-toolchain-${{ hashFiles('Packaging/windows/mingwxp-prep.sh', 'Packaging/windows/mingw-pre-vista-gcc.patch') }}
+
+    - name: Build mingwxp toolchain
+      if: steps.cache-mingwxp.outputs.cache-hit != 'true'
+      run: sudo Packaging/windows/mingwxp-prep.sh
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}
+      run: cmake -S. -Bbuild-windowsxp -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCPACK=ON -DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/mingwxp.toolchain.cmake -DTARGET_PLATFORM=windowsXP
+
+    - name: Build
+      working-directory: ${{github.workspace}}
+      shell: bash
+      run: |
+        cmake --build build-windowsxp -j $(nproc) --target package
+        mv build-windowsxp/devilutionx.zip devilutionx-windows-xp-32bit.zip
+
+    - name: Upload-Package
+      if: ${{ !env.ACT }}
+      uses: actions/upload-artifact@v7
+      with:
+        path: devilutionx-windows-xp-32bit.zip
+
+    - name: Update Release
+      if: ${{ github.event_name == 'release' && !env.ACT }}
+      uses: svenstaro/upload-release-action@v2
+      with:
+        file: devilutionx-windows-xp-32bit.zip
+        overwrite: true

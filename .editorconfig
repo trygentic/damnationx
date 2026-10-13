@@ -1,0 +1,91 @@
+root = true
+
+[*]
+indent_style = tab
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{c++,cc,cpp,cppm,cxx,h,h++,hh,hpp,hxx,inl,ipp,ixx,tlh,tli}]
+# Visual C++ Code Style settings
+cpp_generate_documentation_comments = doxygen_slash_star
+
+[*.java]
+end_of_line = lf
+
+[*.pot]
+end_of_line = lf
+
+[*.po]
+end_of_line = lf
+
+[*.lua]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+
+[*.py]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+
+[*.rb]
+end_of_line = lf
+
+[*.yml]
+indent_style = space
+end_of_line = lf
+
+[*.sh]
+end_of_line = lf
+
+[*.xml]
+end_of_line = lf
+
+[.clang-format]
+end_of_line = lf
+
+[.gitignore]
+end_of_line = lf
+
+[*.cmake]
+indent_style = space
+indent_size = 2
+
+[*.desktop]
+end_of_line = lf
+
+[*.md]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+
+[*.txt]
+end_of_line = crlf
+
+[*.tsv]
+trim_trailing_whitespace = false
+
+[*.plist]
+end_of_line = lf
+
+[AppRun]
+end_of_line = lf
+
+[{CMakeLists.txt,CMakeSettings.json}]
+indent_style = space
+indent_size = 2
+end_of_line = crlf
+
+[control]
+end_of_line = lf
+
+[devilutionx.spec]
+end_of_line = lf
+
+[Dockerfile]
+end_of_line = lf
+
+[ASSETS_VERSION]
+end_of_line = lf

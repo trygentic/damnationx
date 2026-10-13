@@ -1,0 +1,48 @@
+#include "engine/load_clx.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+
+#include "appfat.h"
+#include "engine/assets.hpp"
+#include "engine/load_file.hpp"
+#include "engine/render/hd_ui_hooks.hpp"
+
+namespace devilution {
+
+OptionalOwnedClxSpriteListOrSheet LoadOptionalClxListOrSheet(const char *path)
+{
+	AssetRef ref = FindAsset(path);
+	if (!ref.ok())
+		return std::nullopt;
+	const size_t size = ref.size();
+	std::unique_ptr<uint8_t[]> data { new uint8_t[size] };
+	{
+		AssetHandle handle = OpenAsset(std::move(ref));
+		if (!handle.ok() || !handle.read(data.get(), size))
+			return std::nullopt;
+	}
+	OwnedClxSpriteListOrSheet result = OwnedClxSpriteListOrSheet::FromBuffer(std::move(data), size);
+	HdUiNotifyLoaded(path, result);
+	return result;
+}
+
+std::expected<OwnedClxSpriteListOrSheet, std::string> LoadClxListOrSheetWithStatus(const char *path)
+{
+	size_t size;
+	std::expected<std::unique_ptr<uint8_t[]>, std::string> data = LoadFileInMemWithStatus<uint8_t>(path, &size);
+	if (!data.has_value()) return std::unexpected(std::move(data).error());
+	OwnedClxSpriteListOrSheet result = OwnedClxSpriteListOrSheet::FromBuffer(std::move(data).value(), size);
+	HdUiNotifyLoaded(path, result);
+	return result;
+}
+
+OwnedClxSpriteListOrSheet LoadClxListOrSheet(const char *path)
+{
+	std::expected<OwnedClxSpriteListOrSheet, std::string> result = LoadClxListOrSheetWithStatus(path);
+	if (!result.has_value()) app_fatal(result.error());
+	return std::move(result).value();
+}
+
+} // namespace devilution

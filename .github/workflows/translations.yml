@@ -1,0 +1,25 @@
+name: Validate translations
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Install polib
+      run: sudo apt-get update && sudo apt-get install -y python3-polib
+
+    - name: Check
+      working-directory: ${{github.workspace}}
+      shell: bash
+      run: python3 tools/validate_translations.py

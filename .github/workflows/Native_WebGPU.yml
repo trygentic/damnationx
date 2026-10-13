@@ -1,0 +1,42 @@
+name: Native WebGPU targets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install build dependencies
+        run: |
+          Packaging/nix/debian-host-prep.sh
+          sudo apt-get install -y ninja-build libwayland-dev libx11-dev libvulkan-dev
+      - name: Configure SDL3 and Dawn
+        run: |
+          cmake -S . -B build-native-webgpu -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON -DDEVILUTIONX_SYSTEM_SDL3=OFF \
+            -DDEVILUTIONX_SYSTEM_SDL_IMAGE=OFF -DDEVILUTIONX_SYSTEM_SDL_MIXER=OFF \
+            -DBUILD_TESTING=OFF -DDISCORD_INTEGRATION=OFF
+      - name: Build
+        run: cmake --build build-native-webgpu --target devilutionx --parallel 4
+
+  windows:
+    # Packaged Windows x64 WebGPU (SDL3 + Dawn/D3D12) zip with a static CRT; see tools/build-windows-webgpu.ps1.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: lukka/get-cmake@latest
+      - name: Build and package
+        shell: pwsh
+        run: tools/build-windows-webgpu.ps1 -BuildDir build-native-webgpu -Jobs 4
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: devilutionx-windows-x64-webgpu
+          path: build-native-webgpu/devilutionx-*.zip
+          if-no-files-found: error

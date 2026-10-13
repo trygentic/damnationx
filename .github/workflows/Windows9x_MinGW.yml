@@ -1,0 +1,58 @@
+name: Windows 9x MinGW
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Create Build Environment
+      run: >
+        sudo apt-get update &&
+        sudo apt-get install -y cmake build-essential flex bison pkg-config patch gettext dpkg-dev curl xz-utils bzip2 git smpq
+
+    - name: Cache mingw9x toolchain
+      id: cache-mingw9x
+      uses: actions/cache@v6
+      with:
+        path: /opt/mingw9x
+        key: mingw9x-toolchain-${{ hashFiles('Packaging/windows/mingw9x-prep.sh', 'Packaging/windows/mingw-pre-vista-gcc.patch') }}
+
+    - name: Build mingw9x toolchain
+      if: steps.cache-mingw9x.outputs.cache-hit != 'true'
+      run: sudo Packaging/windows/mingw9x-prep.sh
+
+    - name: Configure CMake
+      shell: bash
+      working-directory: ${{github.workspace}}
+      run: cmake -S. -Bbuild-windows9x -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCPACK=ON -DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/mingw9x.toolchain.cmake -DTARGET_PLATFORM=windows9x
+
+    - name: Build
+      working-directory: ${{github.workspace}}
+      shell: bash
+      run: |
+        cmake --build build-windows9x -j $(nproc) --target package
+        mv build-windows9x/devilutionx.zip devilutionx-win9x.zip
+
+    - name: Upload-Package
+      if: ${{ !env.ACT }}
+      uses: actions/upload-artifact@v7
+      with:
+        path: devilutionx-win9x.zip
+
+    - name: Update Release
+      if: ${{ github.event_name == 'release' && !env.ACT }}
+      uses: svenstaro/upload-release-action@v2
+      with:
+        file: devilutionx-win9x.zip
+        overwrite: true

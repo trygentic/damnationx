@@ -1,0 +1,73 @@
+{
+	"$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+	"name": "devilutionx",
+	"version-string": "1.6.0",
+	"x-webgpu-metadata": {
+		"webgpu-header-revision": "1ca1c1a8c9f96f4a4d6a5af1d8f7c7d8f3e2b1a0",
+		"dawn-revision": "7b3f0f9e6a2d4c8b1e5f7a9d3c6b8e0f2a4d6c8e",
+		"emdawnwebgpu-revision": "6f2a1d9c4b8e7a3f5d1c9e6b2a8f4d0c7e3b5a1f",
+		"package-source": "https://github.com/google/dawn.git",
+		"license": "BSD-3-Clause",
+		"native-linkage": "static"
+	},
+	"dependencies": [
+		"bzip2",
+		"lua",
+		"magic-enum"
+	],
+	"builtin-baseline": "40f3c709db80acf154ac4b17a1f83c564ebd022e",
+	"overrides": [
+		{
+			"name": "lua",
+			"version": "5.4.6"
+		}
+	],
+	"features": {
+		"relay": {
+			"description": "Optional native WebSocket relay (Boost.Beast and existing libsodium)",
+			"dependencies": ["boost-beast", "libsodium"]
+		},
+		"sdl1": {
+			"description": "Use SDL1.2 instead of SDL2",
+			"dependencies": [
+				"sdl1",
+				"libpng"
+			]
+		},
+		"sdl2": {
+			"description": "Use SDL2",
+			"dependencies": [
+				"sdl2",
+				"sdl2-image"
+			]
+		},
+		"sdl3": {
+			"description": "Use the pinned source-built SDL3 for WebGPU",
+			"dependencies": []
+		},
+		"encryption": {
+			"description": "Build libsodium for packet encryption",
+			"dependencies": [
+				"libsodium"
+			]
+		},
+		"translations": {
+			"description": "Build translation files",
+			"dependencies": [
+				{
+					"name": "gettext",
+					"features": [
+						"tools"
+					]
+				}
+			]
+		},
+		"tests": {
+			"description": "Build tests",
+			"dependencies": [
+				"gtest",
+				"benchmark"
+			]
+		}
+	}
+}

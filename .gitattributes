@@ -1,0 +1,4 @@
+# Do not let git change line endings.
+* -text
+# CRLF is intentional; check whitespace without treating its CR as trailing space.
+* whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

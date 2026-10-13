@@ -1,0 +1,6 @@
+# scrollrt odd-height zoom goldens (see README.md): 640x351 viewport (640x479 screen), view 11,11, zoom on, light tables.
+# case	master rows 1..350	master row 0	master guard row	row 0
+# The master columns were recorded with the upstream Zoom(); row 0 is the fixed odd-height tail.
+odd_zoom_no_panel	b58aac73e31100dd	82f058a960abb64f	intact	72d52c1d7114f0fd
+odd_zoom_left_panel	a52cda4f0da29fea	07dba0b653a933fa	intact	2eb60bae10604abf
+odd_zoom_right_panel	6dcfeabda6ad3e0d	a01f0d08556f43f7	overwritten	de8a69e2fb7a2e9d

@@ -1,0 +1,92 @@
+diablo	d2	d2hd	note
+sfx\warrior\warior13.wav	data\local\sfx\common\barbarian\bar_cantuse		I can't use this yet
+sfx\warrior\warior14.wav	data\local\sfx\common\barbarian\bar_cantcarry		I can't carry any more -> I can't carry anymore.
+sfx\warrior\wario14b.wav	data\local\sfx\common\barbarian\bar_overburdened		I gotta pawn some of this stuff -> I am Overburdened.
+sfx\warrior\wario14c.wav	data\local\sfx\common\barbarian\bar_toomuch		Too much baggage -> Too much.
+sfx\warrior\warior15.wav	data\local\sfx\common\barbarian\bar_overburdened		I have no room -> I am Overburdened.
+sfx\warrior\wario15b.wav	data\local\sfx\common\barbarian\bar_overburdened		I have no room for this crap -> I am Overburdened.
+sfx\warrior\wario15c.wav	data\local\sfx\common\barbarian\bar_toomuch		I gotta get rid of some of this crap -> Too much.
+sfx\warrior\warior16.wav	data\local\sfx\common\barbarian\bar_toomuch		Where would I put this? -> Too much.
+sfx\warrior\warior17.wav	data\local\sfx\common\barbarian\bar_noway		No way
+sfx\warrior\warior18.wav	data\local\sfx\common\barbarian\bar_impossible		Not a chance -> impossible.
+sfx\warrior\warior21.wav	data\local\sfx\common\barbarian\bar_cant		I can't move this -> I can't.
+sfx\warrior\warior23.wav	data\local\sfx\common\barbarian\bar_locked		I can't open this -> It's locked.
+sfx\warrior\warior24.wav	data\local\sfx\common\barbarian\bar_locked		I can't open this... yet -> It's locked.
+sfx\warrior\warior25.wav	data\local\sfx\common\barbarian\bar_cant		I can't lift this -> I can't.
+sfx\warrior\warior27.wav	data\local\sfx\common\barbarian\bar_cantdohere		I can't cast that here -> I can't do that here.
+sfx\warrior\warior35.wav	data\local\sfx\common\barbarian\bar_notenoughmana		Not enough mana
+sfx\warrior\warior37.wav	data\local\sfx\common\barbarian\bar_cannot		I can't do that -> cannot.
+sfx\warrior\warior38.wav	data\local\sfx\common\barbarian\bar_no		No
+sfx\warrior\warior39.wav	data\local\sfx\common\barbarian\bar_yes_statement		Yes
+sfx\warrior\warior40.wav	data\local\sfx\common\barbarian\bar_impossible		That won't work -> impossible.
+sfx\warrior\warior41.wav	data\local\sfx\common\barbarian\bar_nothere		That won't work here -> Not here.
+sfx\warrior\warior60.wav	data\local\sfx\common\barbarian\bar_timetodie		Time to die
+sfx\warrior\warior64.wav	data\local\sfx\common\barbarian\bar_die		Die!
+sfx\warrior\warior76.wav	data\local\sfx\common\barbarian\bar_whatthehell		What was that? -> What the hell is that?
+sfx\warrior\warior68.wav	data\global\sfx\combat\player\barbarian\soft1	data\hd\global\sfx\combat\player\barbarian\barbarian_gethit_1_hd	Argh (hit by trap) -> grunt
+sfx\warrior\warior69.wav	data\global\sfx\combat\player\barbarian\soft4	data\hd\global\sfx\combat\player\barbarian\barbarian_gethit_2_hd	Argh (hit) -> grunt
+sfx\warrior\wario69b.wav	data\global\sfx\combat\player\barbarian\soft5	data\hd\global\sfx\combat\player\barbarian\barbarian_gethit_3_hd	Ugh (hit, variant) -> grunt
+sfx\warrior\warior70.wav	data\global\sfx\combat\player\barbarian\hard3	data\hd\global\sfx\combat\player\barbarian\barbarian_gethit_4_hd	Aaaaargh (burning/heavy hit) -> grunt
+sfx\warrior\warior71.wav	data\global\sfx\combat\player\barbarian\death1	data\hd\global\sfx\combat\player\barbarian\barbarian_death_1_hd	Oof-ah (death) -> grunt
+sfx\rogue\rogue13.wav	data\local\sfx\common\amazon\ama_cantuseyet		I can't use this yet
+sfx\rogue\rogue14.wav	data\local\sfx\common\amazon\ama_cantcarry		I can't carry any more -> I can't carry anymore.
+sfx\rogue\rogue15.wav	data\local\sfx\common\amazon\ama_overburdened		I have no room -> I am overburdened.
+sfx\rogue\rogue16.wav	data\local\sfx\common\amazon\ama_toomuch		Where would I put this? -> too much.
+sfx\rogue\rogue17.wav	data\local\sfx\common\amazon\ama_noway		No way
+sfx\rogue\rogue18.wav	data\local\sfx\common\amazon\ama_impossible		Not a chance -> impossible.
+sfx\rogue\rogue21.wav	data\local\sfx\common\amazon\ama_cant		I can't move this -> I can't.
+sfx\rogue\rogue23.wav	data\local\sfx\common\amazon\ama_locked		I can't open this -> It's locked.
+sfx\rogue\rogue24.wav	data\local\sfx\common\amazon\ama_locked		I can't open this... yet -> It's locked.
+sfx\rogue\rogue25.wav	data\local\sfx\common\amazon\ama_cant		I can't lift this -> I can't.
+sfx\rogue\rogue27.wav	data\local\sfx\common\amazon\ama_cantdohere		I can't cast that here -> I can't do that here.
+sfx\rogue\rogue35.wav	data\local\sfx\common\amazon\ama_notenoughmana		Not enough mana
+sfx\rogue\rogue37.wav	data\local\sfx\common\amazon\ama_cant		I can't do that -> I can't.
+sfx\rogue\rogue38.wav	data\local\sfx\common\amazon\ama_no		No
+sfx\rogue\rogue39.wav	data\local\sfx\common\amazon\ama_yes_statement		Yes
+sfx\rogue\rogue40.wav	data\local\sfx\common\amazon\ama_impossible		That won't work -> impossible.
+sfx\rogue\rogue41.wav	data\local\sfx\common\amazon\ama_nothere		That won't work here -> Not here.
+sfx\rogue\rogue60.wav	data\local\sfx\common\amazon\ama_timetodie		Time to die
+sfx\rogue\rogue64.wav	data\local\sfx\common\amazon\ama_die		Die!
+sfx\rogue\rogue76.wav	data\local\sfx\common\amazon\ama_whatthehell		What was that? -> What the hell is that?
+sfx\rogue\rogue68.wav	data\global\sfx\combat\player\amazon\soft4	data\hd\global\sfx\combat\player\amazon\amazon_gethit_1_hd	Argh (hit by trap) -> grunt
+sfx\rogue\rogue69.wav	data\global\sfx\combat\player\amazon\hard1	data\hd\global\sfx\combat\player\amazon\amazon_gethit_2_hd	Argh (hit) -> grunt
+sfx\rogue\rogue69b.wav	data\global\sfx\combat\player\amazon\hard2	data\hd\global\sfx\combat\player\amazon\amazon_gethit_3_hd	Ugh (hit, variant) -> grunt
+sfx\rogue\rogue70.wav	data\global\sfx\combat\player\amazon\hard6	data\hd\global\sfx\combat\player\amazon\amazon_gethit_4_hd	Aaaaargh (burning/heavy hit) -> grunt
+sfx\rogue\rogue71.wav	data\global\sfx\combat\player\amazon\death1	data\hd\global\sfx\combat\player\amazon\amazon_death_1_hd	Oof-ah (death) -> grunt
+sfx\sorceror\mage13.wav	data\local\sfx\common\sorceress\sor_cantuseyet		I can't use this yet
+sfx\sorceror\mage14.wav	data\local\sfx\common\sorceress\sor_cantcarrymore		I can't carry any more -> I can't carry anymore.
+sfx\sorceror\mage15.wav	data\local\sfx\common\sorceress\sor_overburdened		I have no room -> I am overburdened.
+sfx\sorceror\mage16.wav	data\local\sfx\common\sorceress\sor_toomuch		Where would I put this? -> Too much.
+sfx\sorceror\mage17.wav	data\local\sfx\common\sorceress\sor_noway		No way
+sfx\sorceror\mage18.wav	data\local\sfx\common\sorceress\sor_impossible		Not a chance -> impossible.
+sfx\sorceror\mage21.wav	data\local\sfx\common\sorceress\sor_icant		I can't move this -> I can't.
+sfx\sorceror\mage23.wav	data\local\sfx\common\sorceress\sor_locked		I can't open this -> It's locked.
+sfx\sorceror\mage24.wav	data\local\sfx\common\sorceress\sor_locked		I can't open this... yet -> It's locked.
+sfx\sorceror\mage25.wav	data\local\sfx\common\sorceress\sor_icant		I can't lift this -> I can't.
+sfx\sorceror\mage27.wav	data\local\sfx\common\sorceress\sor_cantdohere		I can't cast that here -> I can't do that here.
+sfx\sorceror\mage35.wav	data\local\sfx\common\sorceress\sor_notenoughmana		Not enough mana
+sfx\sorceror\mage37.wav	data\local\sfx\common\sorceress\sor_icant		I can't do that -> I can't.
+sfx\sorceror\mage38.wav	data\local\sfx\common\sorceress\sor_no		No
+sfx\sorceror\mage39.wav	data\local\sfx\common\sorceress\sor_yes_statement		Yes
+sfx\sorceror\mage40.wav	data\local\sfx\common\sorceress\sor_impossible		That won't work -> impossible.
+sfx\sorceror\mage41.wav	data\local\sfx\common\sorceress\sor_nothere		That won't work here -> Not here.
+sfx\sorceror\mage60.wav	data\local\sfx\common\sorceress\sor_timetodie		Time to die
+sfx\sorceror\mage64.wav	data\local\sfx\common\sorceress\sor_die		Die!
+sfx\sorceror\mage76.wav	data\local\sfx\common\sorceress\sor_whatthehell		What was that? -> What the hell is that?
+sfx\sorceror\mage68.wav	data\global\sfx\combat\player\sorceress\soft1	data\hd\global\sfx\combat\player\sorceress\sorceress_gethit_1_hd	Argh (hit by trap) -> grunt
+sfx\sorceror\mage69.wav	data\global\sfx\combat\player\sorceress\soft3	data\hd\global\sfx\combat\player\sorceress\sorceress_gethit_2_hd	Argh (hit) -> grunt
+sfx\sorceror\mage69b.wav	data\global\sfx\combat\player\sorceress\soft4	data\hd\global\sfx\combat\player\sorceress\sorceress_gethit_3_hd	Ugh (hit, variant) -> grunt
+sfx\sorceror\mage70.wav	data\global\sfx\combat\player\sorceress\hard3	data\hd\global\sfx\combat\player\sorceress\sorceress_gethit_4_hd	Aaaaargh (burning/heavy hit) -> grunt
+sfx\sorceror\mage71.wav	data\global\sfx\combat\player\sorceress\death1	data\hd\global\sfx\combat\player\sorceress\sorceress_death_1_hd	Oof-ah (death) -> grunt
+sfx\monk\monk13.wav	data\local\sfx\common\paladin\pal_cantuseyet		I can't use this yet
+sfx\monk\monk14.wav	data\local\sfx\common\paladin\pal_cantcarry		I can't carry any more -> I can't carry anymore.
+sfx\monk\monk15.wav	data\local\sfx\common\paladin\pal_overburdened		I have no room -> I am overburdened.
+sfx\monk\monk16.wav	data\local\sfx\common\paladin\pal_toomuch		Where would I put this? -> too much.
+sfx\monk\monk24.wav	data\local\sfx\common\paladin\pal_itslocked		I can't open this... yet -> It's locked.
+sfx\monk\monk27.wav	data\local\sfx\common\paladin\pal_cantdohere		I can't cast that here -> I can't do that here.
+sfx\monk\monk35.wav	data\local\sfx\common\paladin\pal_notenoughmana		Not enough mana
+sfx\monk\monk68.wav	data\global\sfx\combat\player\paladin\soft1	data\hd\global\sfx\combat\player\paladin\paladin_gethit_1_hd	Argh (hit by trap) -> grunt
+sfx\monk\monk69.wav	data\global\sfx\combat\player\paladin\soft2	data\hd\global\sfx\combat\player\paladin\paladin_gethit_2_hd	Argh (hit) -> grunt
+sfx\monk\monk69b.wav	data\global\sfx\combat\player\paladin\soft3	data\hd\global\sfx\combat\player\paladin\paladin_gethit_3_hd	Ugh (hit, variant) -> grunt
+sfx\monk\monk70.wav	data\global\sfx\combat\player\paladin\hard2	data\hd\global\sfx\combat\player\paladin\paladin_gethit_4_hd	Aaaaargh (burning/heavy hit) -> grunt
+sfx\monk\monk71.wav	data\global\sfx\combat\player\paladin\death1	data\hd\global\sfx\combat\player\paladin\paladin_death_1_hd	Oof-ah (death) -> grunt

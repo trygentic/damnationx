@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<title>DamnationX</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body {
+			font-family: arial;
+			margin: 0;
+			padding: none;
+			background: black;
+			color: white;
+		}
+
+		.emscripten {
+			padding-right: 0;
+			margin-left: auto;
+			margin-right: auto;
+			display: block;
+		}
+
+		div.emscripten {
+			text-align: center;
+		}
+
+		div.emscripten_border {
+			border: 1px solid black;
+			/* Below the fixed top-right buttons, then as large as the window allows at the game's shape.
+			   --game-aspect ("W / H") is set by the launcher's Play, so windowed mode has no bars either. */
+			margin: 64px auto 16px;
+			width: min(calc(100vw - 40px), calc((100vh - 100px) * var(--game-aspect, 4 / 3)));
+			max-width: 2048px; /* CSS px: the canvas backing store is this x devicePixelRatio, so 4096 at DPR 2 */
+			aspect-ratio: var(--game-aspect, 4 / 3);
+			display: flex;
+			justify-content: center;
+			align-items: center;
+		}
+
+		div.emscripten_border:fullscreen {
+			width: 100vw;
+			height: 100vh;
+			max-width: none;
+			aspect-ratio: auto;
+			margin: 0;
+			border: 0;
+			background: black;
+		}
+
+		div.emscripten_border:fullscreen #exitFullscreenBtn {
+			display: block;
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			z-index: 1;
+		}
+
+		div.emscripten_border:fullscreen canvas {
+			/* Fill the screen; object-fit keeps the game's own aspect ratio, so a resolution matching the display has no bars. */
+			width: 100vw;
+			height: 100vh;
+		}
+
+		/* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+		canvas.emscripten {
+			border: 0px none;
+			background-color: black;
+			width: 100%;
+			height: 100%;
+			max-width: 100%;
+			max-height: 100%;
+			object-fit: contain;
+			image-rendering: pixelated;
+			image-rendering: crisp-edges;
+			-webkit-user-select: none;
+			-moz-user-select: none;
+			-ms-user-select: none;
+			user-select: none;
+			-webkit-user-drag: none;
+			pointer-events: auto;
+		}
+
+		#emscripten_logo {
+			display: inline-block;
+			margin: 0;
+		}
+
+		.spinner {
+			height: 30px;
+			width: 30px;
+			margin: 0;
+			margin-top: 20px;
+			margin-left: 20px;
+			display: inline-block;
+			vertical-align: top;
+
+			-webkit-animation: rotation .8s linear infinite;
+			-moz-animation: rotation .8s linear infinite;
+			-o-animation: rotation .8s linear infinite;
+			animation: rotation 0.8s linear infinite;
+
+			border-left: 5px solid rgb(235, 235, 235);
+			border-right: 5px solid rgb(235, 235, 235);
+			border-bottom: 5px solid rgb(235, 235, 235);
+			border-top: 5px solid rgb(120, 120, 120);
+
+			border-radius: 100%;
+			background-color: rgb(189, 215, 46);
+		}
+
+		@-webkit-keyframes rotation {
+			from {
+				-webkit-transform: rotate(0deg);
+			}
+
+			to {
+				-webkit-transform: rotate(360deg);
+			}
+		}
+
+		@-moz-keyframes rotation {
+			from {
+				-moz-transform: rotate(0deg);
+			}
+
+			to {
+				-moz-transform: rotate(360deg);
+			}
+		}
+
+		@-o-keyframes rotation {
+			from {
+				-o-transform: rotate(0deg);
+			}
+
+			to {
+				-o-transform: rotate(360deg);
+			}
+		}
+
+		@keyframes rotation {
+			from {
+				transform: rotate(0deg);
+			}
+
+			to {
+				transform: rotate(360deg);
+			}
+		}
+
+		#status {
+			display: inline-block;
+			vertical-align: top;
+			margin-top: 30px;
+			margin-left: 20px;
+			font-weight: bold;
+			color: rgb(120, 120, 120);
+		}
+
+		#progress {
+			height: 20px;
+			width: 300px;
+		}
+
+		#controls {
+			display: inline-block;
+			float: right;
+			vertical-align: top;
+			margin-top: 30px;
+			margin-right: 20px;
+		}
+
+		#output {
+			width: 100%;
+			height: 200px;
+			margin: 0 auto;
+			margin-top: 10px;
+			border-left: 0px;
+			border-right: 0px;
+			padding-left: 0px;
+			padding-right: 0px;
+			display: block;
+			background-color: black;
+			color: white;
+			font-family: 'Lucida Console', Monaco, monospace;
+			outline: none;
+		}
+
+		/* File Manager Styles */
+		#fileManagerBtn {
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			cursor: pointer;
+			z-index: 1000;
+		}
+
+		#fullscreenBtn {
+			position: fixed;
+			top: 20px;
+			right: 145px;
+			z-index: 1000;
+		}
+
+		#d2SoundBtn {
+			position: fixed;
+			top: 20px;
+			right: 255px;
+			z-index: 1000;
+		}
+
+
+		#d2SoundModal .modal-content {
+			color: #111;
+		}
+
+		#d2SoundModal .d2-source {
+			border: 1px solid #999;
+			padding: 10px 15px;
+			margin: 15px 0;
+		}
+
+		#d2SoundModal .d2-source.d2-highlight {
+			border: 2px solid #b8860b;
+		}
+
+		#d2SoundModal .d2-source h3 {
+			margin-top: 0;
+		}
+
+		#d2SoundModal .d2-source .btn {
+			margin: 5px 5px 5px 0;
+		}
+
+		#d2SoundModal .d2-note {
+			font-size: 0.9em;
+			color: #444;
+		}
+
+		#d2SoundModal .d2-status {
+			min-height: 1.2em;
+			margin: 10px 0;
+		}
+
+		#d2SoundModal .d2-error {
+			color: #a00000;
+		}
+
+		#d2SoundProgress {
+			width: 100%;
+		}
+
+		#d2SoundDirInput, #d2SoundMpqInput {
+			display: none;
+		}
+
+		#exitFullscreenBtn {
+			display: none;
+		}
+
+		#fullscreenBtn, #exitFullscreenBtn, #fileManagerBtn, #d2SoundBtn {
+			background: #222;
+			color: white;
+			border: 1px solid #666;
+			padding: 8px 12px;
+			cursor: pointer;
+		}
+
+		#privacyLink {
+			position: fixed;
+			bottom: 20px;
+			left: 20px;
+			z-index: 1000;
+			color: #aaa;
+		}
+
+		#fileManagerModal, #d2SoundModal {
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0,0,0,0.5);
+			z-index: 2000;
+			justify-content: center;
+			align-items: center;
+		}
+
+		#fileManagerModal.show, #d2SoundModal.show {
+			display: flex;
+		}
+
+		.modal-content {
+			background: white;
+			color: #111;
+			border: 1px solid black;
+			padding: 20px;
+			max-width: 600px;
+			width: 90%;
+			max-height: 80vh;
+			overflow-y: auto;
+		}
+
+		.modal-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 20px;
+		}
+
+		.modal-header h2 {
+			margin: 0;
+		}
+
+		.close-btn {
+			border: 1px solid black;
+			cursor: pointer;
+			padding: 5px 10px;
+		}
+
+		.drop-zone {
+			border: 1px solid black;
+			padding: 20px;
+			text-align: center;
+			margin: 20px 0;
+			cursor: pointer;
+		}
+
+		.drop-zone p {
+			margin: 10px 0;
+		}
+
+		.file-list {
+			margin: 20px 0;
+		}
+
+		.file-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 10px;
+			margin: 5px 0;
+			border: 1px solid black;
+		}
+
+		.file-item-name {
+			flex: 1;
+		}
+
+		.file-item-size {
+			margin: 0 15px;
+		}
+
+		.btn {
+			padding: 8px 16px;
+			border: 1px solid black;
+			cursor: pointer;
+		}
+
+		.section {
+			margin: 20px 0;
+		}
+
+		#fileInput {
+			display: none;
+		}
+
+		@media screen and (max-width: 700px) {
+			div.emscripten_border {
+				width: min(calc(100vw - 40px), calc((100vh - 100px) * var(--game-aspect, 4 / 3)));
+			}
+		}
+
+		#downloadPanel { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 950; width: min(440px, calc(100vw - 48px)); padding: 14px 18px; border: 1px solid #665847; background: #211e1a; box-sizing: border-box; text-align: center; pointer-events: none; }
+		#downloadPanel[hidden] { display: none; }
+		#downloadProgress { width: 100%; height: 16px; margin-top: 8px; accent-color: #bca477; }
+		#downloadDetail { font-size: 13px; color: #c2b7a6; margin-top: 6px; }
+
+		/* tools/launcher: covers the page until Play; File Manager (z-index 1000+) stays above it. */
+		#launcher {
+			position: fixed;
+			inset: 0;
+			width: 100%;
+			height: 100%;
+			z-index: 900;
+			background: #1b1b1b;
+		}
+	</style>
+</head>
+
+<body>
+	<canvas id="launcher"></canvas>
+	<section id="downloadPanel" role="status" aria-live="polite">
+		<div id="downloadLabel">Loading launcher…</div>
+		<progress id="downloadProgress" max="100" aria-label="Download progress"></progress>
+		<div id="downloadDetail">Preparing downloads</div>
+	</section>
+	<a id="privacyLink" href="privacy.html">Privacy</a>
+	<button id="fullscreenBtn" type="button">Fullscreen</button>
+	<button id="fileManagerBtn" title="File Manager">File Manager</button>
+	<button id="d2SoundBtn" type="button" title="Import the sounds of Diablo II or Diablo II: Resurrected">Diablo II Sounds</button>
+	<div id="d2SoundModal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h2>Diablo II Sounds</h2>
+				<button class="close-btn" id="d2SoundClose">&times;</button>
+			</div>
+			<div class="info-text">
+				Replaces the game's sounds with the ones of your Diablo II or Diablo II: Resurrected.
+				Your game files are read in place: nothing is uploaded or copied, only the imported sounds are saved in this browser.
+				Then select the pack in Settings &gt; Audio &gt; Sound Pack.
+			</div>
+			<div class="d2-source" data-source="d2">
+				<h3>Diablo II</h3>
+				<button class="btn" type="button" data-d2-choose="d2-folder">Choose the Diablo II folder&hellip;</button>
+				<button class="btn" type="button" data-d2-choose="d2-files">Choose MPQ files&hellip;</button>
+				<p class="d2-note">Uses d2sfx.mpq and d2speech.mpq, plus d2exp.mpq, d2xtalk.mpq and patch_d2.mpq of Lord of Destruction if you have them. Creates the "Diablo II" pack.</p>
+			</div>
+			<div class="d2-source" data-source="d2r">
+				<h3>Diablo II: Resurrected</h3>
+				<button class="btn" type="button" data-d2-choose="d2r-folder">Choose the Diablo II Resurrected folder&hellip;</button>
+				<p class="d2-note">The folder with D2R.exe, .build.info and Data. Only the sounds are read from its data (about a minute). Creates the "Classic" and "Advanced" (remastered) packs, about 60 MB.</p>
+			</div>
+			<progress id="d2SoundProgress" value="0" max="100" hidden></progress>
+			<div id="d2SoundStatus" class="d2-status" aria-live="polite"></div>
+			<button class="btn" type="button" id="d2SoundCancel" hidden>Cancel</button>
+			<div class="section">
+				<h3>Sound packs</h3>
+				<div class="file-list" id="d2SoundPacks"></div>
+			</div>
+			<input type="file" id="d2SoundDirInput" webkitdirectory multiple>
+			<input type="file" id="d2SoundMpqInput" accept=".mpq,.MPQ" multiple>
+		</div>
+	</div>
+	<div id="fileManagerModal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h2>File Manager</h2>
+				<button class="close-btn" id="closeModal">&times;</button>
+			</div>
+
+			<div class="section">
+				<h3>Upload MPQ Files</h3>
+				<div class="info-text">
+					Upload DIABDAT.MPQ or SPAWN.MPQ or other game files. Files will persist across browser sessions.
+				</div>
+				<div class="drop-zone" id="dropZone">
+					<p>📁 Drag and drop MPQ files here</p>
+					<p>or</p>
+					<p><button class="btn" id="browseBtn">Browse Files</button></p>
+				</div>
+				<input type="file" id="fileInput" accept=".mpq,.MPQ" multiple>
+			</div>
+
+			<div class="section">
+				<div class="file-list">
+					<h3>Loaded MPQ Files</h3>
+					<div id="mpqFilesList"></div>
+				</div>
+			</div>
+
+			<div class="section">
+				<h3>HD Assets</h3>
+				<p class="info-text">Use the HD asset pack from a folder on this computer: choose the <code>hd</code> folder, or the unzipped pack that contains it. The game reads files from the folder as it needs them; nothing is uploaded. Works in any browser; Chrome and Edge also remember the folder. Choose it before pressing Play.</p>
+				<p id="hdStatus" class="info-text" role="status">No HD folder selected.</p>
+				<button class="btn" id="hdChooseBtn">Choose HD Folder&hellip;</button>
+				<button class="btn" id="hdForgetBtn" hidden>Stop Using HD Folder</button>
+			</div>
+
+			<div class="section">
+				<h3>Hero Saves</h3>
+				<p class="info-text">Download heroes and shared stashes for safekeeping or transfer to another browser. Leave the game before backing up for the latest hero progress. Restore before pressing Play.</p>
+				<p id="heroSaveStatus" class="info-text" role="status">Waiting for save storage...</p>
+				<div id="heroSaveList" class="info-text"></div>
+				<button class="btn" id="backupHeroSaves">Download Backup</button>
+				<button class="btn" id="restoreHeroSaves">Restore Backup</button>
+				<input type="file" id="heroBackupInput" accept=".json,application/json" hidden>
+			</div>
+
+			<div class="section">
+				<h3>Settings</h3>
+				<div class="info-text">
+					Reset game settings (diablo.ini) without deleting saves. Useful if settings are accidentally messed up or not working correctly.
+				</div>
+				<button class="btn btn-reset" id="resetSettingsBtn">Reset Game Settings</button>
+			</div>
+		</div>
+	</div>
+
+	<div class="spinner" id='spinner'></div>
+	<div class="emscripten" id="status">Checking browser compatibility...</div>
+	<section id="launchGate" aria-live="polite" aria-atomic="true">
+		<strong id="launchState">Checking browser compatibility...</strong>
+		<p id="launchMessage">The game will start after WebGPU, game data, and renderer initialization complete.</p>
+		<button id="launchRetry" type="button" hidden>Retry initialization</button>
+	</section>
+
+	<div class="emscripten">
+		<progress value="0" max="100" id="progress" hidden=1></progress>
+	</div>
+
+	<div class="emscripten_border">
+		<button id="exitFullscreenBtn" type="button">Exit Fullscreen</button>
+		<canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+	</div>
+	<textarea id="output" rows="8"></textarea>
+
+	<script type='text/javascript'>
+		// Track binary streams without duplicate downloads or buffering. The data loader
+		// and WebAssembly streaming compiler still consume their normal responses.
+		var downloads = new Map();
+		var downloadRuntimeReady = false;
+		var launcherReady = false;
+		var gameRequested = false;
+		var downloadPanel = document.getElementById('downloadPanel');
+		var downloadProgress = document.getElementById('downloadProgress');
+		function updateDownloads() {
+			var entries = Array.from(downloads.values()).filter(function (entry) { return gameRequested || entry.name === 'launcher'; });
+			if (launcherReady && !gameRequested) { downloadPanel.hidden = true; return; }
+			var pending = entries.filter(function (entry) { return !entry.done; });
+			if (downloadRuntimeReady && !pending.length) { downloadPanel.hidden = true; return; }
+			downloadPanel.hidden = false;
+			var loaded = entries.reduce(function (sum, entry) { return sum + entry.loaded; }, 0);
+			var total = entries.reduce(function (sum, entry) { return sum + entry.total; }, 0);
+			var known = entries.length && entries.every(function (entry) { return entry.total > 0; });
+			document.getElementById('downloadLabel').textContent = pending.length ? 'Loading ' + pending.map(function (entry) { return entry.name; }).join(' + ') : (gameRequested ? 'Preparing game…' : 'Preparing launcher…');
+			if (known && pending.length) downloadProgress.value = Math.min(100, loaded / total * 100);
+			else downloadProgress.removeAttribute('value');
+			var detail = (loaded / 1048576).toFixed(1) + ' MB downloaded';
+			if (known && pending.length) detail += ' of ' + (total / 1048576).toFixed(1) + ' MB (' + Math.min(100, Math.floor(loaded / total * 100)) + '%)';
+			document.getElementById('downloadDetail').textContent = entries.length ? detail : 'Preparing downloads';
+		}
+		var originalFetch = window.fetch.bind(window);
+		async function fetchBinary(input, options, url) {
+			// Only content-addressed launcher binaries bypass HTTP revalidation.
+			// A new build has a different URL, so an update cannot reuse stale WASM.
+			var cache = null;
+			if (/\/launcher\/[a-f0-9]{16}\/launcher_bg\.wasm$/.test(url.pathname) && window.caches) {
+				try {
+					cache = await caches.open('damnationx-launcher-v1');
+					var saved = await cache.match(url.href);
+					if (saved) return saved;
+				} catch (_) { cache = null; }
+			}
+			var response = await originalFetch(input, options);
+			if (cache && response.ok) cache.put(url.href, response.clone()).then(async function () {
+				var keys = await cache.keys();
+				for (var old of keys.slice(0, Math.max(0, keys.length - 2))) if (old.url !== url.href) await cache.delete(old);
+			}).catch(function () {});
+			return response;
+		}
+
+		window.fetch = async function (input, options) {
+			var url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, location.href);
+			if (url.origin !== location.origin || !/\.(wasm|data)$/.test(url.pathname)) return originalFetch(input, options);
+			var entry = { name: url.pathname.endsWith('.data') ? 'game data' : (url.pathname.includes('/launcher/') ? 'launcher' : 'game engine'), loaded: 0, total: 0, done: false };
+			downloads.set(url.href, entry);
+			updateDownloads();
+			try {
+				var response = await fetchBinary(input, options, url);
+				if (!response.ok) throw new Error('Download failed (' + response.status + '): ' + entry.name);
+				// Streams deliver decoded bytes; compressed Content-Length cannot be compared.
+				entry.total = response.headers.get('Content-Encoding') ? 0 : Number(response.headers.get('Content-Length') || 0);
+				if (!response.body || !window.TransformStream) { entry.done = true; updateDownloads(); return response; }
+				var stream = response.body.pipeThrough(new TransformStream({
+					transform: function (chunk, controller) { entry.loaded += chunk.byteLength; updateDownloads(); controller.enqueue(chunk); },
+					flush: function () { entry.done = true; entry.total = entry.loaded; updateDownloads(); }
+				}));
+				return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
+			} catch (error) {
+				document.getElementById('downloadLabel').textContent = 'Could not load ' + entry.name;
+				document.getElementById('downloadDetail').textContent = 'Check your connection and reload to retry.';
+				downloadProgress.removeAttribute('value');
+				throw error;
+			}
+		};
+		var statusElement = document.getElementById('status');
+		var progressElement = document.getElementById('progress');
+		var spinnerElement = document.getElementById('spinner');
+		var launchStateElement = document.getElementById('launchState');
+		var launchMessageElement = document.getElementById('launchMessage');
+		var launchRetryElement = document.getElementById('launchRetry');
+		var gameFrame = document.querySelector('.emscripten_border');
+		var fullscreenBtn = document.getElementById('fullscreenBtn');
+		fullscreenBtn.hidden = !gameFrame.requestFullscreen;
+		// Escape belongs to the game (menu, closing panels); Shift+Escape leaves fullscreen.
+		// Chromium: Keyboard Lock delivers a short Escape press to the page while in element
+		// fullscreen (holding Escape ~2s still exits, by browser design). Lock is requested
+		// before entering fullscreen and re-requested on every fullscreenchange, so it also
+		// covers fullscreen entered by SDL itself (Alt+Enter / Graphics option targets the
+		// canvas, not gameFrame).
+		// Safari/Firefox have no Keyboard Lock: Escape always exits fullscreen and the page
+		// never sees the keydown. We don't fight that; instead the unexpected exit is
+		// forwarded to the game as an Escape press so the in-game action still happens.
+		var gameCanvas = document.getElementById('canvas');
+		var keyboardLock = navigator.keyboard && navigator.keyboard.lock ? navigator.keyboard : null;
+		var exitingFullscreenOnPurpose = false;
+		var escapeLocked = false;
+		var swallowEscapeKeyup = false;
+		var lastEscapeKeydown = 0;
+		function lockEscape() {
+			if (!keyboardLock) return;
+			keyboardLock.lock(['Escape']).then(function () { escapeLocked = true; }, function (error) { escapeLocked = false; console.warn('Could not capture Escape in fullscreen:', error); });
+		}
+		function leaveFullscreen() {
+			if (!document.fullscreenElement) return;
+			exitingFullscreenOnPurpose = true;
+			var exit = document.exitFullscreen();
+			if (exit && exit.catch) exit.catch(function () { exitingFullscreenOnPurpose = false; });
+		}
+		function sendEscapeToGame() {
+			['keydown', 'keyup'].forEach(function (type) {
+				var event = new KeyboardEvent(type, { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true });
+				Object.defineProperty(event, 'keyCode', { value: 27 });
+				Object.defineProperty(event, 'which', { value: 27 });
+				gameCanvas.dispatchEvent(event);
+			});
+		}
+		// One fullscreen path for the page button and Alt+Enter: the page frame, so the fullscreen CSS and the
+		// Escape lock always apply. Alt+Enter is handled here, inside the key press (browsers only allow
+		// fullscreen from a user gesture), and never reaches the game, whose own SDL fullscreen targets the bare canvas.
+		function enterFullscreen() {
+			lockEscape();
+			var request = gameFrame.requestFullscreen();
+			if (request && request.then) request.then(lockEscape, function (error) { console.warn('Fullscreen request failed:', error); });
+		}
+		fullscreenBtn.addEventListener('click', enterFullscreen);
+		var swallowEnterKeyup = false;
+		window.addEventListener('keydown', function (e) {
+			if (e.key !== 'Enter' || !e.altKey || !e.isTrusted) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			swallowEnterKeyup = true;
+			if (!e.repeat) (document.fullscreenElement ? leaveFullscreen : enterFullscreen)();
+		}, true);
+		window.addEventListener('keyup', function (e) {
+			if (e.key !== 'Enter' || !swallowEnterKeyup) return;
+			swallowEnterKeyup = false;
+			e.stopImmediatePropagation();
+		}, true);
+		document.addEventListener('fullscreenchange', function () {
+			if (document.fullscreenElement) {
+				lockEscape();
+				return;
+			}
+			if (keyboardLock) keyboardLock.unlock();
+			var wasLocked = escapeLocked;
+			escapeLocked = false;
+			var onPurpose = exitingFullscreenOnPurpose;
+			exitingFullscreenOnPurpose = false;
+			// Escape not locked and no Escape keydown reached us: the browser consumed Escape.
+			if (!wasLocked && !onPurpose && !document.hidden && Date.now() - lastEscapeKeydown > 500) sendEscapeToGame();
+		});
+		window.addEventListener('keydown', function (e) {
+			if (e.key !== 'Escape' || !e.isTrusted) return;
+			lastEscapeKeydown = Date.now();
+			if (e.shiftKey && document.fullscreenElement) {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				swallowEscapeKeyup = true;
+				leaveFullscreen();
+			}
+		}, true);
+		window.addEventListener('keyup', function (e) {
+			// Swallow the matching keyup so the game never sees half of Shift+Escape.
+			if (e.key !== 'Escape' || !swallowEscapeKeyup) return;
+			swallowEscapeKeyup = false;
+			e.stopImmediatePropagation();
+		}, true);
+		var exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+		exitFullscreenBtn.title = keyboardLock ? 'Exit fullscreen (Shift+Esc or Alt+Enter)' : 'Exit fullscreen (Esc, Shift+Esc or Alt+Enter)';
+		fullscreenBtn.title = 'Fullscreen (Alt+Enter)';
+		exitFullscreenBtn.addEventListener('click', leaveFullscreen);
+		var launch = {
+			state: 'checking',
+			started: false,
+			setState: function (state, message, retry) {
+				this.state = state;
+				launchStateElement.textContent = state.replace(/-/g, ' ');
+				launchMessageElement.textContent = message;
+				launchRetryElement.hidden = !retry;
+				if (state === 'ready') document.getElementById('launchGate').hidden = true;
+			},
+			// The launcher's Play passes argv (`--set Section.Key=Value` pairs); the runtime marks ready.
+			start: function (args) {
+				if (args) { this.args = args; gameRequested = true; updateDownloads(); document.getElementById('launcher').hidden = true; }
+				if (this.started || !this.ready || !this.args) return;
+				if (!window.isSecureContext) { this.setState('insecure-context', 'WebGPU requires HTTPS (or localhost). Serve this page from a secure origin, then reload.', true); return; }
+				if (!navigator.gpu || !navigator.gpu.requestAdapter) { this.setState('unsupported-browser', 'This browser does not provide WebGPU. Use a current browser with WebGPU enabled; the game cannot start here.', false); return; }
+				var prefRoot = '/libsdl/diasurgical/devilution';
+				try {
+					var renamed = false;
+					FS.readdir(prefRoot).forEach(function (name) {
+						var lower = name.toLowerCase();
+						if (name !== lower && lower.endsWith('.mpq')) {
+							try { FS.stat(prefRoot + '/' + lower); } catch (e) {
+								FS.rename(prefRoot + '/' + name, prefRoot + '/' + lower);
+								renamed = true;
+							}
+						}
+					});
+					if (renamed) Module.saveToIndexedDB().catch(function (error) { console.error('Could not save game data filename:', error); });
+				} catch (error) { console.error('Could not check uploaded game data:', error); }
+				var gameData = ['/diabdat.mpq', '/spawn.mpq', prefRoot + '/diabdat.mpq', prefRoot + '/spawn.mpq'];
+				if (!gameData.some(function (path) { try { FS.stat(path); return true; } catch (e) { return false; } })) {
+					this.setState('game-data-needed', 'Upload your own DIABDAT.MPQ or SPAWN.MPQ with File Manager. The game will start after the upload.', false);
+					document.getElementById('fileManagerBtn').click();
+					return;
+				}
+				this.setState('starting-renderer', 'Starting the Emdawnwebgpu renderer...');
+				this.started = true;
+				if (window.Module && Module.callMain) Module.callMain(this.args);
+			}
+		};
+		window.launch = launch;
+		launchRetryElement.addEventListener('click', function () { launch.started = false; launch.start(); });
+		document.addEventListener('visibilitychange', function () { if (window.Module) Module.dxBrowserPaused = document.hidden; });
+		window.addEventListener('pointerdown', function () { if (window.Module && Module.SDL3_audio_resume) Module.SDL3_audio_resume(); });
+
+		var Module = {
+			noInitialRun: true,
+			onRuntimeInitialized: function () { downloadRuntimeReady = true; updateDownloads(); launch.ready = true; launch.start(); },
+			preRun: [],
+			postRun: [],
+			print: (function () {
+				var element = document.getElementById('output');
+				if (element) element.value = ''; // clear browser cache
+				return function (text) {
+					if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+					console.log(text);
+					if (element) {
+						element.value += text + "\n";
+						element.scrollTop = element.scrollHeight; // focus on bottom
+					}
+				};
+			})(),
+			canvas: (function () {
+				var canvas = document.getElementById('canvas');
+
+				// As a default initial behavior, pop up an alert when webgl context is lost. To make your
+				// application robust, you may want to override this behavior before shipping!
+				// See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
+				canvas.addEventListener("webglcontextlost", function (e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+
+				// Prevent canvas from being dragged
+				canvas.addEventListener("dragstart", function (e) { e.preventDefault(); }, false);
+
+				return canvas;
+			})(),
+			setStatus: function (text) {
+				if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+				if (text === Module.setStatus.last.text) return;
+				var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+				var now = Date.now();
+				if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+				Module.setStatus.last.time = now;
+				Module.setStatus.last.text = text;
+				if (m) {
+					text = m[1];
+					progressElement.value = parseInt(m[2]) * 100;
+					progressElement.max = parseInt(m[4]) * 100;
+					progressElement.hidden = false;
+					spinnerElement.hidden = false;
+				} else {
+					progressElement.value = null;
+					progressElement.max = null;
+					progressElement.hidden = true;
+					if (!text) spinnerElement.style.display = 'none';
+				}
+				statusElement.innerHTML = text;
+			},
+			totalDependencies: 0,
+			monitorRunDependencies: function (left) {
+				this.totalDependencies = Math.max(this.totalDependencies, left);
+				Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies - left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+			}
+		};
+		Module.setStatus('Downloading...');
+		window.onerror = function (event) {
+			// TODO: do not warn on ok events like simulating an infinite loop or exitStatus
+			Module.setStatus('Exception thrown, see JavaScript console');
+			spinnerElement.style.display = 'none';
+			Module.setStatus = function (text) {
+				if (text) Module.printErr('[post-exception status] ' + text);
+			};
+		};
+	</script>
+	<script type='text/javascript' src="file-manager.js"></script>
+	<script type='text/javascript' src="d2sound-ui.js"></script>
+	<script type='text/javascript' src="hd-folder.js"></script>
+	<script type="module">
+		import init from './launcher/launcher.js';
+		try {
+			await init();
+			launcherReady = true;
+			updateDownloads();
+			const engine = document.createElement('script');
+			engine.src = 'devilutionx.js';
+			engine.async = true;
+			engine.onerror = function () { launch.setState('load-failed', 'Could not load the game engine. Reload to retry.', false); };
+			document.body.appendChild(engine);
+		} catch (error) {
+			document.getElementById('downloadLabel').textContent = 'Could not load the launcher';
+			document.getElementById('downloadDetail').textContent = 'Reload to retry.';
+			console.error(error);
+		}
+	</script>
+</body>
+
+</html>

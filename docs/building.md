@@ -1,0 +1,918 @@
+# Building from Source
+
+## Release identity and reproducible packaging
+
+Every distribution uses one validated identity: `namespace-version-commit`. CMake
+reads the version from `VERSION` and the `[release]` section in `manifest.ini`,
+then requires commit metadata. For a clean checkout with no Git metadata, pass the
+source commit explicitly:
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DCPACK=ON -DDEVILUTIONX_RELEASE_COMMIT="$(git rev-parse HEAD)"
+cmake --build build-release --target package
+```
+
+The generated `release-manifest.ini` accompanies the package and records the
+native, browser shell/Wasm, WGSL/runtime, and `dxmod-core-1` reference-pack names.
+The package never contains proprietary game data: supply the legally obtained
+original data separately at runtime. A version or commit mismatch fails during
+configuration rather than producing a drifted artifact.
+
+Native clean-machine runtime requirements are SDL3 for the WebGPU client (SDL2
+remains the legacy default), the platform WebGPU/Dawn runtime where applicable,
+and the system libraries selected by the package metadata (zlib, bzip2, PNG,
+libsodium, and gettext only when translations are built). Install the dependency
+notices shipped under `LICENSE/` and retain the release manifest with the package.
+Native and browser mods both run in the embedded `wasmi` interpreter; mod execution
+must not be replaced by browser-native or JIT execution.
+
+## Browser artifact deployment
+
+Build the browser target with the Emscripten toolchain. Serve the output over
+HTTPS (localhost is acceptable for local development), map `.wasm` to
+`application/wasm`, `.js` to `text/javascript`, and `.data` to
+`application/octet-stream`. Immutable, content-addressed or release-identity
+asset URLs may be cached indefinitely; never reuse an immutable name for changed
+bytes. Proprietary game data is an external user import and must not be copied
+into the web output.
+
+The Emdawnwebgpu/WebGPU renderer path and its WGSL shaders are built by the
+`-DDEVILUTIONX_WEBGPU=ON` configuration described under "Emscripten" below; the
+browser Wasm (`wasmi`) mod host is a target, not yet shipped. The browser
+supports single-player only: game data is imported at runtime with the in-page
+File Manager, and saves persist to IndexedDB. The lobby and relay services that
+online play connects to are not part of this repository.
+
+## Native WebGPU (Dawn) on macOS, Windows, Linux, and Android
+
+The native client can present through the same WebGPU presenter and HD art code as the browser, linked against
+Dawn. It needs SDL3, git and Python 3. On macOS, install SDL3 with `brew install sdl3`:
+
+```bash
+cmake -S . -B build-native-dawn -DCMAKE_BUILD_TYPE=RelWithDebInfo -DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON \
+  -DDEVILUTIONX_DAWN_BUILD_ROOT=<dir for the Dawn checkout and build>
+cmake --build build-native-dawn --target devilutionx -j
+build-native-dawn/devilutionx.app/Contents/MacOS/devilutionx --data-dir <dir with DIABDAT.MPQ> --hd-dir <path to hd>
+```
+
+The first configure fetches `DEVILUTIONX_DAWN_REVISION` and builds and installs Dawn's `webgpu_dawn` library under
+`DEVILUTIONX_DAWN_BUILD_ROOT` (default `<build>/dawn`, about 1.5 GB); later configures reuse it. Point
+`DEVILUTIONX_DAWN_DIR` at an existing Dawn install prefix to skip that.
+
+HD art turns on by itself: with the **HD Art** setting (Graphics, on by default, saved as `HD Art` in `diablo.ini`)
+the game looks for an `hd` folder (or `HD`) holding `sprites.txt` or `ui.txt`, in this order: the folder with
+DIABDAT.MPQ, the other data folders (`--data-dir`, the pref/config folder, the XDG data folders on Linux), next to the
+executable, and on macOS next to the `.app` bundle. Players unzip the HD pack's `hd` folder to one of:
+
+| Platform | Folder for `hd` |
+| --- | --- |
+| Windows | next to `devilutionx.exe`, or `%APPDATA%\diasurgical\devilution\hd` |
+| Linux | next to the `devilutionx` binary (or AppImage), or `~/.local/share/diasurgical/devilution/hd` |
+| macOS | next to the `.app` bundle, or `~/Library/Application Support/diasurgical/devilution/hd` |
+| Android | `Android/data/<package>/files/hd` (the folder that holds DIABDAT.MPQ) |
+
+The log says which folder was used (`WebGPU (Dawn): HD art folder ...`). Turning the setting off (it takes effect
+after a restart) keeps the classic art. Run options: `--hd` forces the HD floor, sprites, tiles and UI on (the
+browser's `?hdFloor=1&hdSprites=1&hdTiles=1&hdUi=1`) even with the setting off, `--hd-flag NAME` sets any other launch
+flag, `--hd-dir PATH` names the HD art folder instead of searching, and `--no-webgpu` presents with the SDL renderer.
+If Dawn cannot start (no GPU or driver with Direct3D 12, Vulkan or Metal), the game falls back to the SDL renderer
+without HD art and, when an HD pack is installed, says so in the first game's message log. Classic SDL2 builds
+(without `DEVILUTIONX_WEBGPU`) cannot draw HD art at all; they log a warning and show the same kind of note when they
+find an `hd` folder.
+
+The launch flags (and the browser's URL flags) say which HD subsystems a run can draw. On top of them, Graphics >
+HD Graphics (saved in `diablo.ini` as `[Graphics] HD Graphics`) and the H key (gamepad: bind "Toggle HD Graphics")
+switch between the HD and classic art at once, in town, in the dungeon and with menus open, like Diablo II:
+Resurrected's legacy toggle. HD art stays loaded on the GPU while it is off, so switching back is instant; a fractional
+zoom shows as the nearest whole level while HD is off and comes back with it. The option is listed only when the run
+was started with an HD flag: the HD UI has to see each UI asset as it loads, so the pack cannot be loaded later in a
+running game. `--hd-flag hdToggleStress` (`?hdToggleStress=1`) flips the switch every 20 frames in game, 100 times, to
+check it for stale frames, GPU errors and leaks.
+
+The same `-DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON` options enable the native presenter on Windows (D3D12) and Linux (Vulkan). On Linux, both X11 and Wayland SDL3 windows are accepted. Supply a native SDL3 installation or build it from source with `-DDEVILUTIONX_SYSTEM_SDL3=OFF`. Dawn is built separately for each target platform and architecture in `DEVILUTIONX_DAWN_BUILD_ROOT`; an existing compatible Dawn installation can be supplied through `DEVILUTIONX_DAWN_DIR`.
+
+Android's native window is supported by the Dawn presenter with SDL3 and Vulkan. From `android-project`, run `./gradlew assembleDebug -Pwebgpu` to build an Android WebGPU APK with the pinned SDL3 Java Activity and native library. This optional target requires Android API 24 or newer and builds Dawn with the NDK toolchain for arm64-v8a and x86_64; expect the first configure to take substantially longer. The default `./gradlew assembleDebug` target continues to build the SDL2 APK.
+
+The `-Pwebgpu` APK is DamnationX: it installs as `net.damnationx` ("DamnationX"; the debug build is `net.damnationx.dev`, "DamnationX (Dev)") next to stock DevilutionX. Gradle options: `-PdawnJobs=N` caps the one-time Dawn build (default 6) and `-PdawnBuildRoot=DIR` shares the built Dawn between checkouts. `./gradlew assembleRelease -Pwebgpu` is signed only when `-PreleaseStoreFile=... -PreleaseStorePassword=... -PreleaseKeyAlias=... -PreleaseKeyPassword=...` (or `DX_RELEASE_STORE_FILE`, `DX_RELEASE_STORE_PASSWORD`, `DX_RELEASE_KEY_ALIAS`, `DX_RELEASE_KEY_PASSWORD`) are given; otherwise it produces `app-release-unsigned.apk`. Use the same keystore for every release, or updates will not install over the previous version.
+
+HD art on Android: long-press the app icon, choose "Import Data" (or use "Import Data" on the game data screen) and select the DamnationX HD pack `.zip` (`damnationx-hd-webp.zip` is the smaller download). The app unpacks it into `Android/data/<package>/files/hd`, replacing any previous pack, and passes `--hd` on the next launch when `hd/sprites.txt` is present. Over USB, `adb push hd /sdcard/Android/data/net.damnationx/files/` does the same.
+
+## Reference mod and asset workflows
+
+The shipped C and Rust examples target the restricted `dxmod-core-1` C ABI. Native
+and browser execution are both `wasmi`; use bounded handles,
+capabilities, and deterministic command ordering. Rust examples use the pinned
+`wasm32-unknown-emscripten` target and the documented Rust/Emscripten versions;
+never pass engine pointers or raw filesystem/network/GPU access to a guest. Asset
+examples must contain original sample art only, preserve indexed transparency and
+material channels, and resolve unlisted logical IDs from local original data.
+
+DevilutionX provides a source package with the release (`devilutionx-src.tar.xz`) that contains
+all the dependencies that must be vendored, the version information, and `devilutionx.mpq`.
+This is the version most appropriate for packaging DevilutionX for Linux distributions.
+For other use cases, use the git repository.
+
+<details><summary>Linux</summary>
+
+Note that ```pkg-config``` is an optional dependency for finding libsodium, although we have a fallback if necessary.
+
+### Installing dependencies on Debian and Ubuntu
+
+```
+sudo apt-get install cmake g++ libsdl2-dev libsodium-dev libpng-dev libbz2-dev libgtest-dev libgmock-dev libbenchmark-dev libsdl2-image-dev
+```
+
+### If you want to build the translations (optional)
+
+```
+sudo apt-get install gettext poedit
+```
+
+### If you want to build the devilutionX.mpq File (optional)
+
+```
+sudo apt-get install smpq
+```
+
+### Installing dependencies on Fedora
+
+```
+sudo dnf install cmake gcc-c++ glibc-devel libstdc++-static SDL2-devel SDL2_image-devel libsodium-devel libpng-devel bzip2-devel gmock-devel gtest-devel google-benchmark-devel libasan libubsan libpfm-devel
+```
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+```
+
+### Cross-compiling for arm64 (aarch64) on Debian or Ubuntu
+
+First, set up the dependencies for cross-compilation:
+
+```bash
+Packaging/nix/debian-cross-aarch64-prep.sh
+```
+
+Then, build DevilutionX using the cross-compilation CMake toolchain file:
+
+```bash
+cmake -S. -Bbuild-aarch64-rel \
+  -DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/aarch64-linux-gnu.toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCPACK=ON \
+cmake --build build-aarch64-rel -j $(getconf _NPROCESSORS_ONLN) --target package
+```
+
+</details>
+
+<details><summary>macOS</summary>
+
+Make sure you have [Homebrew](https://brew.sh/) installed, then run:
+
+```bash
+brew bundle install
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(sysctl -n hw.physicalcpu)
+```
+
+For native SDL3 validation, also install `brew install sdl3` (CMake requires
+SDL3 3.4.0 or newer). The default Brewfile selects SDL2; it does not provision
+SDL3. Keep the Brewfile's `googletest` and `google-benchmark` dependencies when
+configuring with `-DBUILD_TESTING=ON`. SDL3_image and SDL3_mixer fall back to the
+repository's pinned source dependencies when suitable system packages are absent.
+
+</details>
+<details><summary>iOS</summary>
+
+Make sure you have [Homebrew](https://brew.sh/) installed, then run:
+
+```bash
+brew install cmake
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=../CMake/Platforms/ios.toolchain.cmake  -DENABLE_BITCODE=0 -DPLATFORM=OS64
+cmake --build build -j $(sysctl -n hw.physicalcpu) --config Release
+cd build
+rm -rf Payload
+mkdir -p Payload
+mv devilutionx.app Payload
+zip -r devilutionx.ipa Payload
+```
+
+For testing with the Simulator instead run the following:
+
+```bash
+cmake -S. -Bbuild -G Xcode -DCMAKE_TOOLCHAIN_FILE=../CMake/Platforms/ios.toolchain.cmake -DPLATFORM=SIMULATOR64
+```
+
+Then open the generated Xcode project and run things from there.
+</details>
+<details><summary>FreeBSD</summary>
+
+### Installing dependencies
+
+```
+pkg install cmake sdl2 libsodium libpng bzip2 googletest
+```
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(sysctl -n hw.ncpu)
+```
+
+</details>
+<details><summary>NetBSD</summary>
+
+### Installing dependencies
+
+```
+pkgin install cmake SDL2 libsodium libpng bzip2 googletest
+```
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(sysctl -n hw.ncpu)
+```
+
+</details>
+
+<details><summary>OpenBSD</summary>
+
+### Installing dependencies
+
+```
+pkg_add cmake sdl2 libsodium png bzip2 gmake gtest
+```
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_MAKE_PROGRAM=gmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(sysctl -n hw.ncpuonline)
+```
+
+</details>
+
+<details><summary>Windows via MinGW</summary>
+
+<details><summary>Installing Windows Subsystem for Linux</summary>
+
+Note: We currently recommend using Ubuntu 24.04 for the MinGW build. The following instructions will install the recommended version of Ubuntu on WSL.
+
+If you are building on Windows and do not have WSL already setup this will install WSL and Ubuntu (Requires Windows 10 2004 or higher or Windows 11)
+
+In an Administrator Command Prompt or Powershell
+
+```wsl --install -d Ubuntu-24.04```
+
+Reboot
+
+Wait for Command Prompt to pop up and say installing when complete enter your new Linux password
+
+You can launch WSL anytime by typing wsl or ubuntu in a Command Prompt or Powershell or in the Start Menu launch the Ubuntu App
+
+### Setup git and clone DevilutionX
+
+In a WSL terminal run these commands to get the source code for DevilutionX
+
+```
+sudo apt-get install git
+git clone https://github.com/diasurgical/devilutionx
+cd devilutionx
+```
+
+</details>
+
+### Installing dependencies on WSL, Debian and Ubuntu
+
+#### MinGW build tools
+
+```bash
+# Install MinGW build tools
+sudo apt-get update
+sudo apt-get install cmake git libz-mingw-w64-dev mingw-w64 mingw-w64-tools smpq wget
+```
+
+<details><summary>MinGW 32-bit</summary>
+
+The 32-bit build depends on the 32-bit MinGW Development Libraries for [SDL2](https://www.libsdl.org/download-2.0.php) and [libsodium](https://github.com/jedisct1/libsodium/releases) as well as headers for [zlib](https://zlib.net/zlib-1.2.12.tar.gz). These dependencies will need to be placed in the appropriate subfolders under `/usr/i686-w64-mingw32`.
+
+When linking zlib, libpng will always prefer dynamically linking with `libz.dll.a` if it can be found. We recommend renaming or deleting `libz.dll.a` to force libpng to use static linkage. This will prevent errors about missing dlls when you attempt to run the game.
+
+These can be done automatically by running [`Packaging/windows/mingw-prep.sh`](/Packaging/windows/mingw-prep.sh).
+
+Note: If your `i686-w64-mingw32` directory is not in `/usr` (e.g. when on
+Debian), the mingw-prep scripts and the CMake command won't work. You need
+adjust the mingw-prep scripts and pass `-DCROSS_PREFIX=/path` to CMake to set
+the path to the parent of the `i686-w64-mingw32` directory.
+
+```bash
+# Download the 32-bit development libraries for SDL2 and libsodium
+# as well as the headers for zlib and place them in subfolders under
+# /usr/i686-w64-mingw32
+Packaging/windows/mingw-prep.sh
+```
+
+### Compiling
+
+By compiling the `package` target, the build will produce the `devilutionx.zip` archive which should contain all the dlls necessary to run the game. If you encounter any errors suggesting a dll is missing, try extracting the dlls from the zip archive.
+
+```bash
+# Configure the project to disable unit tests,
+# statically link bzip2 and libsodium,
+# and enable Discord integration
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/mingwcc.toolchain.cmake \
+    -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DDEVILUTIONX_SYSTEM_BZIP2=OFF \
+    -DDEVILUTIONX_STATIC_LIBSODIUM=ON -DDISCORD_INTEGRATION=ON -DCPACK=ON
+
+# Build the "package" target which produces devilutionx.zip
+# containing all the necessary dlls to run the game
+cmake --build build -j $(getconf _NPROCESSORS_ONLN) --target package
+```
+
+</details>
+
+<details open><summary>MinGW 64-bit</summary>
+
+The 64-bit build depends on the 64-bit MinGW Development Libraries of [SDL2](https://www.libsdl.org/download-2.0.php) and [libsodium](https://github.com/jedisct1/libsodium/releases) as well as headers for [zlib](https://zlib.net/zlib-1.2.12.tar.gz). These dependencies will need to be placed in the appropriate subfolders under `/usr/x86_64-w64-mingw32`.
+
+When linking zlib, libpng will always prefer dynamically linking with `libz.dll.a` if it can be found. We recommend renaming or deleting `libz.dll.a` to force libpng to use static linkage. This will prevent errors about missing dlls when you attempt to run the game.
+
+These can be done automatically by running [`Packaging/windows/mingw-prep64.sh`](/Packaging/windows/mingw-prep64.sh).
+
+Note: If your `x86_64-w64-mingw32` directory is not in `/usr` (e.g. when
+on Debian), the mingw-prep scripts and the CMake command won't work. You need
+adjust the mingw-prep scripts and pass `-DCROSS_PREFIX=/path` to CMake to set
+the path to the parent of the `x86_64-w64-mingw32` directory.
+
+```bash
+# Download the 64-bit development libraries for SDL2 and libsodium
+# as well as the headers for zlib and place them in subfolders under
+# /usr/x86_64-w64-mingw32
+Packaging/windows/mingw-prep64.sh
+```
+
+### Compiling
+
+```bash
+# Configure the project to disable unit tests,
+# statically link bzip2 and libsodium,
+# and enable Discord integration
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/mingwcc64.toolchain.cmake \
+    -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DDEVILUTIONX_SYSTEM_BZIP2=OFF \
+    -DDEVILUTIONX_STATIC_LIBSODIUM=ON -DDISCORD_INTEGRATION=ON -DCPACK=ON
+
+# Build the "package" target which produces devilutionx.zip
+# containing all the necessary dlls to run the game
+cmake --build build -j $(getconf _NPROCESSORS_ONLN) --target package
+```
+
+</details>
+
+</details>
+
+<details><summary>Windows via Visual Studio</summary>
+
+### Installing dependencies
+
+Make sure to install the workload `Desktop development with C++` and the individual components `C++ CMake tools for Windows` and `Windows SDK` for Visual Studio.
+*Note: `Windows SDK` component should match your Windows build version.*
+
+Install [Git for Windows](https://gitforwindows.org/)
+
+Run the following commands in Command Prompt or Powershell
+
+~~~ bat
+git clone https://github.com/microsoft/vcpkg
+cd vcpkg
+bootstrap-vcpkg.bat
+vcpkg integrate install
+~~~
+
+If you need additional instructions for vcpkg you can find the documentation [here](https://github.com/microsoft/vcpkg#quick-start-windows).
+
+### If you want to build the devilutionX.mpq File (optional)
+
+In order to build devilutionx.mpq, install smpq from https://launchpad.net/smpq/trunk/1.7/+download/SMPQ-1.7-x86_64.exe.
+The location of this tool will need to be [added to the system's PATH environment variable](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/).
+
+### Compiling
+
+* **Through Open->CMake in Visual Studio**
+
+1. Go to `File -> Open -> CMake`, select `CMakeLists.txt` from the project root.
+2. Select the `x64-Release` configuration (or `x86` for 32 bit builds, `-Debug` for debug builds).
+3. Select `Build devilution.exe` from the `Build` menu.
+
+* **Through GCC/WSL in Visual Studio**
+
+1. Ensure the WSL environment has the build pre-requisites for both devilutionX (see "Installing Dependencies on Debian and Ubuntu" under the "Linux" section above) and [WSL remote development](https://docs.microsoft.com/en-us/cpp/linux/connect-to-your-remote-linux-computer?view=msvc-160#connect-to-wsl).
+2. Select the `WSL-GCC-x64-Debug` configuration.
+3. Select `Build devilution` from the `Build` menu.
+
+* **Through cmake-gui**
+
+1. Input the path to devilutionx source directory at `Where is the source code:` field.
+2. Input the path where the binaries would be placed at `Where to build the binaries:` field. If you want to place them inside source directory it's preferable to do so inside directory called `build` to avoid the binaries being added to the source tree.
+3. It's recommended to input `Win32` in `Optional Platform for Generator`, otherwise it will default to x64 build.
+4. In case you're using `vcpkg` select `Specify toolchain file for cross-compiling` and select the file `scripts/buildsystems/vcpkg.cmake` from `vcpkg` directory otherwise just go with `Use default native compilers`.
+5. In case you need to select any paths to dependencies manually do this right in cmake-gui window.
+6. Press `Generate` and open produced `.sln` file using Visual Studio.
+7. Use build/debug etc. commands inside Visual Studio Solution like with any normal Visual Studio project.
+
+</details>
+
+<details><summary>Android</summary>
+
+### Installing dependencies
+
+Install [Android Studio](https://developer.android.com/studio)
+After first launch configuration, go to "Configure -> SDK Manager -> SDK Tools".
+Select "NDK (Side by side)" and "CMake" checkboxes and click "OK".
+
+### Compiling
+
+Click "Open Existing Project" and choose "android-project" folder in DevilutionX root folder.
+Wait until Gradle sync is completed.
+In Android Studio, go to "Build -> Make Project" or use the shortcut Ctrl+F9
+You can find the compiled APK in `/android-project/app/build/outputs/apk/`
+</details>
+
+<details><summary>Android Termux</summary>
+
+### Installing dependencies on Debian and Ubuntu
+
+```
+pkg i which getconf cmake gettext libsodium sdl2 sdl2-image zlib bzip2
+```
+
+### If you want to build the devilutionX.mpq File (optional)
+
+```
+NOSUDO=1 tools/build_and_install_smpq.sh
+```
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release -DDEVILUTIONX_SYSTEM_BENCHMARK=OFF
+cmake --build build -j $(nproc)
+```
+</details>
+
+<details><summary>Nintendo Switch</summary>
+
+### Installing dependencies
+
+https://devkitpro.org/wiki/Getting_Started
+
+- Install (dkp-)pacman: https://devkitpro.org/wiki/devkitPro_pacman
+
+- Install required packages with (dkp-)pacman:
+
+```
+sudo (dkp-)pacman -S --needed - < Packaging/switch/packages.txt
+```
+
+- Install smpq (if building from git or a source archive without devilutionx.mpq)
+  DevilutionX requires some core assets to render UI elements and fonts even if game data is not available. While some
+  platforms can load this from the filesystem as loose files the switch build currently only supports bundling the mpq
+  archive inside the nro. If you're building DevilutionX on a supported platform a prebuilt binary may be available from
+  your package distribution system (e.g. `sudo apt install smpq` or `yum install smpq`), on windows you can
+  [download the latest version from Launchpad.net](https://launchpad.net/smpq/+download), and unix based OSes can build
+  from source using [tools/build_and_install_smpq.sh](../tools/build_and_install_smpq.sh)
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/Switch.cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_ASSETS_MPQ=ON
+cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+```
+
+The nro-file will be generated in the build folder. Test with an emulator (RyuJinx) or real hardware.
+
+[Nintendo Switch manual](manual/platforms/switch.md)
+</details>
+
+<details><summary>Nintendo 3DS</summary>
+
+### Installing dependencies
+
+https://devkitpro.org/wiki/Getting_Started
+
+- Install (dkp-)pacman: https://devkitpro.org/wiki/devkitPro_pacman
+
+- Install required packages with (dkp-)pacman:
+
+```
+sudo (dkp-)pacman -S \
+    devkitARM general-tools 3dstools libctru \
+    citro3d 3ds-sdl 3ds-libpng 3ds-bzip2 \
+    3ds-cmake 3ds-pkg-config picasso 3dslink
+```
+
+- Download or compile [bannertool](https://github.com/diasurgical/bannertool/releases) and [makerom](https://github.com/jakcron/Project_CTR/releases)
+    - Copy binaries to: `/opt/devkitpro/tools/bin/`
+
+### Compiling
+
+_If you are compiling using MSYS2, you will need to run `export MSYS2_ARG_CONV_EXCL=-D` before compiling.
+Otherwise, MSYS will sanitize file paths in compiler flags which will likely lead to errors in the build._
+
+```bash
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=/opt/devkitpro/cmake/3DS.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+```
+
+The output files will be generated in the build folder.
+
+[Nintendo 3DS manual](/docs/manual/platforms/3ds.md)
+</details>
+
+<details><summary>PlayStation Vita</summary>
+
+### Compiling
+
+```bash
+cmake -S. -Bbuild -DCMAKE_TOOLCHAIN_FILE=${VITASDK}/share/vita.toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+[PlayStation Vita manual](/docs/manual/platforms/vita.md)
+</details>
+
+
+<details><summary>Haiku</summary>
+
+### Installing dependencies on 32 bit Haiku
+
+```
+pkgman install cmake_x86 devel:libsdl2_x86 devel:libsodium_x86 devel:libpng_x86 devel:bzip2_x86
+```
+
+### Installing dependencies on 64 bit Haiku
+
+```
+pkgman install cmake libsdl2_devel libsodium_devel libpng16_devel bzip2_devel gtest_devel gettext getconf
+```
+
+### Compiling on 32 bit Haiku
+
+```bash
+setarch x86 # Switch to secondary compiler toolchain (GCC8+)
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+```
+
+### Compiling on 64 bit Haiku
+
+No setarch required, as there is no secondary toolchain on x86_64, and the primary is GCC8+
+
+```bash
+cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j $(getconf _NPROCESSORS_ONLN)
+```
+
+</details>
+
+<details><summary>OpenDingux / RetroFW</summary>
+
+DevilutionX uses buildroot-based toolchains to build packages for OpenDingux and RetroFW.
+
+For OpenDingux / RetroFW builds, `mksquashfs` needs to be installed on your machine.
+
+To build, run the following command:
+
+~~~ bash
+TOOLCHAIN=<path/to/toolchain> Packaging/OpenDingux/build.sh <platform>
+~~~
+
+Replace `<platform>` with one of: `lepus`, `retrofw`, `rg99`, `rg350`, or `gkd350h`.
+
+For example:
+
+~~~ bash
+TOOLCHAIN=/opt/gcw0-toolchain Packaging/OpenDingux/build.sh rg350
+~~~
+
+You can download the prebuilt toolchains for `x86_64` hosts here:
+
+* OpenDingux: https://github.com/OpenDingux/buildroot/releases
+* RetroFW: https://github.com/Poligraf/retrofw_buildroot_gcc11/releases
+
+Remember to run `./relocate-sdk.sh` in the toolchain directory after unpacking it.
+
+Alternatively, if you do not set `TOOLCHAIN`, the script will
+download and compile a partial buildroot toolchain for you
+(stored at `$HOME/buildroot-$PLATFORM-devilutionx`).
+This requires 8 GiB+ disk space and takes a while.
+
+End-user manuals are available [here](manual/platforms) and
+in the package help section.
+
+</details>
+
+<details><summary>Clockwork PI GameShell</summary>
+
+You can either call
+
+~~~ bash
+Packaging/cpi-gamesh/build.sh
+~~~
+
+to install dependencies and build the code.
+
+Or you create a new directory under `/home/cpi/apps/Menu` and copy [the file](../Packaging/cpi-gamesh/__init__.py) there. After restarting the UI, you can download and compile the game directly from the device itself. See [the readme](../Packaging/cpi-gamesh/readme.md) for more details.
+</details>
+
+<details><summary>Amiga via Docker</summary>
+
+### Build the container from the repo root
+
+~~~ bash
+docker build -f Packaging/amiga/Dockerfile -t devilutionx-amiga .
+~~~
+
+### Build DevilutionX Amiga binary
+
+~~~ bash
+docker run -u "$(id -u "$USER"):$(id -g "$USER")" --rm -v "${PWD}:/work" devilutionx-amiga
+~~~
+
+The command above builds DevilutionX in release mode.
+For other build options, you can run the container interactively:
+
+~~~ bash
+docker run -u "$(id -u "$USER"):$(id -g "$USER")" -ti --rm -v "${PWD}:/work" devilutionx-amiga bash
+~~~
+
+See the `CMD` in `Packaging/amiga/Dockerfile` for reference.
+
+To actually start DevilutionX, increase the stack size to 50KiB in Amiga.
+You can do this by selecting the DevilutionX icon, then hold right mouse button and
+select Icons -> Information in the top menu.
+</details>
+
+<details><summary>Emscripten</summary>
+
+The browser target is a single-threaded SDL3 Emscripten port. It builds a game
+shell with a WebGPU/secure-context launch gate, in-page MPQ import via the File
+Manager, and IndexedDB save persistence. The shell requires a WebGPU-capable,
+secure-context browser to launch. The Wasm (`wasmi`) mod host is not yet wired
+up.
+
+There are two Emscripten configurations with different toolchain requirements:
+
+* **Default (SDL/legacy presentation):** any recent Emscripten SDK works.
+* **WebGPU (`-DDEVILUTIONX_WEBGPU=ON`):** enables the WebGPU presenter and the
+  2.5D hybrid lighting path. It needs
+  Emscripten **4.0.11 or newer** (`DEVILUTIONX_WEBGPU_EMSCRIPTEN_VERSION`,
+  `CMake/Dependencies.cmake`) and the pinned Emdawnwebgpu port described below.
+
+### Emscripten SDK
+
+Install the [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html).
+
+The Wasm mod host (`-DDEVILUTIONX_ENABLE_WASM_MOD_HOST=ON`) is pinned to
+Emscripten 3.1.74 (`DEVILUTIONX_EMSCRIPTEN_VERSION`), which predates
+Emdawnwebgpu port support, so the WebGPU build needs a **second, separate
+emsdk clone**. Never run `emsdk activate` inside an emsdk that is pinned for
+the mod host: activation rewrites that clone's `.emscripten` and breaks the
+3.1.74 pin for everyone using it. Instead:
+
+~~~ bash
+git clone https://github.com/emscripten-core/emsdk.git /path/to/emsdk-4.0.11
+cd /path/to/emsdk-4.0.11
+./emsdk install 4.0.11
+./emsdk activate 4.0.11
+source /path/to/emsdk-4.0.11/emsdk_env.sh   # scoped to the current shell only
+emcc --version | head -1                    # must report 4.0.11
+~~~
+
+Configuring `-DDEVILUTIONX_WEBGPU=ON` with an older Emscripten stops with a
+`FATAL_ERROR` that repeats these instructions.
+
+### Building
+
+~~~ bash
+# Default browser build (SDL/legacy presentation)
+emcmake cmake -S. -Bbuild-em -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-em -j $(getconf _NPROCESSORS_ONLN)
+
+# WebGPU build (requires the 4.0.11 emsdk to be sourced in this shell)
+emcmake cmake -S. -Bbuild-em-webgpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DDEVILUTIONX_WEBGPU=ON -DDEVILUTIONX_DISABLE_EXCEPTIONS=OFF
+cmake --build build-em-webgpu -j $(getconf _NPROCESSORS_ONLN)
+~~~
+
+Use a fresh build directory when switching between the two configurations or
+between emsdk versions; a stale `CMakeCache.txt` keeps the old toolchain paths.
+`-DDEVILUTIONX_DISABLE_EXCEPTIONS=OFF` is currently required because
+`Source/lua/modules/render.cpp` throws `sol::error` and does not compile with
+exceptions disabled (the browser default); drop the flag once that is fixed.
+
+The Emscripten platform auto-selects SDL3 and rejects threading flags such as
+`-pthread`, `-sSHARED_MEMORY`, and `-sUSE_SDL=2`. Tests are disabled under
+Emscripten (`BUILD_TESTING` is forced off); the `Emscripten WebGPU` GitHub
+workflow additionally runs `node --test Packaging/emscripten/emscripten_pre.test.mjs`
+and `tools/wgsl_validate.py` (install `naga-cli` with `cargo install naga-cli`
+to run the WGSL validation locally).
+
+### Emdawnwebgpu port pin
+
+The WebGPU build compiles and links with `--use-port=<port>:cpp_bindings=false`.
+`<port>` is chosen at configure time, in this order:
+
+1. `-DDEVILUTIONX_EMDAWNWEBGPU_PORT_FILE=<path>/emdawnwebgpu_pkg/emdawnwebgpu.port.py`:
+   a local port file, for offline builds. The pinned revision is not verified.
+2. **Default:** the Dawn release package pinned by
+   `DEVILUTIONX_EMDAWNWEBGPU_REVISION` (`v20260423.175430`). CMake downloads
+   `emdawnwebgpu_pkg-<revision>.zip` from
+   `https://github.com/google/dawn/releases`, verifies it against
+   `DEVILUTIONX_EMDAWNWEBGPU_PORT_SHA256`, and unpacks it into
+   `<build-dir>/emdawnwebgpu/`. The configure log prints the revision and hash
+   (`Emdawnwebgpu port: pinned ...`).
+3. `-DDEVILUTIONX_EMDAWNWEBGPU_BUILTIN_PORT=ON`: Emscripten's builtin
+   `emdawnwebgpu` port (Emscripten 4.0.10+). This floats the Dawn snapshot with
+   the Emscripten release and is opt-in only; the configure log warns.
+
+Bumping the pin means updating `DEVILUTIONX_EMDAWNWEBGPU_REVISION`,
+`DEVILUTIONX_EMDAWNWEBGPU_PORT_SHA256` (the SHA256 of the new
+`emdawnwebgpu_pkg-<revision>.zip`) and, if the C API changed, the presenter
+(`Source/engine/render/webgpu_presenter.cpp`).
+
+The WebGPU link also sets `-sINITIAL_MEMORY=512MB` (with
+`-sALLOW_MEMORY_GROWTH=1` kept as a safety net) so the lighting buffers are
+carved from the initial heap instead of triggering a mid-play heap growth.
+The `Emscripten WebGPU` workflow checks that the linked module declares that
+initial size (8192 pages); locally,
+`wasm-objdump -x -j Memory build-em-webgpu/devilutionx.wasm` (from
+[wabt](https://github.com/WebAssembly/wabt)) shows the same `initial=8192`.
+
+### Running
+
+~~~ bash
+tools/serve_webgpu.sh build-em-webgpu 8080
+# then open http://127.0.0.1:8080/index.html
+~~~
+
+`tools/serve_webgpu.sh` runs a foreground `python3 http.server` (embedded in
+the script; Python 3 is the only dependency) bound to `127.0.0.1` with the
+`.wasm`/`.js`/`.data` MIME types from "Browser artifact deployment" and
+`Cache-Control: no-store`; `tools/serve_webgpu.sh --self-test` checks that
+table end to end without opening a port. `emrun index.html` from the build
+directory also works. Serve over HTTPS or localhost. Import the legally obtained
+game data at runtime with the in-page File Manager, or place `spawn.mpq` next
+to the shell.
+
+</details>
+
+<details><summary>Xbox One/Series</summary>
+
+### Dependencies
+
+* Windows 10+
+* CMake
+* Git
+* Visual Studio 2026 with the following packages installed:
+    * C++ (v145) Universal Windows Platform tools
+    * Windows 11 SDK (10.0.26100.0)
+    * MSVC v145 - VS 2026 C++ x64/x86 build tools
+
+_Note: Visual Studio Community Edition can be used._
+
+### Building
+
+Add the following to the PATH:
+
+* CMake
+* GIT
+* VsDevCmd.bat
+
+Run:
+
+```
+Packaging/xbox-one/build.bat
+```
+
+[Xbox One/Series manual](manual/platforms/xbox-one.md)
+</details>
+
+<details><summary>Miyoo Mini</summary>
+
+Building for Miyoo Mini must be run from inside the [Toolchain Docker image](https://github.com/MiyooMini/union-toolchain).
+Executing `Packaging/miyoo_mini/build.sh` will create the folder `build-miyoo-mini/SDROOT` which has the correct structure to be used with
+OnionOS Port Collection.
+</details>
+
+<details><summary>macOS 10.4 Tiger</summary>
+
+For macOS Tiger, DevilutionX can be compiled using the compiler and libraries from [MacPorts](https://www.macports.org/).
+
+For PowerPC, you can use precompiled dependencies from here:
+
+http://macports-tiger-ppc.glebm.com/
+
+After installing MacPorts, run:
+
+~~~ bash
+# Some packages may require you to manually deactivate certain ports during installation.
+# Remember to reactivate them after installing.
+sudo port install curl curl-ca-bundle gcc14 cmake \
+  libsdl12 libsdl_image libsodium bzip2 zlib lua54
+
+# Set GCC 14 as the default GCC:
+sudo port select --set gcc mp-gcc14
+~~~
+
+<!-- The following packages have issues so we use the vendored versions: google-benchmark gtest -->
+
+Then, build DevilutionX:
+
+~~~ bash
+CC=gcc cmake -S. -Bbuild-rel -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCPACK=ON -DMACOSX_STANDALONE_APP_BUNDLE=ON
+cmake --build build-rel -j "$(sysctl -n hw.ncpu)"
+
+# `sudo` is required to produce a bundle with all the shared libraries.
+sudo cmake --build build-rel --target package -j "$(sysctl -n hw.ncpu)"
+~~~
+
+To run tools from the `tools/` directory (only needed for development), you also need Python:
+
+~~~ bash
+sudo port install python312
+sudo port select --set python python312
+sudo port select --set python3 python312
+~~~
+
+</details>
+
+<details><summary>DOS</summary>
+
+Cross-compile for DOS from Linux using DJGPP GCC 14.2.0. The build uses SDL3-dos
+(a DOS port of SDL3) with VESA video and Sound Blaster 16 audio.
+
+#### Installing the DJGPP toolchain (once)
+
+~~~ bash
+Packaging/windows/dos-prep.sh
+~~~
+
+This builds and installs the DJGPP cross-compiler. After installation, make sure
+`i586-pc-msdosdjgpp-gcc` (or `i386-pc-msdosdjgpp-gcc`) is on your `PATH`.
+
+#### Compiling
+
+~~~ bash
+cmake -S. -Bbuild-dos \
+  -DCMAKE_TOOLCHAIN_FILE=CMake/platforms/djcpp.toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=OFF
+cmake --build build-dos -j $(getconf _NPROCESSORS_ONLN)
+~~~
+
+Output: `build-dos/devx.exe` (≈ 5 MB DJGPP executable).
+
+#### Running in DOSBox
+
+1. Copy the CWSDPMI DPMI host next to the executable:
+   ~~~ bash
+   cp /path/to/CWSDPMI.EXE build-dos/
+   ~~~
+
+2. Place `spawn.mpq` (shareware) or `DIABDAT.MPQ` (full game) in `build-dos/`.
+
+3. Run:
+   ~~~ bash
+   dosbox -c "MOUNT C build-dos" -c "C:" -c "devx.exe"
+   ~~~
+
+Useful flags:
+- `devx.exe --verbose --log-to-file DEBUG.LOG` to write verbose log to a file
+
+#### Known limitations
+
+- **MP3 too slow for real-time:** dr_mp3 compiles but real-time stream-decoding
+  drops the game to ~4.5 fps. Use WAV-only MPQ files on DOS.
+
+</details>
+
+<details><summary><b>CMake build options</b></summary>
+
+### General
+
+- `-DCMAKE_BUILD_TYPE=Release` changed build type to release and optimize for distribution.
+- `-DNONET=ON` disable network support, this also removes the need for the ASIO and Sodium.
+- `-DUSE_SDL1=ON` build for SDL v1 instead of v2, not all features are supported under SDL v1, notably upscaling.
+- `-DCMAKE_TOOLCHAIN_FILE=../CMake/platforms/linux_i386.toolchain..cmake` generate 32bit builds on 64bit platforms (remember to use the `linux32` command if on Linux).
+
+### Debug builds
+
+- `-DDEBUG=OFF` disable debug mode of the Diablo engine.
+- `-DASAN=OFF` disable address sanitizer.
+- `-DUBSAN=OFF` disable undefined behavior sanitizer.
+
+</details>

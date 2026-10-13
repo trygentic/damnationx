@@ -1,0 +1,53 @@
+#include "engine/load_cel.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <memory>
+#include <string>
+
+#ifdef DEBUG_CEL_TO_CL2_SIZE
+#include <iostream>
+#endif
+
+#include "appfat.h"
+#include "mpq/mpq_common.hpp"
+#include "utils/status_macros.hpp"
+#include "utils/str_cat.hpp"
+
+#ifdef UNPACKED_MPQS
+#include "engine/load_clx.hpp"
+#else
+#include "engine/load_file.hpp"
+#include "utils/cel_to_clx.hpp"
+#include "engine/render/hd_ui_hooks.hpp"
+#endif
+
+namespace devilution {
+
+std::expected<OwnedClxSpriteListOrSheet, std::string> LoadCelListOrSheetWithStatus(const char *pszName, PointerOrValue<uint16_t> widthOrWidths)
+{
+	char path[MaxMpqPathSize];
+	*BufCopy(path, pszName, DEVILUTIONX_CEL_EXT) = '\0';
+#ifdef UNPACKED_MPQS
+	return LoadClxListOrSheetWithStatus(path);
+#else
+	size_t size;
+	ASSIGN_OR_RETURN(std::unique_ptr<uint8_t[]> data, LoadFileInMemWithStatus<uint8_t>(path, &size));
+#ifdef DEBUG_CEL_TO_CL2_SIZE
+	std::cout << path;
+#endif
+	OwnedClxSpriteListOrSheet result = CelToClx(data.get(), size, widthOrWidths);
+	HdUiNotifyLoaded(pszName, result);
+	return result;
+#endif
+}
+
+OwnedClxSpriteListOrSheet LoadCelListOrSheet(const char *pszName, PointerOrValue<uint16_t> widthOrWidths)
+{
+	std::expected<OwnedClxSpriteListOrSheet, std::string> result = LoadCelListOrSheetWithStatus(pszName, widthOrWidths);
+	if (DVL_PREDICT_FALSE(!result.has_value())) app_fatal(result.error());
+	return std::move(result).value();
+}
+
+} // namespace devilution

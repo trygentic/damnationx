@@ -1,0 +1,50 @@
+include(functions/FetchContent_ExcludeFromAll_backport)
+
+# Workaround for deprecation of older CMake versions
+set(CMAKE_POLICY_VERSION_MINIMUM 3.22)
+
+if(NOT DISABLE_LTO)
+  # Force CMake to raise an error if INTERPROCEDURAL_OPTIMIZATION
+  # is enabled and compiler does not support IPO
+  set(CMAKE_POLICY_DEFAULT_CMP0069 NEW)
+endif()
+
+if(DEVILUTIONX_STATIC_LIBPNG)
+  set(PNG_LIBRARY png_static)
+  set(PNG_STATIC ON)
+  set(PNG_SHARED OFF)
+else()
+  set(PNG_LIBRARY png)
+  set(PNG_STATIC OFF)
+  set(PNG_SHARED ON)
+endif()
+set(PNG_TESTS OFF)
+set(PNG_TOOLS OFF)
+set(SKIP_INSTALL_ALL ON)
+
+if(APPLE AND "${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+  set(PNG_ARM_NEON "on" CACHE STRING "" FORCE)
+endif()
+
+include(FetchContent)
+FetchContent_Declare_ExcludeFromAll(libpng
+  URL https://github.com/pnggroup/libpng/archive/3061454d980de7d53608f594194cfac722721d2a.tar.gz
+  URL_HASH MD5=2007281c431730eca37a71878efcc858
+)
+FetchContent_MakeAvailable_ExcludeFromAll(libpng)
+
+target_include_directories(${PNG_LIBRARY} INTERFACE
+  $<BUILD_INTERFACE:${libpng_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${libpng_BINARY_DIR}>)
+
+add_library(PNG::PNG ALIAS ${PNG_LIBRARY})
+
+if(MSVC OR ANDROID)
+  # SDL_image defaults to its vendored (download-script) libraries on MSVC and otherwise calls
+  # find_package(PNG); point that at this source-built PNG::PNG, as 3rdParty/zlib does for ZLIB.
+  # On Android (SDL3) that lookup otherwise fails quietly ("libpng NOT found") and IMG_Load cannot decode PNGs.
+  set(PNG_FOUND ON PARENT_SCOPE)
+  set(PNG_LIBRARIES PNG::PNG PARENT_SCOPE)
+  set(PNG_INCLUDE_DIRS ${libpng_SOURCE_DIR} ${libpng_BINARY_DIR} PARENT_SCOPE)
+  set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_LIST_DIR}/CMake" PARENT_SCOPE)
+endif()
