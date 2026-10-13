@@ -35,7 +35,7 @@ jobs:
         shell: pwsh
         run: tools/build-windows-webgpu.ps1 -BuildDir build-native-webgpu -Jobs 4
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: devilutionx-windows-x64-webgpu
           path: build-native-webgpu/devilutionx-*.zip
