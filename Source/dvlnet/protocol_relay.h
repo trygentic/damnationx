@@ -58,8 +58,14 @@ public:
 	int create(std::string_view name) override;
 	int join(std::string_view id) override;
 	std::expected<void, PacketError> poll() override;
-	// The HTTP directory does not require a relay peer or an OOB discovery packet.
-	bool send_info_request() override { return true; }
+	// Browsing the HTTP directory needs no peer. Joined sessions still need the
+	// protocol's information packets to discover their game host.
+	bool send_info_request() override
+	{
+		const auto ready = proto.peers_ready();
+		if (ready.has_value() && !*ready) return true;
+		return base_protocol<protocol_relay>::send_info_request();
+	}
 	void clear_gamelist() override { }
 	std::vector<GameInfo> get_gamelist() override;
 	bool SNetLeaveGame(net::leaveinfo_t type) override;
