@@ -12,7 +12,8 @@ inline void ConfigureTls(boost::asio::ssl::context &context)
 {
     boost::system::error_code ignored;
     context.set_default_verify_paths(ignored);
-    context.add_certificate_authority(boost::asio::buffer(LobbyCa, sizeof(LobbyCa) - 1));
+    for (const auto pem : LobbyCa)
+        context.add_certificate_authority(boost::asio::buffer(pem.data(), pem.size()));
     if (const char *ca = std::getenv("DAMNATIONX_LOBBY_CA")) context.load_verify_file(ca);
 }
 } // namespace devilution::net::lobby

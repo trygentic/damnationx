@@ -1,4 +1,6 @@
 #pragma once
+#include <string_view>
 namespace devilution::net::lobby {
-inline constexpr char LobbyCa[] = R"DXCA(@DEVILUTIONX_LOBBY_CA_PEM@)DXCA";
+inline constexpr std::string_view LobbyCa[] = {
+@DEVILUTIONX_LOBBY_CA_CERTIFICATES@};
 }

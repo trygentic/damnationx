@@ -1,10 +1,18 @@
 name: Beta release packages
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Source commit to build (blank uses this workflow commit)
+        default: ''
+      platforms:
+        description: Build all, linux, or windows-android
+        default: all
 permissions:
   contents: read
 jobs:
   linux:
+    if: inputs.platforms != 'windows-android'
     strategy:
       fail-fast: false
       matrix:
@@ -17,6 +25,8 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
       - name: Dependencies
         run: |
           Packaging/nix/debian-host-prep.sh --no-gcc
@@ -60,15 +70,18 @@ jobs:
           path: dist/*
           if-no-files-found: error
   windows:
+    if: inputs.platforms != 'linux'
     runs-on: windows-latest
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
       - uses: lukka/get-cmake@latest
       - name: Lobby dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-asio:x64-windows-static boost-beast:x64-windows-static openssl:x64-windows-static
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install --classic boost-asio:x64-windows-static boost-beast:x64-windows-static openssl:x64-windows-static
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg failed' }
       - uses: actions/cache@v4
         with:
@@ -97,15 +110,20 @@ jobs:
           path: dist/*
           if-no-files-found: error
   android:
+    if: inputs.platforms != 'linux'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: temurin
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - name: Dependencies
         run: |
           sudo apt-get update
