@@ -32,8 +32,8 @@ jobs:
           Packaging/nix/debian-host-prep.sh --no-gcc
           sudo apt-get install -y gcc-14 g++-14 ninja-build libboost-dev libssl-dev libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev libvulkan-dev libx11-xcb-dev libxcb1-dev libasound2-dev libpulse-dev libudev-dev
           if [ "${{ matrix.arch }}" = arm64 ]; then
-            NOSUDO=1 PREFIX=/tmp/smpq tools/build_and_install_smpq.sh
-            echo /tmp/smpq/bin >> "$GITHUB_PATH"
+            sudo env NOSUDO=1 PREFIX= tools/build_and_install_smpq.sh
+            echo /usr/local/bin >> "$GITHUB_PATH"
           fi
       - uses: actions/cache@v4
         with:
