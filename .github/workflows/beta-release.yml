@@ -6,13 +6,17 @@ on:
         description: Source commit to build (blank uses this workflow commit)
         default: ''
       platforms:
-        description: Build all, linux, or windows-android
+        description: Build all, linux, windows, android, or windows-android
         default: all
+      android_artifact_run:
+        description: Recheck an already built Android artifact from this run ID
+        default: ''
 permissions:
   contents: read
+  actions: read
 jobs:
   linux:
-    if: inputs.platforms != 'windows-android'
+    if: inputs.platforms == 'all' || inputs.platforms == 'linux'
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +79,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
   windows:
-    if: inputs.platforms != 'linux'
+    if: inputs.platforms == 'all' || inputs.platforms == 'windows' || inputs.platforms == 'windows-android'
     runs-on: windows-latest
     timeout-minutes: 180
     steps:
@@ -96,15 +100,21 @@ jobs:
         shell: pwsh
         run: |
           $prefix = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-static"
-          tools/build-windows-webgpu.ps1 -BuildDir build -Jobs 2 -ExtraCMakeArgs @("-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net", "-DDEVILUTIONX_BOOST_INCLUDE_DIR=$prefix/include", "-DOPENSSL_ROOT_DIR=$prefix", "-DOPENSSL_USE_STATIC_LIBS=ON", "-DDEVILUTIONX_BUILD_LOBBY_CHECK=ON", "-DDEVILUTIONX_TRAINER=OFF", "-DDISCORD_INTEGRATION=OFF")
+          tools/build-windows-webgpu.ps1 -BuildDir build -Jobs 2 -ExtraCMakeArgs @("-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net", "-DDEVILUTIONX_BOOST_INCLUDE_DIR=$prefix/include", "-DOPENSSL_ROOT_DIR=$prefix", "-DOPENSSL_USE_STATIC_LIBS=ON", "-DDEVILUTIONX_BUILD_LOBBY_CHECK=ON", "-DDEVILUTIONX_TRAINER=OFF", "-DDISCORD_INTEGRATION=ON")
           cmake --build build --target damnationx-lobby-check --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: build/dawn
+          key: beta7-dawn-windows-31e25af
       - name: Read-only lobby verification without system CA files
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force empty-ca
           $env:SSL_CERT_FILE = "$PWD/empty-ca/missing"
           $env:SSL_CERT_DIR = "$PWD/empty-ca"
+          Get-ChildItem build/_CPack_Packages -Recurse -Filter '*.dll' | ForEach-Object { Copy-Item $_.FullName build/ -Force }
           ./build/damnationx-lobby-check.exe
           if ($LASTEXITCODE -ne 0) { throw 'Lobby verification failed' }
           New-Item -ItemType Directory -Force dist
@@ -115,7 +125,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
   android:
-    if: inputs.platforms != 'linux'
+    if: inputs.platforms == 'all' || inputs.platforms == 'android' || inputs.platforms == 'windows-android'
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
@@ -130,11 +140,13 @@ jobs:
         with:
           packages: platform-tools
       - name: Dependencies
+        if: inputs.android_artifact_run == ''
         run: |
           sudo apt-get update
           sudo apt-get install -y gettext ninja-build
           sdkmanager 'ndk;29.0.14206865' 'cmake;3.31.0' 'platforms;android-35' 'build-tools;35.0.0'
       - uses: actions/cache@v4
+        if: inputs.android_artifact_run == ''
         with:
           path: |
             lobby-deps
@@ -142,13 +154,39 @@ jobs:
             ~/.gradle/caches
           key: beta7-android-deps-openssl357-boost188-dawn31e25af
       - name: Build lobby dependencies
+        if: inputs.android_artifact_run == ''
         env:
           ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/29.0.14206865
         run: bash tools/release-tools/android-lobby-deps.sh "$PWD/lobby-deps"
       - name: Build APK
+        if: inputs.android_artifact_run == ''
         run: |
           cd android-project
           ./gradlew assembleDebug -Pwebgpu -PdawnJobs=2 -PdawnBuildRoot="$GITHUB_WORKSPACE/android-dawn" -PlobbyDepsRoot="$GITHUB_WORKSPACE/lobby-deps" --max-workers=2
+      - uses: actions/cache/save@v4
+        if: always() && inputs.android_artifact_run == ''
+        with:
+          path: |
+            lobby-deps
+            android-dawn
+            ~/.gradle/caches
+          key: beta7-android-deps-openssl357-boost188-dawn31e25af
+      - name: Stage built APK
+        if: inputs.android_artifact_run == ''
+        run: |
+          mkdir -p dist
+          cp android-project/app/build/outputs/apk/debug/app-debug.apk dist/DamnationX-1.6.0-beta.7-android.apk
+      - uses: actions/upload-artifact@v4
+        if: inputs.android_artifact_run == ''
+        with:
+          name: beta7-android-built
+          path: dist/*.apk
+          if-no-files-found: error
+      - name: Download APK for verification-only rerun
+        if: inputs.android_artifact_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download '${{ inputs.android_artifact_run }}' --repo '${{ github.repository }}' -n beta7-android-built -D dist
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -159,17 +197,10 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
-          target: google_apis
+          target: default
           disable-animations: true
           script: |
-            adb install android-project/app/build/outputs/apk/debug/app-debug.apk
-            adb logcat -c
-            adb shell am start -n net.damnationx.dev/org.diasurgical.devilutionx.DevilutionXSDLActivity --ez check_lobby true
-            for i in $(seq 1 30); do adb logcat -d | grep 'Lobby GET verified: https://lobby.damnationx.net' && exit 0; sleep 1; done; adb logcat -d; exit 1
-      - name: Package
-        run: |
-          mkdir -p dist
-          cp android-project/app/build/outputs/apk/debug/app-debug.apk dist/DamnationX-1.6.0-beta.7-android.apk
+            bash tools/release-tools/check-android-lobby.sh dist/DamnationX-1.6.0-beta.7-android.apk
       - uses: actions/upload-artifact@v4
         with:
           name: beta7-android

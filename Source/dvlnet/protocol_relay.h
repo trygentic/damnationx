@@ -58,6 +58,8 @@ public:
 	int create(std::string_view name) override;
 	int join(std::string_view id) override;
 	std::expected<void, PacketError> poll() override;
+	// The HTTP directory does not require a relay peer or an OOB discovery packet.
+	bool send_info_request() override { return true; }
 	void clear_gamelist() override { }
 	std::vector<GameInfo> get_gamelist() override;
 	bool SNetLeaveGame(net::leaveinfo_t type) override;

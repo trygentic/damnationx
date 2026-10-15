@@ -52,6 +52,7 @@
 #include "doom.h"
 #ifdef DEVILUTIONX_LOBBY
 #include "dvlnet/lobby_api.h"
+#include "dvlnet/protocol_relay.h"
 #endif
 #include "encrypt.h"
 #include "engine/backbuffer_state.hpp"
@@ -3036,6 +3037,11 @@ int DiabloMain(int argc, char **argv)
         if (origin != "https://lobby.damnationx.net") {
             std::fprintf(stderr, "Unexpected lobby origin: %s\n", origin.c_str());
             return 2;
+        }
+        net::relay_net provider;
+        if (!provider.send_info_request()) {
+            std::fprintf(stderr, "Directory discovery waits for a game peer\n");
+            return 4;
         }
         std::vector<net::lobby::Game> games;
         std::string error;

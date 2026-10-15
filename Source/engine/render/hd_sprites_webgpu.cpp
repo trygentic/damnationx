@@ -98,7 +98,7 @@ struct Instance {
   rect: vec4f,     // x, y, width, height in back-buffer pixels
   uvRect: vec4f,   // u0, v0, u1, v1 of the frame cell
   clipRect: vec4f, // x0, y0, x1, y1: visible (snapshotted) back-buffer pixels
-  params: vec4f,   // light (legacy) or palette fade (hybrid), instance index, card anchor row (sprite) / pivot row (shadow) / outline radius (outline), kind
+  params: vec4f,   // light / palette fade / outline alpha cutoff, instance index, card anchor / pivot / outline radius, kind
   tint: vec4f,     // HdSpriteTint: per-channel multiplier (rgb), saturation (w); identity (1, 1, 1, 1). Outline: colour (rgb), quad padding (w).
 };
 
@@ -180,7 +180,7 @@ fn outlineAlpha(item: Instance, uv: vec2f) -> f32 {
     let offset = vec2f(cos(angle), sin(angle)) * radius;
     alpha = max(alpha, max(cellAlpha(item, uv + offset), cellAlpha(item, uv + offset * 0.5)));
   }
-  return smoothstep(0.1, 0.5, alpha);
+  return smoothstep(item.params.x, min(item.params.x + 0.4, 1.0), alpha);
 }
 
 // Coverage left by the classic draws after the instance (the last-writer plane): 0 hidden, 0.5 behind a see-through
@@ -1277,7 +1277,8 @@ void HdSpritesGpuPrepare(const HdSpritesGpuFrame &frame)
 			continue;
 		const SDL_Color &color = system_palette[static_cast<size_t>(instance.outlineColor)];
 		GpuInstance outline = Gpu.gpuInstances[i];
-		outline.params = { 1.0F, outline.params[1], hd_sprites::OutlineRadius(worldScale), 3.0F };
+		// Objects and items carry soft ground shadows in their art. Highlight their opaque body, not that shadow.
+		outline.params = { instance.dropShadow ? 0.1F : 0.9F, outline.params[1], hd_sprites::OutlineRadius(worldScale), 3.0F };
 		outline.tint = { color.r / 255.0F, color.g / 255.0F, color.b / 255.0F, hd_sprites::OutlineQuadPadding(worldScale) };
 		Gpu.outlineSlots[i] = static_cast<int>(Gpu.gpuInstances.size());
 		Gpu.gpuInstances.push_back(outline);
