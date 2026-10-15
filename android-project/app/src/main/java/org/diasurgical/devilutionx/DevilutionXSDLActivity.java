@@ -46,7 +46,7 @@ public class DevilutionXSDLActivity extends SDLActivity {
 	protected void onStart() {
 		super.onStart();
 
-		if (isMissingGameData()) {
+		if (!isLobbyCheck() && isMissingGameData()) {
 			Intent intent = new Intent(this, DataActivity.class);
 			startActivity(intent);
 			noExit = true;
@@ -148,7 +148,12 @@ public class DevilutionXSDLActivity extends SDLActivity {
 		return Locale.getDefault().toString();
 	}
 
+    private boolean isLobbyCheck() {
+        return BuildConfig.DEBUG && getIntent().getBooleanExtra("check_lobby", false);
+    }
+
 	protected String[] getArguments() {
+        if (isLobbyCheck()) return new String[]{"--check-lobby"};
 		String externalDir = fileManager.getExternalFilesDirectory();
 
 		ArrayList<String> arguments = new ArrayList<>(Arrays.asList(

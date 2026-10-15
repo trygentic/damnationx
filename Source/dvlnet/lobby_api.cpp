@@ -11,6 +11,7 @@
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl.hpp>
+#include "dvlnet/lobby_tls.h"
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/ssl.hpp>
@@ -135,8 +136,7 @@ Reply Request(const char *method, const std::string &path, const std::string &bo
 		http::response<http::string_body> response;
 		if (address.tls) {
 			asio::ssl::context context(asio::ssl::context::tls_client);
-			context.set_default_verify_paths();
-			if (const char *ca = std::getenv("DAMNATIONX_LOBBY_CA")) context.load_verify_file(ca);
+			ConfigureTls(context);
 			beast::ssl_stream<beast::tcp_stream> stream(io, context);
 			stream.set_verify_mode(asio::ssl::verify_peer);
 			stream.set_verify_callback(asio::ssl::host_name_verification(address.host));

@@ -9,7 +9,9 @@ This repository holds the source code and the release builds. Download the build
 
 ## Latest beta
 
-Beta 6 adds an animated 3D model for the Warrior on Windows, Linux and Android. The model is part of the HD pack, in its `hd/3d/warrior` folder: with an HD pack that includes it, Warriors are drawn as the 3D model instead of HD sprites. Packs without that folder keep working and show the HD sprites. Settings > Graphics > 3D Warrior Model switches back to the HD sprites. The Windows, Linux and Android builds still can't reach the DamnationX lobby, but TCP/IP and ZeroTier multiplayer work. Nothing changed for macOS and the browser, so their beta 3 downloads are still current.
+Beta 7 updates macOS, Windows, Linux, Android and the browser to use the lobby at `https://lobby.damnationx.net`. Native builds include the lobby provider and a certificate store for HTTPS and secure WebSockets. The HD pack remains a separate download; an existing compatible pack continues to work.
+
+The animated 3D Warrior from beta 6 remains available with an HD pack containing `hd/3d/warrior`. Rogues and Sorcerers keep their existing art.
 
 ## You need the Diablo game data
 

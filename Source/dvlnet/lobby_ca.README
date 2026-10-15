@@ -1,0 +1,7 @@
+The lobby_ca.pem file is the Mozilla root certificate store converted to PEM
+by the curl project: https://curl.se/docs/caextract.html
+Retrieved 2026-10-16. Certificate data date: 2026-09-25.
+Mozilla certificate data is distributed under MPL 2.0:
+https://www.mozilla.org/MPL/2.0/
+Refresh this file when releasing clients so the embedded trust store stays current.
+The client also uses OpenSSL's platform default paths and DAMNATIONX_LOBBY_CA.

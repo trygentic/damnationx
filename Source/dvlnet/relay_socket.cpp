@@ -9,6 +9,7 @@
 #else
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include "dvlnet/lobby_tls.h"
 #include <boost/beast.hpp>
 #include <boost/beast/websocket/ssl.hpp>
 #include <cstdlib>
@@ -186,8 +187,7 @@ bool RelaySocket::Open(const std::string &url, std::string &error)
 	const std::string host = colon == std::string::npos ? authority : authority.substr(0, colon);
 	const std::string port = colon == std::string::npos ? (secure ? "443" : "80") : authority.substr(colon + 1);
 	if (secure) {
-		impl_->tls.set_default_verify_paths();
-		if (const char *ca = std::getenv("DAMNATIONX_LOBBY_CA")) impl_->tls.load_verify_file(ca);
+		lobby::ConfigureTls(impl_->tls);
 		impl_->stream = std::make_unique<Impl::StreamImpl<websocket::stream<asio::ssl::stream<tcp::socket>>>>(impl_->io, impl_->io, impl_->tls);
 	} else {
 		impl_->stream = std::make_unique<Impl::StreamImpl<websocket::stream<tcp::socket>>>(impl_->io, impl_->io);

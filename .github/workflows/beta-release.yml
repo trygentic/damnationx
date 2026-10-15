@@ -1,0 +1,154 @@
+name: Beta release packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          Packaging/nix/debian-host-prep.sh --no-gcc
+          sudo apt-get install -y gcc-14 g++-14 ninja-build libboost-dev libssl-dev libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev libvulkan-dev libasound2-dev libpulse-dev libudev-dev
+          if [ "${{ matrix.arch }}" = arm64 ]; then
+            NOSUDO=1 PREFIX=/tmp/smpq tools/build_and_install_smpq.sh
+            echo /tmp/smpq/bin >> "$GITHUB_PATH"
+          fi
+      - uses: actions/cache@v4
+        with:
+          path: build/dawn
+          key: beta7-dawn-linux-${{ matrix.arch }}-31e25af
+      - name: Configure
+        env:
+          CC: gcc-14
+          CXX: g++-14
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCPACK=ON -DBUILD_TESTING=OFF -DDISCORD_INTEGRATION=OFF \
+            -DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON -DDEVILUTIONX_DAWN_JOBS=2 \
+            -DDEVILUTIONX_SYSTEM_SDL3=OFF -DDEVILUTIONX_STATIC_SDL3=ON \
+            -DDEVILUTIONX_SYSTEM_SDL_IMAGE=OFF -DDEVILUTIONX_SYSTEM_SDL_MIXER=OFF \
+            -DDEVILUTIONX_SYSTEM_LIBSODIUM=OFF -DDEVILUTIONX_SYSTEM_BZIP2=OFF \
+            -DDEVILUTIONX_LOBBY=ON -DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net \
+            -DDEVILUTIONX_BUILD_LOBBY_CHECK=ON -DDEVILUTIONX_TRAINER=OFF
+      - name: Build
+        run: cmake --build build -j 2 --target package damnationx-lobby-check
+      - name: Read-only lobby verification without system CA files
+        run: |
+          mkdir -p /tmp/empty-ca
+          SSL_CERT_FILE=/tmp/empty-ca/missing SSL_CERT_DIR=/tmp/empty-ca build/damnationx-lobby-check
+          build/devilutionx --check-lobby
+      - name: Package
+        run: |
+          STRIP_PACKAGE=1 TARBALL_DEB_RPM=0 Packaging/nix/LinuxReleasePackaging.sh
+          mkdir -p dist
+          mv devilutionx.tar.xz dist/DamnationX-1.6.0-beta.7-linux-${{ matrix.arch }}.tar.xz
+          for f in build/*.deb build/*.rpm; do [ ! -f "$f" ] || cp "$f" dist/; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta7-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Lobby dependencies
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install boost-asio:x64-windows-static boost-beast:x64-windows-static openssl:x64-windows-static
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg failed' }
+      - uses: actions/cache@v4
+        with:
+          path: build/dawn
+          key: beta7-dawn-windows-31e25af
+      - name: Build
+        shell: pwsh
+        run: |
+          $prefix = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-static"
+          tools/build-windows-webgpu.ps1 -BuildDir build -Jobs 2 -ExtraCMakeArgs @("-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net", "-DDEVILUTIONX_BOOST_INCLUDE_DIR=$prefix/include", "-DOPENSSL_ROOT_DIR=$prefix", "-DOPENSSL_USE_STATIC_LIBS=ON", "-DDEVILUTIONX_BUILD_LOBBY_CHECK=ON", "-DDEVILUTIONX_TRAINER=OFF", "-DDISCORD_INTEGRATION=OFF")
+          cmake --build build --target damnationx-lobby-check --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
+      - name: Read-only lobby verification without system CA files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force empty-ca
+          $env:SSL_CERT_FILE = "$PWD/empty-ca/missing"
+          $env:SSL_CERT_DIR = "$PWD/empty-ca"
+          ./build/damnationx-lobby-check.exe
+          if ($LASTEXITCODE -ne 0) { throw 'Lobby verification failed' }
+          New-Item -ItemType Directory -Force dist
+          Copy-Item build/devilutionx-*.zip dist/DamnationX-1.6.0-beta.7-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta7-windows-x64
+          path: dist/*
+          if-no-files-found: error
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+      - uses: android-actions/setup-android@v3
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext ninja-build
+          sdkmanager 'ndk;29.0.14206865' 'cmake;3.31.0' 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            lobby-deps
+            android-dawn
+            ~/.gradle/caches
+          key: beta7-android-deps-openssl357-boost188-dawn31e25af
+      - name: Build lobby dependencies
+        env:
+          ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/29.0.14206865
+        run: bash tools/release-tools/android-lobby-deps.sh "$PWD/lobby-deps"
+      - name: Build APK
+        run: |
+          cd android-project
+          ./gradlew assembleDebug -Pwebgpu -PdawnJobs=2 -PdawnBuildRoot="$GITHUB_WORKSPACE/android-dawn" -PlobbyDepsRoot="$GITHUB_WORKSPACE/lobby-deps" --max-workers=2
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify actual APK with read-only lobby request
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install android-project/app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell am start -n net.damnationx.dev/org.diasurgical.devilutionx.DevilutionXSDLActivity --ez check_lobby true
+            for i in $(seq 1 30); do adb logcat -d | grep 'Lobby GET verified: https://lobby.damnationx.net' && exit 0; sleep 1; done; adb logcat -d; exit 1
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp android-project/app/build/outputs/apk/debug/app-debug.apk dist/DamnationX-1.6.0-beta.7-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta7-android
+          path: dist/*
+          if-no-files-found: error

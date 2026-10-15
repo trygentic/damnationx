@@ -1,0 +1,4 @@
+#pragma once
+namespace devilution::net::lobby {
+inline constexpr char LobbyCa[] = R"DXCA(@DEVILUTIONX_LOBBY_CA_PEM@)DXCA";
+}

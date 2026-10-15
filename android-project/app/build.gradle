@@ -33,6 +33,11 @@ android {
 		externalNativeBuild {
 			cmake {
 				arguments "-DANDROID_STL=c++_static"
+                if (project.hasProperty('lobbyDepsRoot')) {
+                    arguments "-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net"
+                    arguments "-DDEVILUTIONX_ANDROID_OPENSSL_ROOT=" + project.property('lobbyDepsRoot') + "/openssl"
+                    arguments "-DDEVILUTIONX_BOOST_INCLUDE_DIR=" + project.property('lobbyDepsRoot') + "/boost_1_88_0"
+                }
 				if (webgpuBuild) {
 					arguments "-DUSE_SDL3=ON", "-DDEVILUTIONX_WEBGPU=ON", "-DDEVILUTIONX_SYSTEM_SDL3=OFF", "-DDEVILUTIONX_STATIC_SDL3=OFF"
 					// The one-time Dawn build is memory-hungry: -PdawnJobs=N (default 6).

@@ -1103,6 +1103,7 @@ extern "C" void SdlLogToFile(void *userdata, int /*category*/, SDL_LogPriority p
 	printNewlineInConsole();
 	PrintHelpOption("-h, --help", _(/* TRANSLATORS: Commandline Option */ "Print this message and exit"));
 	PrintHelpOption("--version", _(/* TRANSLATORS: Commandline Option */ "Print the version and exit"));
+	PrintHelpOption("--check-lobby", "Check lobby access with a read-only request and exit");
 	PrintHelpOption("--data-dir", _(/* TRANSLATORS: Commandline Option */ "Specify the folder of diabdat.mpq"));
 	PrintHelpOption("--save-dir", _(/* TRANSLATORS: Commandline Option */ "Specify the folder of save files"));
 	PrintHelpOption("--config-dir", _(/* TRANSLATORS: Commandline Option */ "Specify the location of diablo.ini"));
@@ -3028,6 +3029,29 @@ void ApplyRememberedLaunchOptions(int argc, char **argv)
 
 int DiabloMain(int argc, char **argv)
 {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) != "--check-lobby") continue;
+#ifdef DEVILUTIONX_LOBBY
+        const auto origin = net::lobby::Origin();
+        if (origin != "https://lobby.damnationx.net") {
+            std::fprintf(stderr, "Unexpected lobby origin: %s\n", origin.c_str());
+            return 2;
+        }
+        std::vector<net::lobby::Game> games;
+        std::string error;
+        if (!net::lobby::List(games, error)) {
+            std::fprintf(stderr, "Lobby GET failed: %s\n", error.c_str());
+            return 1;
+        }
+        SDL_Log("Lobby GET verified: %s; %zu public games", origin.c_str(), games.size());
+        std::printf("Lobby GET verified: %s; %zu public games\n", origin.c_str(), games.size());
+        return 0;
+#else
+        std::fprintf(stderr, "Lobby support is disabled in this build\n");
+        return 3;
+#endif
+    }
+
 #ifdef _DEBUG
 	SDL_SetLogPriorities(SDL_LOG_PRIORITY_DEBUG);
 #endif
