@@ -51,6 +51,10 @@ jobs:
             -DDEVILUTIONX_SYSTEM_LIBSODIUM=OFF -DDEVILUTIONX_SYSTEM_BZIP2=OFF \
             -DDEVILUTIONX_LOBBY=ON -DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net \
             -DDEVILUTIONX_BUILD_LOBBY_CHECK=ON -DDEVILUTIONX_TRAINER=OFF
+      - uses: actions/cache/save@v4
+        with:
+          path: build/dawn
+          key: beta7-dawn-linux-${{ matrix.arch }}-31e25af
       - name: Build
         run: cmake --build build -j 2 --target package damnationx-lobby-check
       - name: Read-only lobby verification without system CA files
