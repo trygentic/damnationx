@@ -47,7 +47,16 @@ add_library(casclib STATIC
 target_include_directories(casclib PUBLIC ${casclib_SOURCE_DIR}/src)
 target_compile_definitions(casclib
   PUBLIC CASCLIB_NO_AUTO_LINK_LIBRARY CASCLIB_NODEBUG
-  PRIVATE CASC_USE_SYSTEM_ZLIB)
+  PRIVATE CASC_USE_SYSTEM_ZLIB
+    # CascLib vendors legacy OpenSSL AES routines. Keep their symbols private
+    # to this component when the lobby also links a current OpenSSL library.
+    AES_KEY=CascLib_AES_KEY
+    aes_key_st=CascLib_aes_key_st
+    AES_set_encrypt_key=CascLib_AES_set_encrypt_key
+    AES_set_decrypt_key=CascLib_AES_set_decrypt_key
+    AES_encrypt=CascLib_AES_encrypt
+    AES_decrypt=CascLib_AES_decrypt
+    AES_cbc_decrypt=CascLib_AES_cbc_decrypt)
 target_link_libraries(casclib PRIVATE ZLIB::ZLIB)
 if(WIN32)
   target_link_libraries(casclib PRIVATE ws2_32 wininet)

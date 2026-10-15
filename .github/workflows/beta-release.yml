@@ -87,11 +87,23 @@ jobs:
         with:
           ref: ${{ inputs.source_ref || github.sha }}
       - uses: lukka/get-cmake@latest
+      - uses: actions/cache@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/downloads
+          key: beta7-vcpkg-x64-static-boost-openssl-v1
       - name: Lobby dependencies
         shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT/vcpkg.exe" install --classic boost-asio:x64-windows-static boost-beast:x64-windows-static openssl:x64-windows-static
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg failed' }
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/downloads
+          key: beta7-vcpkg-x64-static-boost-openssl-v1
       - uses: actions/cache@v4
         with:
           path: build/dawn
@@ -100,8 +112,8 @@ jobs:
         shell: pwsh
         run: |
           $prefix = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-static"
-          tools/build-windows-webgpu.ps1 -BuildDir build -Jobs 2 -ExtraCMakeArgs @("-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net", "-DDEVILUTIONX_BOOST_INCLUDE_DIR=$prefix/include", "-DOPENSSL_ROOT_DIR=$prefix", "-DOPENSSL_USE_STATIC_LIBS=ON", "-DDEVILUTIONX_BUILD_LOBBY_CHECK=ON", "-DDEVILUTIONX_TRAINER=OFF", "-DDISCORD_INTEGRATION=ON")
-          cmake --build build --target damnationx-lobby-check --parallel 2
+          tools/build-windows-webgpu.ps1 -BuildDir build -Jobs 4 -ExtraCMakeArgs @("-DDEVILUTIONX_LOBBY=ON", "-DDEVILUTIONX_DEFAULT_LOBBY_ORIGIN=https://lobby.damnationx.net", "-DDEVILUTIONX_BOOST_INCLUDE_DIR=$prefix/include", "-DOPENSSL_ROOT_DIR=$prefix", "-DOPENSSL_USE_STATIC_LIBS=ON", "-DDEVILUTIONX_BUILD_LOBBY_CHECK=ON", "-DDEVILUTIONX_TRAINER=OFF", "-DDISCORD_INTEGRATION=ON")
+          cmake --build build --target damnationx-lobby-check --parallel 4
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' }
       - uses: actions/cache/save@v4
         if: always()
