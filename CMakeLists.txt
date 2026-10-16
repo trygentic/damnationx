@@ -585,6 +585,9 @@ if(EMSCRIPTEN)
     -sFORCE_FILESYSTEM=1
     -sALLOW_MEMORY_GROWTH=1
     -sASYNCIFY
+    # Large game/renderer frames need an explicit stack; trap before an overflow corrupts globals.
+    -sSTACK_SIZE=4MB
+    -sSTACK_OVERFLOW_CHECK=2
     $<$<BOOL:${DEVILUTIONX_LOBBY}>:-lwebsocket.js>
     -sEXPORTED_RUNTIME_METHODS=callMain
     -lidbfs.js

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -894,7 +895,9 @@ float FloorHeightAt(float x, float z)
 void WorldGpuRelease()
 {
 	ReleaseAll();
-	Level = LevelGeometry {};
+	// Reset in place: a temporary LevelGeometry exceeds the browser's default 64 KiB stack.
+	std::destroy_at(&Level);
+	std::construct_at(&Level);
 	InvalidateLevel();
 }
 
