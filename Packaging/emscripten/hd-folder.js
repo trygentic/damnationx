@@ -24,6 +24,7 @@
 
 	if (!choose || !status) return;
 	var canRemember = !!window.showDirectoryPicker;
+	var useInputPicker = !canRemember;
 
 	function db() {
 		return new Promise(function (resolve, reject) {
@@ -61,7 +62,7 @@
 		history.replaceState(history.state, '', url);
 	}
 
-	function started() { return !!(window.Module && Module.calledRun); }
+	function started() { return !!(window.launch && window.launch.started); }
 
 	function use(dir, note) {
 		if (canRemember) hdDir = dir;
@@ -76,9 +77,16 @@
 		var input = document.createElement('input');
 		input.type = 'file';
 		input.webkitdirectory = true;
+		input.multiple = true;
+		input.hidden = true;
+		document.body.appendChild(input);
 		input.addEventListener('change', function () {
 			var files = Array.from(input.files || []);
-			if (!files.length) return;
+			input.remove();
+			if (!files.length) {
+				status.textContent = 'No files were returned. Choose the unzipped HD folder, not the ZIP file.';
+				return;
+			}
 			// webkitRelativePath is "<chosen>/...": find the prefix of the folder that holds sprites.txt
 			var index = files.find(function (f) { return /(^|\/)sprites\.txt$/.test(f.webkitRelativePath) && f.webkitRelativePath.split('/').length <= 3; });
 			if (!index) {
@@ -90,24 +98,31 @@
 			files.forEach(function (f) { if (f.webkitRelativePath.startsWith(prefix)) hdFiles.set(f.webkitRelativePath.slice(prefix.length), f); });
 			use({ name: prefix.replace(/\/$/, '').split('/').pop() || 'hd' }, ' (choose it again after a reload)');
 		});
+		input.addEventListener('cancel', function () { input.remove(); });
 		input.click();
 	}
 
 	async function pick() {
-		if (!canRemember) return pickWithInput();
+		if (useInputPicker) return pickWithInput();
 		var chosen;
 		try {
 			chosen = await window.showDirectoryPicker({ id: 'damnationx-hd', mode: 'read' });
 		} catch (e) {
-			return; // cancelled
+			if (e && e.name === 'AbortError') return; // cancelled
+			useInputPicker = true;
+			status.textContent = 'Could not open the HD folder picker: ' + (e && e.message || String(e)) + '. Click again to use the compatible folder picker.';
+			choose.textContent = 'Choose HD Folder (compatibility)…';
+			return;
 		}
+		status.textContent = 'Checking HD folder "' + chosen.name + '"…';
 		var dir = await hdFolderIn(chosen);
 		if (!dir) {
 			status.textContent = '"' + chosen.name + '" has no HD pack. Choose the "hd" folder (it contains sprites.txt) or the folder that contains it.';
 			return;
 		}
-		await idb('readwrite', function (s) { return s.put(dir, KEY); }).catch(function () {});
 		use(dir);
+		// Remembering the handle is optional; slow browser storage must not delay activation.
+		idb('readwrite', function (s) { return s.put(dir, KEY); }).catch(function () {});
 	}
 
 	choose.addEventListener('click', async function () {
