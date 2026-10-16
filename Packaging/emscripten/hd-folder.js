@@ -66,7 +66,12 @@
 	function started() { return !!(window.launch && window.launch.started); }
 
 	function use(dir, note) {
-		if (canRemember) hdDir = dir;
+		if (canRemember && typeof dir.getFileHandle === 'function') {
+			hdDir = dir;
+			hdFiles = null;
+		} else {
+			hdDir = null;
+		}
 		stored = null;
 		setFlags(true);
 		status.textContent = 'Using HD folder "' + dir.name + '"' + (note || '') + '.' + (started() ? ' Reload the page to apply it.' : '');
@@ -144,7 +149,7 @@
 	}
 
 	if (canRemember) idb('readonly', function (s) { return s.get(KEY); }).then(async function (handle) {
-		if (!handle) return;
+		if (!handle || hdDir || hdFiles) return;
 		if (await handle.queryPermission({ mode: 'read' }) === 'granted') return use(handle);
 		stored = handle;
 		status.textContent = 'HD folder "' + handle.name + '" needs permission again.';

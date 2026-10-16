@@ -66,3 +66,12 @@ test('alternate folder button opens the input without the native picker',async()
  h.elements.get('hdInputChooseBtn').listeners.click();
  assert.equal(h.inputs.length,1);
 });
+
+test('a native selection replaces files from the alternate picker',async()=>{
+ const h=harness({picker:async()=>folder});
+ h.elements.get('hdInputChooseBtn').listeners.click();
+ h.inputs[0].files=[Object.assign(new Blob(['old index']),{webkitRelativePath:'old/hd/sprites.txt'})];
+ h.inputs[0].listeners.change();
+ await h.click();
+ assert.equal(await (await h.window.fetch('https://preview.test/play/hd/sprites.txt')).text(),'index');
+});
