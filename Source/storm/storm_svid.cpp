@@ -243,9 +243,10 @@ bool BlitFrame()
 #else
 
 #ifdef USE_SDL3
-		const SDL_PixelFormat wndFormat = SDL_GetWindowPixelFormat(ghMainWnd);
+		// WebGPU renders into a software surface; the window display format may be unknown.
+		const SDL_PixelFormat wndFormat = outputSurface->format;
 #else
-		const Uint32 wndFormat = SDL_GetWindowPixelFormat(ghMainWnd);
+		const Uint32 wndFormat = outputSurface->format->format;
 #endif
 		const bool isIndexedOutputFormat = SDL_ISPIXELFORMAT_INDEXED(wndFormat);
 #endif
@@ -286,7 +287,7 @@ bool BlitFrame()
 #endif
 			if (
 #ifdef USE_SDL3
-			    SDL_BlitSurfaceScaled(converted.get(), nullptr, outputSurface, &outputRect, SDL_SCALEMODE_LINEAR)
+			    !SDL_BlitSurfaceScaled(converted.get(), nullptr, outputSurface, &outputRect, SDL_SCALEMODE_LINEAR)
 #else
 			    SDL_BlitScaled(converted.get(), nullptr, outputSurface, &outputRect) <= -1
 #endif
