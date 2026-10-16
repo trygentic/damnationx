@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = await readFile(new URL('./hd-folder.js', import.meta.url), 'utf8');
 function harness({ picker, remember = true, started = false } = {}) {
- const elements = new Map(['hdChooseBtn','hdForgetBtn','hdStatus'].map(id => [id,{hidden:id==='hdForgetBtn',textContent:id==='hdStatus'?'No HD folder selected.':'',listeners:{},addEventListener(t,f){this.listeners[t]=f;}}]));
+ const elements = new Map(['hdChooseBtn','hdInputChooseBtn','hdForgetBtn','hdStatus'].map(id => [id,{hidden:id==='hdForgetBtn',textContent:id==='hdStatus'?'No HD folder selected.':'',listeners:{},addEventListener(t,f){this.listeners[t]=f;}}]));
  const inputs=[];
  const window = {fetch:async()=>new Response('remote'),Module:{calledRun:true},launch:{started}};
  if(remember) window.showDirectoryPicker=picker;
@@ -59,4 +59,10 @@ test('a failed native picker offers a folder input on the next click',async()=>{
  h.inputs[0].files=[];
  await h.inputs[0].listeners.change();
  assert.match(h.status(),/No files were returned/);
+});
+
+test('alternate folder button opens the input without the native picker',async()=>{
+ const h=harness({picker:async()=>{throw new Error('must not call native picker');}});
+ h.elements.get('hdInputChooseBtn').listeners.click();
+ assert.equal(h.inputs.length,1);
 });

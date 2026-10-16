@@ -14,6 +14,7 @@
 	var FLAGS = ['hdFloor', 'hdSprites', 'hdTiles', 'hdUi'];
 	var DB = 'damnationx-hd', STORE = 'handles', KEY = 'hd';
 	var choose = document.getElementById('hdChooseBtn');
+	var inputChoose = document.getElementById('hdInputChooseBtn');
 	var forget = document.getElementById('hdForgetBtn');
 	var status = document.getElementById('hdStatus');
 	var hdDir = null; // FileSystemDirectoryHandle of the folder holding sprites.txt
@@ -129,6 +130,7 @@
 		if (stored && await stored.requestPermission({ mode: 'read' }) === 'granted') return use(stored);
 		return pick();
 	});
+	if (inputChoose) inputChoose.addEventListener('click', pickWithInput);
 
 	if (forget) {
 		forget.addEventListener('click', async function () {
