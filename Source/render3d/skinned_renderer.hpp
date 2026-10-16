@@ -77,6 +77,7 @@ bool SkinnedRequestImposter(const Player &player, int clip);
 struct SkinnedImposterOutput {
 	int clip = -1;
 	WGPUTextureView view = nullptr;
+	uint64_t generation = 0; // WebGPU handles may be recycled after a resize.
 };
 
 /**

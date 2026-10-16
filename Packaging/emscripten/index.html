@@ -681,7 +681,8 @@
 				launchStateElement.textContent = state.replace(/-/g, ' ');
 				launchMessageElement.textContent = message;
 				launchRetryElement.hidden = !retry;
-				if (state === 'ready') document.getElementById('launchGate').hidden = true;
+				if (state === 'ready' || state === 'renderer-failure') document.getElementById('launchGate').hidden = state === 'ready';
+				launchRetryElement.textContent = this.started ? 'Reload game' : 'Retry';
 			},
 			// The launcher's Play passes argv (`--set Section.Key=Value` pairs); the runtime marks ready.
 			start: function (args) {
@@ -715,7 +716,7 @@
 			}
 		};
 		window.launch = launch;
-		launchRetryElement.addEventListener('click', function () { launch.started = false; launch.start(); });
+		launchRetryElement.addEventListener('click', function () { if (launch.started) { window.location.reload(); return; } launch.start(); });
 		document.addEventListener('visibilitychange', function () { if (window.Module) Module.dxBrowserPaused = document.hidden; });
 		window.addEventListener('pointerdown', function () { if (window.Module && Module.SDL3_audio_resume) Module.SDL3_audio_resume(); });
 

@@ -954,7 +954,10 @@ struct ImposterSlot {
 	int height = 0;
 	WGPUTexture texture = nullptr; // 2 width x height: [colour | normal]
 	WGPUTextureView view = nullptr;
+	uint64_t generation = 0;
 };
+
+uint64_t ImposterGeneration = 0;
 
 /** 4x MSAA colour + normal + depth and their single-sample resolves, shared by the slots rendered one after another. */
 struct RenderTargets {
@@ -1448,6 +1451,7 @@ bool EnsureSlot(ImposterSlot &slot, int width, int height)
 	slot.view = slot.texture != nullptr ? wgpuTextureCreateView(slot.texture, nullptr) : nullptr;
 	slot.width = width;
 	slot.height = height;
+	slot.generation = ++ImposterGeneration;
 	return slot.view != nullptr;
 }
 
@@ -2669,7 +2673,7 @@ const SkinnedImposterOutput *SkinnedPrepareFrame(WGPUDevice device, WGPUQueue qu
 		if (!request.active || !EnsureSlot(G.slots[i], size, size))
 			continue;
 		RenderImposter(encoder, pipeline, request, G.slots[i]);
-		G.outputs[static_cast<size_t>(count++)] = { request.clip, G.slots[i].view };
+		G.outputs[static_cast<size_t>(count++)] = { request.clip, G.slots[i].view, G.slots[i].generation };
 	}
 	WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
 	wgpuQueueSubmit(G.queue, 1, &commands);

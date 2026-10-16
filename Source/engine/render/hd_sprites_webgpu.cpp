@@ -404,6 +404,7 @@ struct ClipSlot {
 	bool ifRoom = false;
 	/** The texture is owned by the 3D warrior renderer (an imposter, render3d::SkinnedPrepareFrame), never loaded or evicted. */
 	bool external = false;
+	uint64_t externalGeneration = 0;
 };
 
 struct HdSpritesGpu {
@@ -1035,10 +1036,13 @@ void InstallImposters(const render3d::SkinnedImposterOutput *outputs, int count)
 		ClipSlot &slot = Gpu.clips[output.clip];
 		if (!slot.external && slot.state != ClipState::Unrequested)
 			continue; // a clip of the pack: never replaced
-		if (slot.view != output.view) {
+		// Emscripten may reuse the old view's numeric handle after a resize.
+		// Its cached bind groups still refer to the destroyed texture.
+		if (slot.view != output.view || slot.externalGeneration != output.generation) {
 			slot.external = true;
 			ReleaseClipTexture(slot);
 			slot.view = output.view;
+			slot.externalGeneration = output.generation;
 		}
 		slot.external = true;
 		slot.state = ClipState::Resident;
