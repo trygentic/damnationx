@@ -1,0 +1,98 @@
+{
+  "sourceBaseline": "24080e8900d695f9c88f9d3ad417917499d8103f",
+  "hudR4": "5af5d136cc348ee94b904caa7593cdb3c6961960",
+  "license": "Inherited Sustainable Use License v1.0 and original notices; no relicensing",
+  "component": "C++17 numeric/state/codec core; frame and routing are explicit host contracts",
+  "files": [
+    {
+      "path": "include/diablo_hud/types.hpp",
+      "sha256": "cac3bc06db38c29c4bd9d4782a7f7b4ae9a159439b16a605ab8e7f109b671b10",
+      "origins": [
+        {
+          "path": "Source/control/d3d_hud_geometry.hpp",
+          "sha256": "27f70844720e7639ac70cdf87a3ef14f6425f22c4dbff2f6822a317047175833"
+        },
+        {
+          "path": "Source/control/d3d_floating_panels.hpp",
+          "sha256": "bb324dac6f4ca0a6b6f2a5ce3e753f6bcc8710f7a60b96e2de4b05807beb6a12"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/authored.hpp",
+      "sha256": "92c435d07adcf4e44d52299f88b082781a63ce13f673c1b81ae565abf0364d9d",
+      "origins": [
+        {
+          "path": "Source/control/d3d_hud_layout.hpp",
+          "sha256": "ded3c2a93cb916bb363b7db4a49cdd361d8b24c391eeac52b69db2bd2854e8d2"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/layout.hpp",
+      "sha256": "bcdb46ffc879086eba36eacb0d72ded2f4372bfe40b518939f008ad6d7f378c3",
+      "origins": [
+        {
+          "path": "Source/control/d3d_hud_geometry.cpp",
+          "sha256": "665d8e820f7d3bfc5b5aeb6d2c17fe192dc713d2c5ccf726b6e73eb62619c2eb"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/persistence.hpp",
+      "sha256": "6c5205f9ce368ac2bb37500c3f700da02d687906b1ccf6ec227fcfb0f8223841",
+      "origins": [
+        {
+          "path": "Source/control/d3d_hud_geometry.cpp",
+          "sha256": "665d8e820f7d3bfc5b5aeb6d2c17fe192dc713d2c5ccf726b6e73eb62619c2eb"
+        },
+        {
+          "path": "Source/control/d3d_floating_panels.cpp",
+          "sha256": "97bc40d7fc51621cfdbb646af8da0706d3e058036737a9c1db5db577358820dd"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/windows.hpp",
+      "sha256": "f60fd171291ca0a79fa1d4e320c1839b600c616e458bda714301940c9c7a4fb2",
+      "origins": [
+        {
+          "path": "Source/control/d3d_floating_panels.cpp",
+          "sha256": "97bc40d7fc51621cfdbb646af8da0706d3e058036737a9c1db5db577358820dd"
+        },
+        {
+          "path": "Source/engine/render/d3d_panel_presentation.cpp",
+          "sha256": "ada2b9fe57937e8e63c4d1585c81840f974ab6fb21d0a82179e318cd21726685"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/input.hpp",
+      "sha256": "4da6a39becef75ec91a9d1a342de2c6527ea14492c8e04332815b5cc0c1948c7",
+      "origins": [
+        {
+          "path": "Source/control/d3d_floating_panels.cpp",
+          "sha256": "97bc40d7fc51621cfdbb646af8da0706d3e058036737a9c1db5db577358820dd"
+        },
+        {
+          "path": "Source/diablo.cpp",
+          "sha256": "c2c014749974137eb5f5894c4331d33be762476f2130f77c4c0d5b41abf2af02"
+        }
+      ]
+    },
+    {
+      "path": "include/diablo_hud/frame.hpp",
+      "sha256": "690e5de35912eace173ef56dd47986602062a5d2b9c9b0c2389364877e8f2367",
+      "origins": [
+        {
+          "path": "Source/engine/render/scrollrt.cpp",
+          "sha256": "3d4c32f947a9d81335d6541b30131a76f9669e95269958cb8b8b1a5f06dbd7f0"
+        },
+        {
+          "path": "Source/engine/render/d3d_panel_presentation.cpp",
+          "sha256": "ada2b9fe57937e8e63c4d1585c81840f974ab6fb21d0a82179e318cd21726685"
+        }
+      ]
+    }
+  ]
+}
