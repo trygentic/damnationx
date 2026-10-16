@@ -5,6 +5,10 @@
 #include <cstdint>
 #include <utility>
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/html5.h>
+#endif
+
 #ifdef USE_SDL3
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
@@ -954,6 +958,11 @@ DrawableSize GetDrawableSize()
 	DrawableSize size;
 	size.logicalWidth = gnScreenWidth;
 	size.logicalHeight = gnScreenHeight;
+#if defined(__EMSCRIPTEN__) && DEVILUTIONX_WEBGPU
+	// The WebGPU surface belongs to this canvas, not SDL's window drawable.
+	if (emscripten_get_canvas_element_size("#canvas", &size.pixelWidth, &size.pixelHeight) == EMSCRIPTEN_RESULT_SUCCESS)
+		return size;
+#endif
 	if (ghMainWnd == nullptr)
 		return size;
 #ifdef USE_SDL3
