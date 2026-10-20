@@ -28,7 +28,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref || github.sha }}
       - name: Dependencies
@@ -83,7 +83,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref || github.sha }}
       - uses: lukka/get-cmake@latest
@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source_ref || github.sha }}
       - uses: actions/setup-java@v4
