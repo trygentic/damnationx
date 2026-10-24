@@ -21,7 +21,7 @@ Each desktop download combines the native game and launcher. Extract the complet
 
 | Platform | Beta 8 package | Requirements |
 | --- | --- | --- |
-| Windows (build in progress) | `damnationx-game-and-launcher-1.6.0-beta.8-windows-x64.zip` is not attached yet | 64-bit Windows 10 or later, with a GPU and driver that support Direct3D 12 or Vulkan |
+| Windows | `damnationx-game-and-launcher-1.6.0-beta.8-windows-x64.zip` | 64-bit Windows 10 or later, with a GPU and driver that support Direct3D 12 or Vulkan |
 | Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-x64.tar.gz` | Ubuntu 24.04 or a compatible system with glibc 2.39 or later, X11 or Wayland, and a Vulkan driver |
 | Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-arm64.tar.gz` | The same Linux requirements, on 64-bit ARM hardware |
 | macOS | `damnationx-game-and-launcher-1.6.0-beta.8-macos26.2-arm64.tar.gz` | Apple Silicon and macOS 26.2 or later |

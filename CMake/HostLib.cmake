@@ -62,9 +62,13 @@ function(_damnationx_host_collect target out_var visited_var)
   endif()
 
   foreach(_lib IN LISTS _libs)
-    # $<LINK_ONLY:x> wraps private dependencies of static libraries.
-    if(_lib MATCHES "^\\$<LINK_ONLY:(.+)>$")
-      set(_lib "${CMAKE_MATCH_1}")
+    # Resolve build-only wrappers before target traversal. Otherwise an
+    # interface target name becomes a nonexistent library after file(GENERATE).
+    while(_lib MATCHES "^\\$<(LINK_ONLY|BUILD_INTERFACE):(.+)>$")
+      set(_lib "${CMAKE_MATCH_2}")
+    endwhile()
+    if(_lib MATCHES "^\\$<INSTALL_INTERFACE:")
+      continue()
     endif()
     if(_lib MATCHES "^::@")
       continue() # CMake's internal directory-scope markers
