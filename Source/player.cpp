@@ -3087,8 +3087,8 @@ void StartWarpLvl(Player &player, size_t pidx)
 		if (!player.isOnLevel(0)) {
 			player.setLevel(0);
 		} else {
-			if (pidx == CathedralPortalIndex)
-				player.setLevel(1);
+			if (IsFreeTownPortalWarp(pidx))
+				player.setLevel(FreeTownPortalWarpDestination(pidx, player.lastFreeTownPortalSection));
 			else if (Portals[pidx].setlvl)
 				player.setLevel(static_cast<_setlevels>(Portals[pidx].level));
 			else

@@ -13,7 +13,7 @@ namespace devilution {
 namespace {
 
 /**
- * @brief Tags the pixels a blit into the back buffer writes as Unlit in the G-buffer.
+ * @brief Tags the pixels a blit into the back buffer writes as Unlit in the G-buffer (SPEC §5.4).
  *
  * Surface blits only draw UI (the main panel, buttons, belt, info and chat boxes, flasks): after the world pass they
  * must pass through the hybrid composite like every other UI chokepoint. The skip-zero variant stamps only the pixels

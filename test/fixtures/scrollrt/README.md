@@ -1,6 +1,6 @@
 # scrollrt golden fixtures
 
-Consumed by `test/scrollrt_golden_test.cpp`. Copied next to the test binary as
+Consumed by `test/scrollrt_golden_test.cpp` (SPEC §12.1). Copied next to the test binary as
 `test/fixtures/scrollrt/` by `test/Fixtures.cmake`.
 
 ## synthetic_level.bin
@@ -73,7 +73,9 @@ runs of 8 identical pixels so both literal and fill CLX commands are exercised.
 ## goldens.tsv
 
 `case<TAB>FNV-1a 64 hex` of the 640x352 frame for the 24 classic cases (6 view positions x zoom on/off x
-per-pixel lighting on/off) with the hybrid mode latched off. Recorded after the DrawCell flush fix and before any
+per-pixel lighting on/off) with the hybrid mode latched off. Recorded on the T5 flush-fix commit
+`647c11556` (tag `hybrid/T5-flush-fix`, the first commit of `hybrid/T5-scrollrt-integration`; branch
+`hybrid/T10-baseline` is that commit plus this fixture), i.e. after the DrawCell flush fix and before any
 G-buffer code touched the traversal. Re-record with
 
 ```sh
@@ -94,9 +96,9 @@ Master's tail copied output row 1 over row 0 (no panel), the first 320 bytes of 
 wrote 320 bytes before row 0 and left row 0 unzoomed (right panel; before `PalSurface->pixels` in the game). The tail
 now doubles the top source row into row 0, like `gbuffer::ZoomInPlace`. The test asserts rows 1..350 are master's
 bytes, row 0 is the one row that differs, row 0 is pixel-doubled across the viewport and the guard row is intact:
-this is the one intended classic frame change, made together with the DrawCell flush fix.
+this is the classic frame change the design record sanctions next to the DrawCell flush (SPEC §1 bug 7, §15 item 9).
 
-The three master columns were recorded with the upstream `Zoom()` by building this test against it with the
+The three master columns were recorded on `647c11556` (its `Zoom()` is master's) by building this test there with the
 current fixtures and running
 
 ```sh
@@ -104,7 +106,7 @@ SCROLLRT_ODD_ZOOM_RECORD=/abs/path/odd.tsv ./scrollrt_golden_test --gtest_filter
 ```
 
 (in record mode the last column repeats that build's row 0); the last column was then recorded the same way on the
-fixed build. The same upstream build reproduced all 24 `goldens.tsv` hashes.
+fixed build. The same `647c11556` build reproduced all 24 `goldens.tsv` hashes.
 
 ## Regenerating synthetic_level.bin
 

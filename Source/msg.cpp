@@ -1075,7 +1075,7 @@ bool DeltaGetItem(const TCmdGItem &message, uint8_t bLevel)
 			return true;
 		}
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && !defined(DEVILUTIONX_TRAINER)
 		app_fatal("delta:1");
 #endif
 	}
@@ -2007,7 +2007,7 @@ size_t OnWarp(const TCmdParam1 &message, Player &player)
 
 	if (gbBufferMsgs == 1) {
 		BufferMessage(player, &message, sizeof(message));
-	} else if (portalIdx < MAXPORTAL || (portalIdx == CathedralPortalIndex && IsCathedralPortalEnabled() && !player.plrIsOnSetLevel && (player.isOnLevel(0) || player.isOnLevel(1)))) {
+	} else if (portalIdx < MAXPORTAL || (IsFreeTownPortalWarp(portalIdx) && IsFreeTownPortalEnabled() && !player.plrIsOnSetLevel && (player.isOnLevel(0) || IsFreeTownPortalSection(player.plrlevel)))) {
 		StartWarpLvl(player, portalIdx);
 	}
 
@@ -2519,6 +2519,11 @@ size_t OnCheatExperience(const TCmd &cmd, Player &player) // NOLINT(misc-unused-
 			RedrawEverything();
 		}
 		NextPlrLevel(player);
+#ifdef DEVILUTIONX_TRAINER
+		// Release clients ignore CMD_CHEAT_EXPERIENCE, so announce the level like a normal level-up does.
+		if (&player == MyPlayer)
+			NetSendCmdParam1(false, CMD_PLRLEVEL, player.getCharacterLevel());
+#endif
 	}
 #endif
 	return sizeof(cmd);

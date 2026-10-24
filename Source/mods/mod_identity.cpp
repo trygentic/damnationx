@@ -62,7 +62,7 @@ std::expected<VersionedModManifest, ModValidationError> ParseVersionedModManifes
 	result.version = std::string(parsed->getString("package", "version"));
 	if (result.canonicalId.empty() || result.version.empty()) return std::unexpected(ModValidationError::InvalidId);
 	if (!std::regex_match(result.version, std::regex(R"((0|[1-9][0-9]*)\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?)"))) return std::unexpected(ModValidationError::InvalidVersion);
-	// Lists are comma-separated; repeated keys are accepted as well.
+	// Lists are comma-separated (design §5.1); repeated keys are accepted as well.
 	const auto forEachListItem = [&](std::string_view section, std::string_view key, auto &&fn) {
 		for (const Ini::Value &value : parsed->get(section, key)) {
 			std::string_view remaining = value.value;

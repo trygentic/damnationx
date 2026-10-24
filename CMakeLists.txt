@@ -33,16 +33,22 @@ include(functions/genex)
 option(USE_SDL1 "Use SDL1.2 instead of SDL2" OFF)
 option(USE_SDL3 "Use SDL3 instead of SDL2" OFF)
 option(DEVILUTIONX_WEBGPU "Build the shared WebGPU client" OFF)
+cmake_dependent_option(DEVILUTIONX_XR "Build VR support: OpenXR on Android (Quest) and Windows, WebXR in the browser (docs/design/vr.md)" OFF "DEVILUTIONX_WEBGPU" OFF)
 option(NONET "Disable network support" OFF)
+option(DAMNATION_S1_BRIDGE "Debug: loopback bridge on 127.0.0.1:8793 for an external decision loop (macOS/Linux)" OFF)
+# Embedding API (Source/host/host_api.hpp, docs/design/bevy-host.md): also builds the game as the static library
+# damnationx_host for a host that owns the window, loop, input, audio and world rendering. Normal targets are unchanged.
+option(DAMNATIONX_HOST_LIB "Also build the game as a static library for an embedding host (Bevy)" OFF)
 cmake_dependent_option(PACKET_ENCRYPTION "Encrypt network packets" ON "NOT NONET" OFF)
 # The gettext[tools] package takes a very long time to install
 if(CMAKE_TOOLCHAIN_FILE MATCHES "vcpkg.cmake$")
   option(USE_GETTEXT_FROM_VCPKG "Add vcpkg dependency for gettext[tools] for compiling translations" OFF)
 endif()
 option(BUILD_TESTING "Build tests." ON)
+option(DEVILUTIONX_BUILD_RELAY "Build the standalone native WebSocket relay" OFF)
 
-# The restricted WebAssembly mod host is not finished.
-# Keep the integration opt-in until that ABI and its capability policy are
+# The restricted ABI is the prerequisite for the restricted WebAssembly mod
+# host. Keep the integration opt-in until that ABI and its capability policy are
 # available; Dependencies.cmake performs the pinned toolchain checks when enabled.
 option(DEVILUTIONX_ENABLE_WASM_MOD_HOST "Enable the dxmod-core-1 Wasm mod host" OFF)
 set(DEVILUTIONX_RUST_VERSION "1.82.0" CACHE STRING "Pinned Rust version for the Wasm mod host")
@@ -171,6 +177,11 @@ DEBUG_OPTION(ASAN "Enable address sanitizer")
 DEBUG_OPTION(UBSAN "Enable undefined behaviour sanitizer")
 option(TSAN "Enable thread sanitizer (not compatible with ASAN=ON)" OFF)
 DEBUG_OPTION(DEBUG "Enable debug mode in engine")
+option(DEVILUTIONX_TRAINER "Build the private developer trainer (control socket + dev.trainer Lua module). Implies DEBUG=ON." OFF)
+if(DEVILUTIONX_TRAINER)
+  # The trainer drives the `_DEBUG`-only Lua console and `devilutionx.dev` module, in any build type.
+  set(DEBUG ON)
+endif()
 option(GPERF "Build with GPerfTools profiler" OFF)
 cmake_dependent_option(GPERF_HEAP_FIRST_GAME_ITERATION "Save heap profile of the first game iteration" OFF "GPERF" OFF)
 option(ENABLE_CODECOVERAGE "Instrument code for code coverage (only enabled with BUILD_TESTING)" OFF)
@@ -469,6 +480,11 @@ if(NOT NOSOUND AND NOT DEVILUTIONX_STATIC_SDL_AUDIOLIB)
   set(DEVILUTIONX_STATIC_CXX_STDLIB OFF)
 endif()
 
+if(DAMNATIONX_HOST_LIB)
+  # Compiles the host hooks (Source/host/host_hooks.hpp) into the game files; without it they are constant no-ops.
+  add_compile_definitions(DAMNATIONX_HOST_LIB)
+endif()
+
 add_subdirectory(Source)
 
 set(BIN_TARGET devilutionx)
@@ -521,7 +537,7 @@ include(Mods)
 
 if(EMSCRIPTEN)
   if(DEVILUTIONX_WEBGPU)
-    # Emdawnwebgpu port selection.
+    # Emdawnwebgpu port selection (docs/design/hybrid-2p5d-lighting.md, "Emscripten WebGPU").
     # Preferred: the release package pinned by DEVILUTIONX_EMDAWNWEBGPU_REVISION, downloaded
     # once into the build directory and verified against DEVILUTIONX_EMDAWNWEBGPU_PORT_SHA256
     # (CMake/Dependencies.cmake). Emscripten's builtin `emdawnwebgpu` port is only used on
@@ -607,6 +623,14 @@ endif()
 
 if(NOT USE_SDL1 AND NOT USE_SDL3 AND NOT UWP_LIB)
   target_link_libraries(${BIN_TARGET} PUBLIC ${SDL2_MAIN})
+endif()
+
+if(DEVILUTIONX_BUILD_RELAY)
+  if(CMAKE_CROSSCOMPILING)
+    message(FATAL_ERROR "The relay is a native operator service")
+  endif()
+  set(DEVILUTIONX_RELAY_FROM_PARENT ON)
+  add_subdirectory(tools/relay)
 endif()
 
 if(BUILD_TESTING)
@@ -955,7 +979,7 @@ endif()
 option(DEVILUTIONX_BUILD_DXMOD_CONTRACT_TESTS "Build native C/Rust ABI fixtures" OFF)
 if(DEVILUTIONX_BUILD_DXMOD_CONTRACT_TESTS)
   if(CMAKE_CROSSCOMPILING)
-    message(FATAL_ERROR "The dxmod-core byte fixtures require a native build")
+    message(FATAL_ERROR "DXM-F04 byte fixtures require a native build; runtime parity is a separate gate")
   endif()
   enable_testing()
   add_subdirectory(test/dxmod_core)
@@ -968,7 +992,14 @@ if(DEVILUTIONX_BUILD_LOBBY_CHECK AND DEVILUTIONX_LOBBY AND NOT EMSCRIPTEN AND NO
   target_link_dependencies(damnationx-lobby-check PRIVATE libdevilutionx)
 endif()
 
+if(DAMNATIONX_HOST_LIB)
+  include(HostLib)
+endif()
+
 resolve_target_link_dependencies()
+if(DAMNATIONX_HOST_LIB)
+  damnationx_host_write_link_manifest()
+endif()
 if(UWP_LIB)
   get_target_property(_linked_objects libdevilutionx LINKED_OBJECTS)
   target_sources(libdevilutionx PRIVATE ${_linked_objects})

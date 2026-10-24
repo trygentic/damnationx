@@ -1,16 +1,16 @@
 /**
  * @file webgpu_shaders.hpp
  *
- * WGSL sources for the 2.5D hybrid lighting passes. tools/wgsl_validate.py extracts
+ * WGSL sources for the 2.5D hybrid lighting passes (SPEC §9.2-§9.5). tools/wgsl_validate.py extracts
  * every R"WGSL(...)WGSL" string from this file, concatenates HybridPreludeWgsl (and the library strings
  * before the source, HdFloorWgsl) in front of each entry-point source exactly as the presenter does, and
  * validates the result with naga / tint.
  *
  * Source/engine/render/hybrid_reference.cpp is a line-parallel C++ transliteration of the three hybrid
- * strings; keep the two in sync function for function. The opt-in HD floor (HdFloorWgsl) is
+ * strings (SPEC §9.11); keep the two in sync function for function. The opt-in HD floor (HdFloorWgsl) is
  * not modelled there.
  *
- * Rules enforced by review: no select() with side-effecting or expensive operands (both
+ * Rules enforced by review (SPEC §9.3): no select() with side-effecting or expensive operands (both
  * operands are always evaluated; use if/else), every shift amount and array index is u32, the DDA skip
  * test is `any(cell != skip)`, neither stage binds a storage buffer, every branch on light culling is
  * workgroup-uniform (uniforms and the workgroup light mask read after a barrier only), and a dynamic vector-component
@@ -22,18 +22,18 @@ namespace devilution {
 
 /** Shared prelude (kinds, plane decoding, height recovery), concatenated in front of both hybrid shaders. */
 constexpr char HybridPreludeWgsl[] = R"WGSL(
-// ---- hybrid prelude ----
+// ---- hybrid prelude (SPEC §9.2) ----
 const K_UNLIT: u32 = 0u; const K_FLOOR: u32 = 1u; const K_WALL_L: u32 = 2u; const K_WALL_R: u32 = 3u;
 const K_CARD: u32 = 4u; const K_CARD_EMISSIVE: u32 = 5u; const K_WALL_BLENDED: u32 = 6u; const K_WALL_TOP: u32 = 7u;
 const CELL_PICK_OFFSET: f32 = 0.35;   // tiles along the wall normal for own/skip cell picks (see hybridLightMain)
 const V_FACE_SW: u32 = 256u; const V_FACE_SE: u32 = 512u;
 const V_BLOCK: u32 = 1024u; const V_VISIBLE: u32 = 4096u; const V_EXPLORED: u32 = 8192u; const V_ARCH: u32 = 16384u;
 const V_DOOR_OPEN: u32 = 32768u;
-const MAX_WALL_ROWS: u32 = 224u;   // plane-B wrap guard
+const MAX_WALL_ROWS: u32 = 224u;   // plane-B wrap guard (SPEC §3.2)
 
 fn isWallKind(kind: u32) -> bool { return kind == K_WALL_L || kind == K_WALL_R || kind == K_WALL_BLENDED; }
 fn hasHeight(kind: u32) -> bool { return isWallKind(kind) || kind == K_CARD || kind == K_WALL_TOP; }
-// Rows above the anchor for a plane texel. B holds unzoomed rows and is never scaled up.
+// Rows above the anchor for a plane texel. B holds unzoomed rows and is never scaled up (SPEC §3.2).
 // `zoom` packs the zoom as HdWorldTransform maps it: bits 0..7 screen pixels per world pixel in quarters (4 = none,
 // 5 = 1.25x), bits 8..15 minus the transform's offsetY (the first world row gets only the remainder).
 fn zoomQuarters(zoom: u32) -> u32 { return max(zoom & 255u, 4u); }
@@ -56,9 +56,9 @@ fn baseTexelAt(tex: texture_2d<u32>, px: vec2i, zoom: u32, zoomOffsetX: i32) -> 
 fn passThrough(kind: u32) -> bool { return kind == K_UNLIT || kind == K_CARD_EMISSIVE; }
 )WGSL";
 
-/** Compute pass `hybridLightMain`: ray-marched per-mask-texel lighting. Bindings: uniform + textures only. */
+/** Compute pass `hybridLightMain`: ray-marched per-mask-texel lighting (SPEC §9.3). Bindings: uniform + textures only. */
 constexpr char HybridLightWgsl[] = R"WGSL(
-// ---- hybrid light pass ----
+// ---- hybrid light pass (SPEC §9.3) ----
 struct HybridLight { positionRadius: vec4f, colorIntensity: vec4f };
 struct HybridParams {
   screenOriginViewport: vec4f, screenToWorld: vec4f, counts: vec4u, shading: vec4f, tuning: vec4f, misc: vec4u,
@@ -66,7 +66,7 @@ struct HybridParams {
   ambientCurve: array<vec4f, 4>,   // classic darkening per dLight level 0..15 (gbuffer::BuildClassicAmbientCurve)
 };
 @group(0) @binding(0) var<uniform> params: HybridParams;
-@group(0) @binding(1) var volumeTex: texture_2d<u32>;                    // r32uint 112x112 (layout)
+@group(0) @binding(1) var volumeTex: texture_2d<u32>;                    // r32uint 112x112 (SPEC §8.1 layout)
 @group(0) @binding(2) var outputMask: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(3) var auxTex: texture_2d<u32>;
 @group(0) @binding(4) var baseTex: texture_2d<u32>;
@@ -106,7 +106,7 @@ fn ambientOfCell(c: vec2i) -> f32 {
 }
 // Bilinear over the 4 nearest tile centres, interpolating the light LEVEL and mapping afterwards, as the classic
 // per-pixel lightmap does. Interpolating mapped brightness instead spread a lit cell's value halfway into its dark
-// neighbours as diamond-shaped lobes.
+// neighbours as diamond-shaped lobes (rev. 4).
 fn levelBilinear(ground: vec2f) -> f32 {
   let q = ground - vec2f(0.5); let c0 = vec2i(floor(q)); let f = q - vec2f(c0);
   let l00 = levelOfCell(c0); let l10 = levelOfCell(c0 + vec2i(1, 0));
@@ -115,7 +115,7 @@ fn levelBilinear(ground: vec2f) -> f32 {
 }
 fn ambientBilinear(ground: vec2f) -> f32 { return ambientAtLevel(levelBilinear(ground)); }
 // Direct light reaches what classic lights: 1 up to level 14, fading to 0 at 15 along the interpolated level, so the
-// cut follows the lightmap's bleed instead of stopping dead at every fully dark cell's edge.
+// cut follows the lightmap's bleed instead of stopping dead at every fully dark cell's edge (rev. 4).
 fn lightGate(ground: vec2f) -> f32 { return clamp(15.0 - levelBilinear(ground), 0.0, 1.0); }
 // Surfaces: bilinear like cards, zero only for an unexplored own cell. A fully dark but explored cell keeps the bilinear
 // value, which is 0 at its centre and rises toward lit neighbours: the classic per-pixel lightmap bleeds the same way.
@@ -126,13 +126,13 @@ fn ambientBilinearClamped(ground: vec2f, own: vec2i) -> f32 {
 // Gate cell of a wall face: its own cell (the wall cell its centre line runs through), or the cell in front of that line when
 // the own cell carries no Explored bit. Classic marks the wall's own cell explored only from some approaches, and a visible face
 // never reveals anything about the room behind it, so gating an explored face's pixels to black there only produced cell-shaped
-// panels. The front pick reaches half a tile further than the own pick: the wall line is the cell's centre line.
+// panels. The front pick reaches half a tile further than the own pick: the wall line is the cell's centre line (rev. 5).
 fn wallGateCell(ground: vec2f, n: vec2f) -> vec2i {
   let own = vec2i(floor(ground - n * CELL_PICK_OFFSET));
   if ((cellRaw(own) & V_EXPLORED) != 0u) { return own; }
   return vec2i(floor(ground + n * (CELL_PICK_OFFSET + 0.5)));
 }
-// Own cell of a foot-less wall receiver (WallTop): u + v == 1.9375 on the base row.
+// Own cell of a foot-less wall receiver (WallTop): u + v == 1.9375 on the base row (SPEC §3.3).
 fn wallOwnCell(ground: vec2f) -> vec2i {
   var c = vec2i(floor(ground)); let f = ground - vec2f(c);
   let s = i32(round(ground.x + ground.y - 1.9375));
@@ -166,7 +166,7 @@ fn blockedInCell(p: vec3f, d: vec3f, cell: vec2i, v: u32, tIn: f32, tOut: f32, h
 // Visibility of light l from receiver p (tile space; z in world height units). 3D DDA over the 2D grid:
 // an explored cell blocks when BlockLight is set and the ray's z is below the cell's height inside it, behind its face planes
 // (blockedInCell); an explored Arch cell blocks when the ray is below its height AND rises above its lintel (independent of
-// BlockLight); unexplored cells block by BlockLight with infinite height and no faces. Receiver and light cells are skipped (any(): sharing one coordinate is not enough).
+// BlockLight, SPEC §8.2); unexplored cells block by BlockLight with infinite height and no faces. Receiver and light cells are skipped (any(): sharing one coordinate is not enough).
 fn visibility3d(p: vec3f, l: vec3f, skipA: vec2i, skipB: vec2i) -> f32 {
   let d = l - p;
   if (dot(d.xy, d.xy) < 1e-6) { return 1.0; }
@@ -208,7 +208,7 @@ fn softVisibility3d(p: vec3f, l: vec3f, skipA: vec2i, skipB: vec2i) -> f32 {
         + visibility3d(p, vec3f(l.xy - t, l.z), skipA, skipB);
   return v / 3.0;
 }
-// Per-workgroup light culling: the real world footprint of this 8x8 block's shaded receivers, reduced in workgroup
+// Per-workgroup light culling (SPEC §9.3): the real world footprint of this 8x8 block's shaded receivers, reduced in workgroup
 // memory, and the lights touching it as a bitmask built once per workgroup. WGSL zero-initialises workgroup memory, so a key of 0
 // means "no receiver yet". Every texel reads the same mask after a barrier, so every branch on it is workgroup-uniform.
 var<workgroup> wgGroundMax: array<atomic<u32>, 2>;              // orderedKey of the largest ground.x / ground.y
@@ -283,7 +283,7 @@ fn footprintLightMask(fp: Footprint) -> u32 {
 fn accumulate(p: vec3f, n: vec3f, ground: vec2f, own: vec2i, skipA: vec2i, wrap: f32, gated: bool, fp: Footprint) -> vec3f {
   return accumulateMasked(p, n, ground, own, skipA, wrap, gated, footprintLightMask(fp));
 }
-fn debugVolumeColor(cell: vec2i) -> vec3f {                     // Volume view, computed here so the fragment stage needs no volume binding
+fn debugVolumeColor(cell: vec2i) -> vec3f {                     // Volume view (SPEC §9.5), computed here so the fragment stage needs no volume binding
   let v = cellRaw(cell);
   if ((v & V_EXPLORED) == 0u) { return vec3f(1.0, 0.0, 1.0); }  // magenta = leak detector
   let hgt = f32(v & 255u) / 255.0;
@@ -307,7 +307,7 @@ fn receiverOf(id: vec2u) -> Receiver {
   var kind = a >> 5u; let nIdx = a & 31u;
   let b = baseTexelAt(baseTex, outPixel, zoom, zoomOffsetX);
   var h = heightRows(kind, b, u32(outPixel.y), zoom);
-  if (isWallKind(kind) && h > MAX_WALL_ROWS) { kind = K_FLOOR; h = 0u; }   // plane-B wrap guard
+  if (isWallKind(kind) && h > MAX_WALL_ROWS) { kind = K_FLOOR; h = 0u; }   // plane-B wrap guard (SPEC §3.2)
   r.kind = kind; r.nIdx = nIdx; r.hf = f32(h);
   let floorScreen = vec2f(f32(outPixel.x), f32(outPixel.y) + r.hf * zoomScaleOf(zoom));
   r.ground = screenToWorld(floorScreen);
@@ -321,21 +321,21 @@ fn shadeReceiver(r: Receiver, lightMask: u32) -> vec4f {
   let n = params.normalLut[r.nIdx].xyz;
   let z = r.hf / params.shading.y;
   let nudge = n.xy * params.tuning.y;
-  // Cell picks use a wider offset than the shading nudge. A wall's foot line runs through its cell's centre but the
+  // Cell picks use a wider offset than the shading nudge. A wall's foot line runs through its cell's centre (rev. 5) but the
   // ground is quantised to rows and lands up to 1/32 tile either side of it, so 0.35 tiles along the normal keeps the march's
   // skip cell (and the gate's own pick) on the wall's own cell for every column.
   let cellNudge = n.xy * CELL_PICK_OFFSET;
   var lit: vec3f;
-  // Foot-table walls, see-through walls and arches. A see-through (WallBlended) pixel is lit exactly like the opaque
-  // face it continues, as classic's per-pixel lightmap does; lighting it from the floor under the pixel only hid the
-  // swapped wall facings and left every blended piece a different value from its opaque neighbours.
+  // Foot-table walls, see-through walls and arches (SPEC §3.3). A see-through (WallBlended) pixel is lit exactly like the opaque
+  // face it continues, as classic's per-pixel lightmap does; lighting it from the floor under the pixel (rev. 4) only hid the
+  // swapped wall facings (rev. 5) and left every blended piece a different value from its opaque neighbours.
   if (isWallKind(kind)) {
     let skipA = vec2i(floor(ground + cellNudge)); let own = wallGateCell(ground, n.xy);
     lit = accumulateMasked(vec3f(ground + nudge, z), n, ground, own, skipA, params.tuning.x, true, lightMask);
   } else if (kind == K_WALL_TOP) {
     let own = wallOwnCell(ground);
     lit = accumulateMasked(vec3f(ground, z), n, ground, own, own, params.tuning.x, true, lightMask);
-  } else if (kind == K_CARD) {                                  // no gate, no clamp: CPU culling already enforces no-reveal
+  } else if (kind == K_CARD) {                                  // no gate, no clamp: CPU culling already enforces no-reveal (SPEC §3.3)
     let c = vec2i(floor(ground));
     lit = accumulateMasked(vec3f(ground, z), n, ground, c, c, params.shading.w, false, lightMask);
   } else {                                                      // K_FLOOR
@@ -499,9 +499,9 @@ fn floorFrameIndex(px: vec2i, idx: u32) -> u32 {
 }
 )WGSL";
 
-/** Present pass `fragmentMain`: composite the full-bright frame with the light mask. No storage buffers. */
+/** Present pass `fragmentMain`: composite the full-bright frame with the light mask (SPEC §9.4, §9.5). No storage buffers. */
 constexpr char HybridPresentWgsl[] = R"WGSL(
-// ---- hybrid present pass ----
+// ---- hybrid present pass (SPEC §9.4) ----
 struct PresentParams { config: vec4u, values: vec4f, config2: vec4u, paletteEmissive: array<vec4f, 64>, normalLut: array<vec4f, 32> };
 @group(0) @binding(0) var frameTexture: texture_2d<f32>;
 @group(0) @binding(1) var frameSampler: sampler;
@@ -511,7 +511,7 @@ struct PresentParams { config: vec4u, values: vec4f, config2: vec4u, paletteEmis
 @group(0) @binding(5) var baseTex: texture_2d<u32>;
 @group(0) @binding(6) var indexTex: texture_2d<u32>;
 @group(0) @binding(7) var<uniform> present: PresentParams;
-@group(0) @binding(8) var paletteTex: texture_2d<f32>;       // rgba8unorm 256x1: the SDL palette
+@group(0) @binding(8) var paletteTex: texture_2d<f32>;       // rgba8unorm 256x1: the SDL palette (SPEC §3.4)
 // Bindings 16-22: the HD floor (HdFloorWgsl, concatenated in front of this source).
 
 // VertexOutput / vertexMain: verbatim copy of the legacy ShaderSource (webgpu_presenter.cpp:27-41).
@@ -583,7 +583,7 @@ fn hdFloorAlbedo(screen: vec2f, px: vec2i, frame: vec4f) -> vec4f {
   if (!hd.found) { return frame; }
   return vec4f(mix(frame.rgb, hd.rgb, hd.weight), frame.a);   // weight 0 (atlas alpha, decals) = keep classic
 }
-fn debugColor(view: u32, px: vec2i, a: u32, idx: u32, frame: vec4f) -> vec4f {
+fn debugColor(view: u32, px: vec2i, a: u32, idx: u32, frame: vec4f) -> vec4f {   // SPEC §9.5
   let kind = a >> 5u; let nIdx = a & 31u;
   if (view == 1u) {                                             // Kind: 8-colour palette
     var kindColors = array<vec3f, 8>(

@@ -206,7 +206,7 @@ TEST(TileGeometry, Faces)
 	BuildTable();
 	EXPECT_EQ(GetPieceGeometry(Dirt).faces, 0);
 	EXPECT_EQ(GetPieceGeometry(Floor).faces, 0);
-	// A wall half stands on the cell's centre line: a LeftTrapezoid ground micro is a wall running along y, the SE
+	// A wall half stands on the cell's centre line (rev. 5): a LeftTrapezoid ground micro is a wall running along y, the SE
 	// face (+x); a RightTrapezoid one a wall running along x, the SW face (+y). The fixture names follow the drawn half.
 	EXPECT_EQ(GetPieceGeometry(WallSW).faces, SE);
 	EXPECT_EQ(GetPieceGeometry(WallSE).faces, SW);

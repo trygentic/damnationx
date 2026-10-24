@@ -4,6 +4,7 @@
  * Implementation of functions for loading and playing sounds.
  */
 #include "effects.h"
+#include "host/host_hooks.hpp"
 
 #include <cstdint>
 #include <expected>
@@ -199,6 +200,8 @@ bool effect_is_playing(SfxID nSFX)
 
 void stream_stop()
 {
+	if (host::IsActive() && sgpStreamSFX != nullptr)
+		host::StopStream(static_cast<int16_t>(sgpStreamSFX - sgSFX.data()));
 	if (sgpStreamSFX != nullptr) {
 		sgpStreamSFX->pSnd = nullptr;
 		sgpStreamSFX = nullptr;
@@ -209,6 +212,11 @@ void PlaySFX(SfxID psfx)
 {
 	psfx = RndSFX(psfx);
 
+	if (host::IsActive()) {
+		host::QueueSfx(static_cast<int16_t>(psfx), false, { 0, 0 });
+		return;
+	}
+
 	if (!gbSndInited) return;
 
 	PlaySfxPriv(&sgSFX[static_cast<int16_t>(psfx)], false, { 0, 0 });
@@ -218,6 +226,11 @@ void PlaySfxLoc(SfxID psfx, Point position, bool randomizeByCategory)
 {
 	if (randomizeByCategory) {
 		psfx = RndSFX(psfx);
+	}
+
+	if (host::IsActive()) {
+		host::QueueSfx(static_cast<int16_t>(psfx), true, position);
+		return;
 	}
 
 	if (!gbSndInited) return;
@@ -310,6 +323,10 @@ void ui_sound_init()
 
 void effects_play_sound(SfxID id)
 {
+	if (host::IsActive()) {
+		host::QueueSfx(static_cast<int16_t>(id), false, { 0, 0 });
+		return;
+	}
 	if (!gbSndInited || !gbSoundOn) {
 		return;
 	}
@@ -322,11 +339,20 @@ void effects_play_sound(SfxID id)
 
 int GetSFXLength(SfxID nSFX)
 {
+	if (host::IsActive())
+		return host::SfxLengthMs(static_cast<int16_t>(nSFX)); // embedded: no mixer, the length comes from the file
 	TSFX &sfx = sgSFX[static_cast<int16_t>(nSFX)];
 	if (sfx.pSnd == nullptr)
 		sfx.pSnd = sound_file_load(sfx.pszName.c_str(),
 		    /*stream=*/AllowStreaming && (sfx.bFlags & sfx_STREAM) != 0);
 	return sfx.pSnd->DSB.GetLength();
+}
+
+const TSFX *GetSfxEntry(SfxID id)
+{
+	if (sgSFX.empty()) LoadEffectsData();
+	const auto index = static_cast<size_t>(static_cast<int16_t>(id));
+	return index < sgSFX.size() ? &sgSFX[index] : nullptr;
 }
 
 std::expected<HeroSpeech, std::string> ParseHeroSpeech(std::string_view value)

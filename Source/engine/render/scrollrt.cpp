@@ -58,6 +58,7 @@
 #include "game_mode.hpp"
 #include "gmenu.h"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "help.h"
 #include "hwcursor.hpp"
 #include "init.hpp"
@@ -156,7 +157,7 @@ enum class RenderReceiver : uint8_t { Floor, SolidWall, TransparentWall };
 [[nodiscard]] int ComposePresentationLight(Point tilePosition, int authoritativeLight, const RenderLightSnapshot &lights)
 {
 	if (!*GetOptions().Graphics.perPixelLighting || !InDungeonBounds(tilePosition)) return authoritativeLight;
-	// Consume the immutable light snapshot only at the enhanced composition
+	// Consume DXM-L02's immutable snapshot only at the enhanced composition
 	// boundary; dLight remains the authoritative gameplay light field.
 	const RenderReceiver receiver = GetRenderReceiver(tilePosition);
 	if (receiver == RenderReceiver::SolidWall && lights.count == 0) return authoritativeLight;
@@ -290,7 +291,7 @@ bool ShouldShowCursor()
 }
 
 /**
- * @brief Light table index to shade with this frame: the authoritative index in classic mode,
+ * @brief Light table index to shade with this frame (SPEC §5.2): the authoritative index in classic mode,
  * full-bright (or fully dark) under the hybrid latch. Culling decisions keep using the authoritative index.
  */
 [[nodiscard]] DVL_ALWAYS_INLINE int ShadeIndex(int authoritative)
@@ -419,33 +420,6 @@ void DrawMissile(const Surface &out, WorldTilePosition tilePosition, Point targe
 	for (Missile *missile : it->second) {
 		DrawMissilePrivate(out, *missile, targetBufferPosition, pre, lightTableIndex);
 	}
-}
-
-/**
- * @brief Whether the permanent fountain portal to the Cathedral is drawn on this tile (town only).
- */
-[[nodiscard]] bool IsTownCathedralPortalTile(Point tilePosition)
-{
-	return leveltype == DTYPE_TOWN && !setlevel && tilePosition == TownCathedralPortalPosition && IsTownCathedralPortalEnabled();
-}
-
-/**
- * @brief Render the permanent fountain portal to the Cathedral with the blue town portal animation.
- *
- * It is pure decoration (no missile): the trigger itself is a fixed town trigger (InitTownTriggers), so nothing here
- * touches the simulation. The idle loop is timed by the wall clock like the classic 20 fps missile animation.
- */
-void DrawTownCathedralPortal(const Surface &out, Point tilePosition, Point targetBufferPosition)
-{
-	if (!IsTownCathedralPortalTile(tilePosition))
-		return;
-	const MissileFileData &portalSprite = GetMissileSpriteData(MissileGraphicID::TownPortal);
-	const OptionalClxSpriteList sprites = portalSprite.spritesForDirection(static_cast<Direction16>(PortalFrame::Idle));
-	if (!sprites || sprites->numSprites() == 0)
-		return;
-	const uint32_t frame = static_cast<uint32_t>(SDL_GetTicks() / 50) % sprites->numSprites();
-	const Point feet = targetBufferPosition - Displacement { portalSprite.animWidth2, 0 };
-	DrawWorldSprite(out, WorldSpriteDraw { .feet = feet, .sprite = (*sprites)[frame], .selfLit = true });
 }
 
 /**
@@ -762,7 +736,7 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 	uint8_t lightmapBuffer[TILE_WIDTH * TILE_HEIGHT];
 	const Lightmap bleedLightmap = Lightmap::bleedUp(*GetOptions().Graphics.perPixelLighting && !gbuffer::Enabled(), lightmap, targetBufferPosition, lightmapBuffer);
 
-	// G-buffer tile context: every micro row of the cell is anchored at the cell's bottom base row,
+	// G-buffer tile context (SPEC §3.2, §6.1): every micro row of the cell is anchored at the cell's bottom base row,
 	// so a wall pixel of frame row r in micro row k recovers h = 32k + r - foot(c). A wall half stands on the cell's
 	// centre line: the left half shows the SE face (WallRight, foot c/2), the right half the SW face (WallLeft,
 	// foot (31 - c)/2), so the foot lines of neighbouring pieces join into one line along the wall.
@@ -965,6 +939,9 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
 	// HD tiles (?hdTiles=1): the piece's own floor layer, drawn over the HD floor atlas unless ?hdAtlasFloor=1.
 	if (!floorAtlasCovers)
 		HdTilesRecordFloor(out, tilePosition, dPiece[tilePosition.x][tilePosition.y], targetBufferPosition, floorShadeIndex);
+#else
+	if (host::IsActive()) // embedded Hd2D: the host draws the HD tiles (host/host_hd.cpp)
+		HdTilesRecordFloor(out, tilePosition, dPiece[tilePosition.x][tilePosition.y], targetBufferPosition, TileShadeIndex(lightTableIndex));
 #endif
 
 	const uint8_t *tbl = LightTables[TileShadeIndex(lightTableIndex)].data();
@@ -1088,7 +1065,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	const int x = tilePosition.x;
 	const int y = tilePosition.y;
 	return dCorpse[x][y] != 0 || dItem[x][y] != 0 || dObject[x][y] != 0 || dPlayer[x][y] != 0 || dMonster[x][y] != 0
-	    || HasAnyOf(dFlags[x][y], DungeonFlag::Missile | DungeonFlag::DeadPlayer) || IsTownCathedralPortalTile(tilePosition);
+	    || HasAnyOf(dFlags[x][y], DungeonFlag::Missile | DungeonFlag::DeadPlayer);
 }
 
 /**
@@ -1230,7 +1207,6 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 	}
 
 	DrawMissile(out, tilePosition, targetBufferPosition, false, lightTableIndex);
-	DrawTownCathedralPortal(out, tilePosition, targetBufferPosition);
 
 	if (object != nullptr && !object->_oPreFlag) {
 		DrawObject(out, *object, tilePosition, targetBufferPosition, lightTableIndex);
@@ -1263,7 +1239,7 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 				else
 					ClxDrawWithLightmap(out, targetBufferPosition, archSprite, bleedLightmap);
 			} else {
-				// Arches are upright wall faces anchored at the tile base: WallLeft / WallRight in hybrid mode.
+				// Arches are upright wall faces anchored at the tile base (SPEC §5.3): WallLeft / WallRight in hybrid mode.
 				gbuffer::Kind archKind = gbuffer::Kind::Unlit;
 				if (hybrid) {
 					switch (tile_geometry::ArchFacing(leveltype, dSpecial[tilePosition.x][tilePosition.y])) {
@@ -1617,7 +1593,10 @@ void DrawFirstPersonWorldPass(const Surface &fullOut, const Surface &zoomOut, co
 #endif
 	HdSpritesBeginWorldPass(out, /*allowed=*/false);
 	HdUiInvalidateRect(zoomOut.region.x, zoomOut.region.y, zoomOut.region.w, zoomOut.region.h);
-	fpv::ClearWorldArea(zoomOut, gnViewportHeight);
+	if (host::HideHud)
+		fpv::ClearWorldArea(fullOut, fullOut.h());
+	else
+		fpv::ClearWorldArea(zoomOut, gnViewportHeight);
 }
 
 void DrawGame(const Surface &fullOut, Point position, Displacement offset)
@@ -1683,7 +1662,7 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	DunRenderStats.clear();
 #endif
 
-	// Hybrid world pass bracket: always records whether this back buffer is a hybrid frame;
+	// Hybrid world pass bracket (SPEC §5.1): always records whether this back buffer is a hybrid frame;
 	// clears plane A and enters CaptureWorld only when the frame latch enabled the mode.
 	gbuffer::BeginWorldPass(gnViewportHeight);
 	const bool hybrid = gbuffer::Enabled();
@@ -1705,6 +1684,8 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	HdTilesBeginWorldPass(out, true);
 	const bool hdFloorLevel = leveltype == DTYPE_CATHEDRAL || (leveltype == DTYPE_TOWN && !HdTilesWantedForLevel() && WebGpuPrepareTownFloor());
 	WebGpuBeginCathedralFloor(out.w(), out.h(), hdFloorLevel);
+#else
+	HdTilesBeginWorldPass(out, host::IsActive()); // embedded Hd2D (host/host_hd.cpp); off otherwise
 #endif
 	// Opt-in HD sprites draw at canvas resolution over the frame; under hybrid lighting they are lit as cards.
 	HdSpritesBeginWorldPass(out, /*allowed=*/true);
@@ -1841,10 +1822,11 @@ Surface DrawView(const Surface &out, Point startPosition)
 	DrawMonsterHealthBar(ui);
 	fpv::DrawHud(ui);
 
-	if (IsPlayerInStore() && !qtextflag)
+	if (IsPlayerInStore() && !qtextflag && !host::NativeStorePanel())
 		DrawSText(ui);
 	if (invflag) {
-		DrawInv(ui);
+		if (!host::NativeInventoryPanel())
+			DrawInv(ui);
 	} else if (SpellbookFlag) {
 		DrawSpellBook(ui);
 	}
@@ -1896,10 +1878,13 @@ Surface DrawView(const Surface &out, Point startPosition)
 	DrawPlrMsg(ui);
 	gmenu_draw(ui);
 	doom_draw(ui);
-	DrawInfoBox(ui);
+	if (!host::HideHud)
+		DrawInfoBox(ui);
 	UpdateLifeManaPercent(); // Update life/mana totals before rendering any portion of the flask.
-	DrawLifeFlaskUpper(ui);
-	DrawManaFlaskUpper(ui);
+	if (!host::HideHud) {
+		DrawLifeFlaskUpper(ui);
+		DrawManaFlaskUpper(ui);
+	}
 	return ui;
 }
 
@@ -1936,7 +1921,7 @@ void DrawFPS(const Surface &out)
 /**
  * @brief First back-buffer row the presenter reads from the RGBA output surface this frame.
  *
- * A hybrid frame palette-expands the viewport rows on the GPU from the 8-bit back buffer (index and palette
+ * A hybrid frame (SPEC §9.1) palette-expands the viewport rows on the GPU from the 8-bit back buffer (index and palette
  * textures, byte-identical to BltFast) and uploads only the RGBA rows below them (PresentHybrid). The exception is the
  * virtual gamepad: it is drawn into the RGBA frame, which is then uploaded whole (dx.cpp, `frameHasUnlit`). Blitting the
  * viewport rows otherwise palette-expands the whole view on the CPU for nothing.
@@ -2053,7 +2038,7 @@ void DrawWorldForTesting(const Surface &out, Point viewPosition, Displacement of
 
 void DrawWorldSprite(const Surface &out, const WorldSpriteDraw &draw, bool hybrid)
 {
-	// No-reveal: a sprite whose authoritative index is fully dark is black in classic. Items, light-flagged
+	// No-reveal (SPEC §1): a sprite whose authoritative index is fully dark is black in classic. Items, light-flagged
 	// missiles and arches reach this funnel without a cull on dLight == 15, and the GPU gates neither cards (ambient is
 	// bilinear) nor arches (gated on the front cell), so hybrid keeps the classic dark table for them and tags the
 	// pixels pass-through instead of letting the presenter light them. A semantic TRN wins, exactly as in classic.
@@ -2074,7 +2059,7 @@ void DrawWorldSprite(const Surface &out, const WorldSpriteDraw &draw, bool hybri
 		}
 	}
 
-	// Hybrid runs the same primitives with shadeIndex = 0: the sprite is written as a card and the
+	// Hybrid runs the same primitives with shadeIndex = 0 (SPEC §5.3): the sprite is written as a card and the
 	// presenter lights it, so no CPU light table is applied, except the fully dark table above.
 	const int shadeIndex = hybrid && !fullyDark ? 0 : draw.shadeIndex;
 
@@ -2113,7 +2098,7 @@ void LatchHybridWorldFrame(const gbuffer::LatchInput &in)
 	gbuffer::LatchForFrame(in);
 	if (!gbuffer::Enabled())
 		return;
-	// The on-demand generation budget and the hit/miss counters are per game frame: without this reset
+	// The on-demand generation budget (SPEC §7.4) and the hit/miss counters are per game frame: without this reset
 	// the first 8 generations of the session would exhaust the budget for good and every later miss would wait for Pump.
 	clx_normal_map::ResetFrameStats();
 	clx_normal_map::SetOptions(clx_normal_map::Options { .generate = *GetOptions().Graphics.hybridNormalMaps });
@@ -2401,7 +2386,7 @@ extern SDL_Surface *PalSurface;
 
 void ClearScreenBuffer()
 {
-	// The back buffer no longer holds the world pass (loading screens, after in-game movies): present it classic.
+	// The back buffer no longer holds the world pass (loading screens, after in-game movies): present it classic (SPEC §9.9).
 	gbuffer::InvalidateBackBuffer();
 	HdSpritesInvalidate();
 	HdTilesInvalidate();
@@ -2561,35 +2546,37 @@ void DrawAndBlit()
 	fpv::UpdateFrame(); // first-person camera for this frame (reads the interpolated player position)
 
 	const Surface ui = DrawView(out, ViewPosition);
-	if (drawCtrlPan) {
+	if (drawCtrlPan && !host::HideHud) {
 		DrawMainPanel(ui);
 	}
-	if (drawHealth) {
+	if (drawHealth && !host::HideHud) {
 		DrawLifeFlaskLower(ui, !drawCtrlPan);
 	}
-	if (drawMana) {
+	if (drawMana && !host::HideHud) {
 		DrawManaFlaskLower(ui, !drawCtrlPan);
 
 		DrawSpell(ui);
 	}
-	if (drawControlButtons) {
+	if (drawControlButtons && !host::HideHud) {
 		DrawMainPanelButtons(ui);
 	}
-	if (drawBelt) {
+	if (drawBelt && !host::HideHud) {
 		DrawInvBelt(ui);
 	}
 	if (drawChatInput) {
 		DrawChatBox(ui);
 	}
-	DrawXPBar(ui);
-	DrawRunControl(ui);
-	if (*GetOptions().Gameplay.showHealthValues)
+	if (!host::HideHud) {
+		DrawXPBar(ui);
+		DrawRunControl(ui);
+	}
+	if (!host::HideHud && *GetOptions().Gameplay.showHealthValues)
 		DrawFlaskValues(ui, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints >> 6, MyPlayer->_pMaxHP >> 6);
-	if (*GetOptions().Gameplay.showManaValues)
+	if (!host::HideHud && *GetOptions().Gameplay.showManaValues)
 		DrawFlaskValues(ui, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
 		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana >> 6,
 		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana >> 6);
-	if (*GetOptions().Gameplay.floatingInfoBox)
+	if (!host::HideHud && *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(ui);
 
 	if (*GetOptions().Gameplay.showMultiplayerPartyInfo && PartySidePanelOpen)

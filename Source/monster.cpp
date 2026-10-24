@@ -58,6 +58,7 @@
 #include "function_ref.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "inv.h"
 #include "items.h"
 #include "levels/crypt.h"
@@ -3383,7 +3384,7 @@ bool PosOkMovingMissile(Point position)
 }
 
 /**
- * @brief Evicts every cached sprite normal plane that points into `monsterType.animData` (evict-on-free).
+ * @brief Evicts every cached sprite normal plane that points into `monsterType.animData` (evict-on-free, SPEC §7.2).
  *
  * `CMonster` does not record the buffer size, so the extent is recovered from the animations that were carved from it.
  */
@@ -4709,6 +4710,11 @@ void PlayEffect(Monster &monster, MonsterSound mode)
 	}
 
 	const int sndIdx = GenerateRnd(2);
+	if (host::IsActive()) {
+		if (gbBufferMsgs == 0)
+			host::QueueMonsterSfx(monster.type().type, static_cast<int>(mode), sndIdx, monster.position.tile);
+		return;
+	}
 	if (!gbSndInited || !gbSoundOn || gbBufferMsgs != 0) {
 		return;
 	}

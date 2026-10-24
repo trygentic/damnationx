@@ -245,8 +245,9 @@ if(NOT USE_SDL1 AND NOT VITA)
 endif()
 
 if(DEVILUTIONX_WEBGPU)
+  # The 3D models are not packed: the characters ship in the HD art pack (hd/3d/warrior/, hd/3d/rogue/), the props and
+  # their placements in the FREE and HD 3D packs (hd/3d/free/, hd/3d/hd/; docs/3d-asset-packs.md).
   list(APPEND devilutionx_assets hd/cathedral-floor-atlas.png)
-  # The 3D warrior (assets/3d/warrior) is not packed: it ships in the HD art pack as hd/3d/warrior/.
 endif()
 
 if(APPLE)
@@ -259,8 +260,8 @@ if(APPLE)
     target_sources(${BIN_TARGET} PRIVATE "${src}")
   endforeach()
 
-  if(BUILD_TESTING)
-    # Tests aren't bundled, so they need the assets copied here too.
+  if(BUILD_TESTING OR DAMNATIONX_HOST_LIB)
+    # Tests and the host library (CMake/HostLib.cmake) aren't bundled, so they need the assets copied here too.
     copy_files(
       FILES ${devilutionx_assets}
       SRC_PREFIX "assets/"

@@ -283,8 +283,12 @@ AssetRef FindAsset(std::string_view filename);
 void SetHdAssetDirectory(std::string_view directory);
 const std::string &GetHdAssetDirectory();
 
+/** True when the HD art folder `directory` (with a trailing separator) holds the 2D HD art (sprites.txt or ui.txt). */
+bool HdArtDirectoryHas2dArt(const std::string &directory);
+
 /**
- * @brief Looks for an installed HD art pack: an `hd` (or `HD`) folder holding sprites.txt or ui.txt, in the folder
+ * @brief Looks for an installed HD art pack: an `hd` (or `HD`) folder holding sprites.txt or ui.txt (or only a 3D pack,
+ * hd/3d/free or hd/3d/hd), in the folder
  * of DIABDAT.MPQ (or spawn.mpq), the other MPQ search paths (data folder, pref and config folders, ...) or next to the
  * executable (and next to the .app bundle on macOS).
  * @return The pack folder with a trailing path separator, or an empty string when there is none.

@@ -1,10 +1,10 @@
 /**
  * @file clx_normal_map_benchmark.cpp
  *
- * Benchmarks for the sprite normal-plane generator and cache.
+ * Benchmarks for the sprite normal-plane generator and cache (SPEC §12.4).
  *
  * Counters: `packed_bytes` / `dense_bytes` / `packed_ratio` (row-span bytes vs w*h) per frame, and for GeneratePlane
- * `native_us` (measured per frame) plus `wasm_x3_estimate_us` (the x3 wasm scaling calibrates Pump against).
+ * `native_us` (measured per frame) plus `wasm_x3_estimate_us` (the x3 wasm scaling SPEC §7.3 calibrates Pump against).
  */
 #include <array>
 #include <chrono>
@@ -216,7 +216,7 @@ void BM_GeneratePlane(benchmark::State &state)
 }
 BENCHMARK(BM_GeneratePlane)->Arg(64)->Arg(96)->Arg(128)->Arg(160)->UseManualTime();
 
-// GeneratePlane on the committed fixtures (the packed/dense ratio sizes the wasm budget from).
+// GeneratePlane on the committed fixtures (the packed/dense ratio SPEC §7.2 sizes the wasm budget from).
 void BM_GeneratePlane_FixtureDisc(benchmark::State &state)
 {
 	std::optional<OwnedClxSpriteList> list = LoadFixture("disc.clx");
@@ -276,7 +276,7 @@ void BM_Pump(benchmark::State &state)
 }
 BENCHMARK(BM_Pump);
 
-// The public lookup on a warm cache: the per-sprite cost DrawTileContent pays (<= 40 ns).
+// The public lookup on a warm cache: the per-sprite cost DrawTileContent pays (SPEC §11: <= 40 ns).
 void BM_GetOrBuildNormalPlane_Warm(benchmark::State &state)
 {
 	constexpr unsigned Frames = 64;

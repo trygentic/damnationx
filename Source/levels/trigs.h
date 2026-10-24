@@ -24,17 +24,6 @@ extern int numtrigs;
 extern TriggerStruct trigs[MAXTRIGGERS];
 extern int TWarpFrom;
 
-/**
- * @brief Tile of the permanent Cathedral portal next to the town fountain (DamnationX).
- *
- * Standing on it does the same as the Cathedral stairs (WM_DIABNEXTLVL to dungeon level 1). The position is a
- * constant so every client builds the same trigger table.
- */
-constexpr WorldTilePosition TownCathedralPortalPosition { 63, 68 };
-
-/** @brief Whether the fountain portal to the Cathedral exists in town (Gameplay option "Cathedral Portal"). */
-bool IsTownCathedralPortalEnabled();
-
 void InitNoTriggers();
 bool IsWarpOpen(dungeon_type type);
 void InitTownTriggers();

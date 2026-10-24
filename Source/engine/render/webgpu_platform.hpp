@@ -1,9 +1,9 @@
 /**
  * @file webgpu_platform.hpp
  *
- * Platform hooks for the WebGPU presenter: surface creation, waiting, presentation,
+ * Platform hooks for the WebGPU presenter (SPEC §9.8): surface creation, waiting, presentation,
  * launcher state notifications, error reporting and launch flags. Implemented by webgpu_platform_emscripten.cpp (browser)
- * and webgpu_platform_native.cpp (desktop Dawn).
+ * and webgpu_platform_native.cpp (desktop Dawn, SPEC §14.3).
  *
  * webgpu_presenter.cpp only talks to the platform through this table, so it includes no
  * <emscripten.h> and no windowing headers.

@@ -1,0 +1,136 @@
+{
+  "schema": "damnationx.3d-pack-source/1",
+  "pack": "damnationx-3d-hd",
+  "tier": "hd",
+  "title": "DamnationX HD 3D pack (Patreon)",
+  "install_dir": "hd/3d/hd",
+  "source_dir": "../packs/hd/models",
+  "attribution": "DamnationX HD art. Distributed to supporters; do not redistribute.",
+  "license": "DamnationX HD pack terms",
+  "files": {},
+  "extra": [
+    {
+      "source": "3d/warrior/warrior.glb",
+      "install": "hd/3d/warrior/warrior_viewmodel.glb",
+      "optional": true,
+      "relative_to": "assets",
+      "note": "legacy warrior with rigid sword and shield: the first-person weapon model"
+    },
+    {
+      "source": "3d/warrior/warrior_1024.glb",
+      "install": "hd/3d/warrior/warrior_viewmodel_1024.glb",
+      "optional": true,
+      "relative_to": "assets"
+    }
+  ],
+  "models": [
+    {
+      "id": "arch_stone",
+      "source": "arch_stone.glb",
+      "scale": [
+        1.26,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "brazier_metal",
+      "source": "brazier_metal.glb",
+      "scale": 0.8
+    },
+    {
+      "id": "chest_stone",
+      "source": "chest_stone.glb",
+      "scale": 0.65
+    },
+    {
+      "id": "chest_stone_plain",
+      "source": "chest_stone_plain.glb",
+      "scale": 0.65
+    },
+    {
+      "id": "chest_treasure",
+      "source": "chest_treasure.glb",
+      "scale": 0.55
+    },
+    {
+      "id": "chest_wooden",
+      "source": "chest_wooden.glb",
+      "scale": 0.6
+    },
+    {
+      "id": "church_stone",
+      "source": "church_stone.glb"
+    },
+    {
+      "id": "church_stone_plain",
+      "source": "church_stone_plain.glb"
+    },
+    {
+      "id": "cottage_stone_plain",
+      "source": "cottage_stone_plain.glb"
+    },
+    {
+      "id": "cottage_thatched_a",
+      "source": "cottage_thatched_a.glb"
+    },
+    {
+      "id": "cottage_thatched_b",
+      "source": "cottage_thatched_b.glb"
+    },
+    {
+      "id": "door_arch_wooden",
+      "source": "door_arch_wooden.glb",
+      "scale": [
+        2.3,
+        0.95,
+        1.2
+      ]
+    },
+    {
+      "id": "hut_thatched_a",
+      "source": "hut_thatched_a.glb"
+    },
+    {
+      "id": "hut_thatched_b",
+      "source": "hut_thatched_b.glb"
+    },
+    {
+      "id": "hut_thatched_plain",
+      "source": "hut_thatched_plain.glb"
+    },
+    {
+      "id": "sword_great",
+      "source": "sword_great.glb",
+      "scale": 0.6
+    },
+    {
+      "id": "warrior_fantasy",
+      "source": "warrior_fantasy.glb",
+      "scale": 0.67
+    }
+  ],
+  "characters": [
+    {
+      "class": "warrior",
+      "version": "v10b",
+      "source": "damnationx_3d_characters_20261018/Warrior/warrior.glb",
+      "install": "hd/3d/warrior/warrior.glb",
+      "variants": {
+        "_1024": 1024
+      }
+    },
+    {
+      "class": "rogue",
+      "version": "v24d",
+      "source": "damnationx_3d_characters_20261018/Rogue/rogue.glb",
+      "install": "hd/3d/rogue/rogue.glb",
+      "variants": {
+        "_1024": 1024
+      }
+    }
+  ],
+  "character_source_dir": "hd",
+  "placement": "placement.json",
+  "placement_meshes_only": true
+}

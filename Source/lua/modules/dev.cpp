@@ -12,6 +12,9 @@
 #include "lua/modules/dev/quests.hpp"
 #include "lua/modules/dev/search.hpp"
 #include "lua/modules/dev/towners.hpp"
+#ifdef DEVILUTIONX_TRAINER
+#include "lua/modules/dev/trainer.hpp"
+#endif
 
 namespace devilution {
 
@@ -26,6 +29,9 @@ sol::table LuaDevModule(sol::state_view &lua)
 	LuaSetDoc(table, "quests", "", "Quest-related commands.", LuaDevQuestsModule(lua));
 	LuaSetDoc(table, "search", "", "Search the map for monsters / items / objects.", LuaDevSearchModule(lua));
 	LuaSetDoc(table, "towners", "", "Town NPC commands.", LuaDevTownersModule(lua));
+#ifdef DEVILUTIONX_TRAINER
+	LuaSetDoc(table, "trainer", "", "Developer trainer commands (character editor, item and character files).", LuaDevTrainerModule(lua));
+#endif
 	return table;
 }
 

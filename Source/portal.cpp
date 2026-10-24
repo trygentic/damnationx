@@ -13,6 +13,7 @@
 #include "lighting.h"
 #include "missiles.h"
 #include "multi.h"
+#include "options.h"
 #include "player.h"
 #include "tables/misdat.h"
 
@@ -43,22 +44,74 @@ bool NearTrigger(Point position)
 	return false;
 }
 
+void AddFreeTownPortal()
+{
+	if (!IsCathedralPortalOnActiveLevel())
+		return;
+	auto *missile = AddMissile({ 0, 0 }, CathedralPortalPosition(), Direction::South, MissileID::TownPortal, TARGET_MONSTERS, -1, 0, 0, nullptr, SfxID::None);
+	if (missile != nullptr) {
+		missile->setFrameGroup<PortalFrame>(PortalFrame::Idle);
+		if (leveltype != DTYPE_TOWN)
+			missile->_mlid = AddLight(missile->position.tile, 15);
+	}
+}
+
+void OptionFreeTownPortalChanged()
+{
+	// Joining clients must never mutate a host-selected simulation feature.
+	if (gbIsMultiplayer || !gbRunGame || MyPlayer == nullptr)
+		return;
+	const bool enabled = *GetOptions().Gameplay.cathedralPortal;
+	// This legacy mod used to be a second hidden opt-out. An explicit runtime
+	// setting change updates both preferences so it survives the next game.
+	for (OptionEntryBase *entry : GetOptions().Mods.GetEntries()) {
+		if (entry->key == "permanent_cathedral_portal" && entry->GetType() == OptionEntryType::Boolean)
+			static_cast<OptionEntryBoolean *>(entry)->SetValue(enabled);
+	}
+	sgGameInitInfo.bPermanentCathedralPortal = enabled ? 1 : 0;
+	RefreshFreeTownPortal();
+}
+
+const auto OptionChangeHandlerFreeTownPortal = (GetOptions().Gameplay.cathedralPortal.SetValueChangedCallback(OptionFreeTownPortalChanged), true);
+
 } // namespace
 
-bool IsCathedralPortalEnabled()
+bool IsFreeTownPortalEnabled()
 {
 	return sgGameInitInfo.bPermanentCathedralPortal == 1;
 }
 
+bool SetFreeTownPortalEnabled(bool enabled)
+{
+	if (gbIsMultiplayer)
+		return false;
+	for (OptionEntryBase *entry : GetOptions().Mods.GetEntries()) {
+		if (entry->key == "permanent_cathedral_portal" && entry->GetType() == OptionEntryType::Boolean)
+			static_cast<OptionEntryBoolean *>(entry)->SetValue(enabled);
+	}
+	GetOptions().Gameplay.cathedralPortal.SetValue(enabled);
+	return true;
+}
+
+uint8_t FreeTownPortalTargetLevel(const Player &player)
+{
+	return gbIsSpawn ? 1 : ValidFreeTownPortalSection(player.lastFreeTownPortalSection);
+}
+
+bool IsCathedralPortalEnabled()
+{
+	return IsFreeTownPortalEnabled();
+}
+
 bool IsCathedralPortalOnActiveLevel()
 {
-	return IsCathedralPortalEnabled() && !setlevel && (currlevel == 0 || currlevel == 1);
+	return IsCathedralPortalEnabled() && !setlevel && (currlevel == 0 || IsFreeTownPortalSection(currlevel));
 }
 
 Point CathedralPortalPosition()
 {
 	if (leveltype == DTYPE_TOWN)
-		return { 64, 73 }; // Beside Cain (62, 71), leaving his talking tiles clear.
+		return TownCathedralPortalPosition;
 	// Use geometry only: occupied player tiles must not change the shared location.
 	for (int i = 0; i < numtrigs; ++i) {
 		if (trigs[i]._tmsg != WM_DIABPREVLVL)
@@ -101,16 +154,27 @@ void AddPortalMissile(const Player &player, Point position, bool sync)
 	}
 }
 
-void SyncPortals()
+void RefreshFreeTownPortal()
 {
-	if (IsCathedralPortalOnActiveLevel()) {
-		auto *missile = AddMissile({ 0, 0 }, CathedralPortalPosition(), Direction::South, MissileID::TownPortal, TARGET_MONSTERS, -1, 0, 0, nullptr, SfxID::None);
-		if (missile != nullptr) {
-			missile->setFrameGroup<PortalFrame>(PortalFrame::Idle);
-			if (leveltype != DTYPE_TOWN)
-				missile->_mlid = AddLight(missile->position.tile, 15);
-		}
-	}
+	Missiles.remove_if([](Missile &missile) {
+		if (missile._mitype != MissileID::TownPortal || !missile.IsTrap())
+			return false;
+		if (InDungeonBounds(missile.position.tile))
+			dFlags[missile.position.tile.x][missile.position.tile.y] &= ~DungeonFlag::Missile;
+		if (leveltype != DTYPE_TOWN && missile._mlid >= 0 && missile._mlid < MAXLIGHTS)
+			AddUnLight(missile._mlid);
+		return true;
+	});
+	// Release saved/deleted lights before admitting a fresh authoritative source.
+	if (leveltype != DTYPE_TOWN)
+		ProcessLightList();
+	AddFreeTownPortal();
+}
+
+void SyncPortals(bool includeFreeTownPortal)
+{
+	if (includeFreeTownPortal)
+		AddFreeTownPortal();
 	for (int i = 0; i < MAXPORTAL; i++) {
 		if (!Portals[i].open)
 			continue;
@@ -190,11 +254,11 @@ void GetPortalLevel()
 		return;
 	}
 
-	if (portalindex == CathedralPortalIndex) {
+	if (IsFreeTownPortalWarp(portalindex)) {
 		setlevel = false;
-		currlevel = 1;
-		MyPlayer->setLevel(1);
-		leveltype = DTYPE_CATHEDRAL;
+		currlevel = FreeTownPortalWarpDestination(portalindex, FreeTownPortalTargetLevel(*MyPlayer));
+		MyPlayer->setLevel(currlevel);
+		leveltype = GetLevelType(currlevel);
 		return;
 	}
 
@@ -219,7 +283,7 @@ void GetPortalLevel()
 
 void GetPortalLvlPos()
 {
-	if (portalindex == CathedralPortalIndex) {
+	if (IsFreeTownPortalWarp(portalindex)) {
 		// Arrive beside the portal to avoid immediately travelling back.
 		const auto landing = FindClosestValidPosition([](Point p) {
 			return InDungeonBounds(p) && !TileHasAny(p, TileProperties::Solid) && dPlayer[p.x][p.y] == 0 && !NearTrigger(p);
@@ -241,7 +305,7 @@ void GetPortalLvlPos()
 
 bool PosOkPortal(int lvl, Point position)
 {
-	if (IsCathedralPortalEnabled() && !setlevel && lvl == 1 && position == CathedralPortalPosition())
+	if (IsFreeTownPortalEnabled() && !setlevel && lvl == currlevel && IsFreeTownPortalSection(lvl) && position == CathedralPortalPosition())
 		return true;
 	for (auto &portal : Portals) {
 		if (portal.open

@@ -75,6 +75,9 @@
 // for virtual keyboard on 3DS
 #include "platform/ctr/keyboard.h"
 #endif
+#ifdef DEVILUTIONX_TRAINER
+#include "lua/trainer_socket.hpp"
+#endif
 
 namespace devilution {
 
@@ -841,6 +844,9 @@ void UiClearScreen()
 
 void UiPollAndRender(std::optional<tl::function_ref<bool(SDL_Event &)>> eventHandler)
 {
+#ifdef DEVILUTIONX_TRAINER
+	TrainerSocketPoll();
+#endif
 	SDL_Event event;
 	while (PollEvent(&event)) {
 		if (eventHandler && (*eventHandler)(event))

@@ -6,6 +6,7 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_rect.h>
 #include <SDL3/SDL_surface.h>
+#include <SDL3/SDL_timer.h>
 #else
 #include <SDL.h>
 #endif
@@ -21,6 +22,7 @@
 #include "engine/point.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/surface.hpp"
+#include "headless_mode.hpp"
 #include "utils/display.h"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
@@ -105,6 +107,17 @@ void ProgressRenderForeground(int progress)
 
 bool UiProgressDialog(int (*fnfunc)())
 {
+	if (CompanionHeadless()) {
+		const uint32_t started = SDL_GetTicks();
+		while (SDL_GetTicks() - started < 60000) {
+			if (fnfunc() >= 100) return true;
+			SDL_Event event;
+			while (PollEvent(&event))
+				if (event.type == SDL_EVENT_QUIT) return false;
+			SDL_Delay(10);
+		}
+		return false;
+	}
 	// Blit the background once and then free it.
 	ProgressLoadBackground();
 

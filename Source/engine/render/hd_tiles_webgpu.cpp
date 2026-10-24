@@ -1013,18 +1013,19 @@ void HdTilesGpuRelease()
 #include <string>
 
 #include "engine/render/hd_tiles.hpp"
+#include "host/host_hooks.hpp"
 
 namespace devilution {
 
-bool HdTilesGpuAvailable() { return false; }
+// Without WebGPU only an embedding host (Hd2D render mode, host/host_hd.cpp) draws HD tiles; it loads the pages.
+bool HdTilesGpuAvailable() { return host::HdTilesAvailable(); }
 bool HdTilesGpuFlag(const char *) { return false; }
-bool HdTilesGpuFetchText(const char *, std::string &, bool &failed)
+bool HdTilesGpuFetchText(const char *url, std::string &text, bool &failed)
 {
-	failed = true;
-	return false;
+	return host::HdFetchText(url, text, failed);
 }
-void HdTilesGpuUseManifest(int, const hd_tiles::Manifest &) { }
-bool HdTilesGpuRequestPage(int) { return false; }
+void HdTilesGpuUseManifest(int tileset, const hd_tiles::Manifest &manifest) { host::HdUseTileManifest(tileset, manifest); }
+bool HdTilesGpuRequestPage(int) { return host::HdTilesAvailable(); }
 
 } // namespace devilution
 

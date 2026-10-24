@@ -22,7 +22,8 @@ appearance and facing may stand in. Equipment namespaces never borrow a
 neighbor's facing. Legacy `warrior/<action>/<direction>` clips are eligible
 only for a light-armored sword-and-shield warrior; they retain their existing
 neighbor-facing fallback. A modern matching appearance takes precedence.
-The repository ships no player sheets.
+The repository ships no player sheets. Private Blender sources, motion
+files, and render outputs belong on the configured SSD.
 
 # Cathedral floor preview
 

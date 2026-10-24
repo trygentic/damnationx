@@ -72,6 +72,9 @@ std::expected<std::unique_ptr<TSnd>, std::string> SoundFileLoadWithStatus(const 
 void snd_init();
 void snd_deinit();
 _music_id GetLevelMusic(dungeon_type dungeonType);
+/** The asset path of a music track (full or spawn music, whichever is installed), or nullptr. */
+const char *GetMusicTrackPath(_music_id track);
+std::string GetSoundAssetPath(const char *path);
 void music_stop();
 void music_start(_music_id nTrack);
 void sound_disable_music(bool disable);

@@ -1,0 +1,23 @@
+{
+  "schema": "damnationx.3d-placement/1",
+  "placements": [
+    {"model": "cottage_thatched_a", "levels": ["town"], "anchor": "tile", "at": [77.0, 19.0], "scale": [6, 3.9, 6], "replaces": "town_house", "note": "north-east cottage: house cells 74..79 x 16..21"},
+    {"model": "hut_thatched_a", "levels": ["town"], "anchor": "tile", "at": [49.5, 20.0], "scale": [3, 2.25, 4], "replaces": "town_house", "note": "north hut: house cells 48..50 x 18..21"},
+    {"model": "hut_thatched_b", "levels": ["town"], "anchor": "tile", "at": [2.5, 28.5], "scale": [5, 3.35, 5], "replaces": "town_house", "note": "west edge hut: house cells 0..4 x 26..30"},
+    {"model": "cottage_thatched_b", "levels": ["town"], "anchor": "tile", "at": [50.5, 43.5], "scale": [9, 4.45, 7], "replaces": "town_house", "note": "Adria's side: house cells 46..54 x 40..46"},
+    {"model": "hut_thatched_a", "levels": ["town"], "anchor": "tile", "at": [28.5, 50.5], "scale": [5, 3.35, 5], "replaces": "town_house", "note": "west hut: house cells 26..30 x 48..52"},
+    {"model": "cottage_thatched_a", "levels": ["town"], "anchor": "tile", "at": [51.5, 59.5], "scale": [11, 6.65, 11], "replaces": "town_house", "note": "centre house: house cells 46..56 x 54..64"},
+    {"model": "cottage_thatched_b", "levels": ["town"], "anchor": "tile", "at": [66.0, 59.0], "scale": [12, 6.1, 10], "replaces": "town_house", "note": "east house: house cells 60..71 x 54..63"},
+    {"model": "cottage_thatched_a", "levels": ["town"], "anchor": "tile", "at": [39.5, 66.5], "scale": [7, 3.35, 5], "replaces": "town_house", "note": "south-west cottage: house cells 36..42 x 64..68"},
+    {"model": "hut_thatched_b", "levels": ["town"], "anchor": "tile", "at": [72.5, 69.5], "scale": [5, 3.35, 7], "replaces": "town_house", "note": "south-east hut: house cells 70..74 x 66..72"},
+    {"model": "cottage_thatched_b", "levels": ["town"], "anchor": "tile", "at": [51.0, 77.5], "scale": [10, 4.45, 7], "replaces": "town_house", "note": "south house: house cells 46..55 x 74..80"},
+    {"model": "hut_thatched_a", "levels": ["town"], "anchor": "tile", "at": [70.5, 80.5], "scale": [5, 3.35, 5], "replaces": "town_house", "note": "south-east small hut: house cells 68..72 x 78..82"},
+    {"model": "church_stone", "levels": ["town"], "anchor": "tile", "at": [24.5, 20.5], "scale": [20.053, 10, 17], "replaces": "town_house", "note": "Tristram cathedral: house cells 17..31 x 12..28"},
+    {"model": "chest_treasure", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST1", "OBJ_TCHEST1"], "facing": "open_side", "show": "unopened"},
+    {"model": "chest_wooden", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST2", "OBJ_TCHEST2"], "facing": "open_side", "show": "unopened"},
+    {"model": "chest_stone", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST3", "OBJ_TCHEST3"], "facing": "open_side", "show": "unopened"},
+    {"model": "brazier_metal", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_L1LIGHT"]},
+    {"model": "door_arch_wooden", "levels": ["cathedral"], "anchor": "door", "objects": ["OBJ_L1LDOOR", "OBJ_L1RDOOR"], "show": "closed"},
+    {"model": "arch_stone", "levels": ["cathedral"], "anchor": "arch"}
+  ]
+}

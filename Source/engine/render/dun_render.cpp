@@ -117,7 +117,7 @@ enum class LightType : uint8_t {
 	PartiallyLit,
 	FullyLit,
 	PerPixel,
-	/** Hybrid world pass capturing the G-buffer with a fully-lit table: raw copy plus aux/B planes. */
+	/** Hybrid world pass capturing the G-buffer with a fully-lit table: raw copy plus aux/B planes (SPEC §6.1). */
 	GBufferLit,
 	/** Hybrid world pass capturing through a colour map (Hell: LightTables[0] carries the blood remap). */
 	GBuffer,
@@ -258,7 +258,7 @@ DVL_ALWAYS_INLINE DVL_ATTRIBUTE_HOT void RenderLineTransparent<LightType::PerPix
 	BlitPixelsBlendedWithLightmap(dst, src, n, *lightmap);
 }
 
-// A 50 %-blended wall pixel is tagged WallBlended and writes its own B (blended policy).
+// A 50 %-blended wall pixel is tagged WallBlended and writes its own B (SPEC §6.1 blended policy).
 template <>
 DVL_ALWAYS_INLINE DVL_ATTRIBUTE_HOT void RenderLineTransparent<LightType::GBufferLit>(uint8_t *DVL_RESTRICT dst, const uint8_t *DVL_RESTRICT src, uint_fast8_t n, [[maybe_unused]] const uint8_t *DVL_RESTRICT tbl, [[maybe_unused]] const Lightmap *lightmap)
 {
@@ -1056,7 +1056,7 @@ DVL_ALWAYS_INLINE DVL_ATTRIBUTE_HOT void RenderRightTrapezoidOrTransparentSquare
 	}
 }
 
-// `Capture` (the hybrid world pass) is a compile-time parameter of the dispatchers and of
+// `Capture` (the hybrid world pass, SPEC §6.1) is a compile-time parameter of the dispatchers and of
 // RenderTileFrameImmediate: the classic instantiations must stay code-identical to the pre-hybrid
 // functions (no runtime check, no calls), since merging the GBuffer* instantiations into them
 // measurably slowed the classic paths down.
@@ -1110,7 +1110,7 @@ struct TileRenderCommand {
 	Point position;
 	TileType tile;
 
-	// G-buffer tile context, captured from the gbuffer::CurrentTile* globals only while
+	// G-buffer tile context (SPEC §6.1), captured from the gbuffer::CurrentTile* globals only while
 	// the world pass is capturing and restored into them by FlushTileRenderCommands. Sits in the
 	// padding after `tile` so the command stays 56 bytes and classic mode pays nothing for it.
 	// `anchorRow` is the low byte only: that is all gbuffer::BuildBaseRow uses. Tile-local column 0
@@ -1262,7 +1262,7 @@ void RenderTileFrame(const Surface &out, const Lightmap &lightmap, const Point &
 	DecodeBaseRow(gbuffer::CurrentTileBaseRow, command.anchorRow, command.foot);
 	if (tile == TileType::LeftTriangle || tile == TileType::RightTriangle) {
 		// Floor-shaped micro frames drawn inside DrawCell (pillars, stairs, props, floor-shaped
-		// wall halves): lit as floor with foot None, whatever the caller's context.
+		// wall halves): lit as floor with foot None, whatever the caller's context (SPEC §6.1).
 		command.aux = gbuffer::ShadowByte;
 		command.auxBlended = gbuffer::ShadowByte;
 		command.foot = gbuffer::FootKind::None;
@@ -1314,7 +1314,7 @@ namespace {
 
 /**
  * @brief world_draw_black_tile while the hybrid world pass captures: the GBufferDark leaf stamps
- * UnlitByte over every row it blackens, following the same clipped triangle geometry.
+ * UnlitByte over every row it blackens, following the same clipped triangle geometry (SPEC §6.1).
  */
 DVL_NO_INLINE void BlackTileCapture(const Surface &out, int sx, int sy, const Clip &clipLeft, const Clip &clipRight)
 {

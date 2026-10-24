@@ -1,7 +1,7 @@
 /**
  * @file hd_ui.hpp
  *
- * Opt-in HD UI for the WebGPU browser build (`?hdUi=1`): the control
+ * Opt-in HD UI for the WebGPU browser build (`?hdUi=1`, DamnationX HD runtime contract v1 section 6): the control
  * panel, orbs, belt, side panels, item icons, cursors, game menu, stores and the DiabloUI front end are drawn from
  * 4x art at canvas resolution over the classic UI.
  *

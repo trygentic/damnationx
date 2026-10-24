@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 
 #include <gtest/gtest.h>
@@ -1006,6 +1008,61 @@ bool TestNetPackValidation()
 	PlayerNetPack packed;
 	PackNetPlayer(packed, *MyPlayer);
 	return UnPackNetPlayer(packed, Players[1]);
+}
+
+TEST_F(NetPackTest, FreeTownPortalPlayerPackRoundTripsEverySectionWithoutSharingHeroHistory)
+{
+	static_assert(sizeof(PlayerPack::reserved3) == 20);
+	static_assert(offsetof(PlayerPack, reserved3) + 20 == sizeof(PlayerPack));
+	for (const uint8_t section : { 1, 5, 9, 13 }) {
+		MyPlayer->setLevel(static_cast<uint8_t>(section + 2));
+		MyPlayer->setLevel(0);
+		PlayerPack packed {};
+		PackPlayer(packed, *MyPlayer);
+		EXPECT_EQ(packed.reserved3[0], 'F');
+		EXPECT_EQ(packed.reserved3[1], 'P');
+		EXPECT_EQ(packed.reserved3[2], 1);
+		EXPECT_EQ(packed.reserved3[3], section);
+		for (size_t index = 4; index < 20; ++index)
+			EXPECT_EQ(packed.reserved3[index], 0);
+
+		Players[1].lastFreeTownPortalSection = section == 13 ? 5 : 13;
+		UnPackPlayer(packed, Players[1]);
+		EXPECT_EQ(Players[1].lastFreeTownPortalSection, section);
+		Players[1].setLevel(6);
+		EXPECT_EQ(Players[1].lastFreeTownPortalSection, 5);
+		EXPECT_EQ(MyPlayer->lastFreeTownPortalSection, section);
+	}
+}
+
+TEST_F(NetPackTest, FreeTownPortalOldPlayerPackMigratesCurrentFloorButDoesNotGuessTownHistory)
+{
+	PlayerPack legacy {};
+	PackPlayer(legacy, *MyPlayer);
+	std::fill(std::begin(legacy.reserved3), std::end(legacy.reserved3), 0);
+	legacy.plrlevel = 14;
+	UnPackPlayer(legacy, Players[1]);
+	EXPECT_EQ(Players[1].lastFreeTownPortalSection, 13);
+	legacy.plrlevel = 0;
+	UnPackPlayer(legacy, Players[1]);
+	EXPECT_EQ(Players[1].lastFreeTownPortalSection, 1);
+}
+
+TEST_F(NetPackTest, FreeTownPortalPlayerPackRejectsInvalidTagsAndSections)
+{
+	PlayerPack packed {};
+	MyPlayer->setLevel(0);
+	MyPlayer->lastFreeTownPortalSection = 7;
+	PackPlayer(packed, *MyPlayer);
+	EXPECT_EQ(packed.reserved3[3], 1);
+	packed.reserved3[2] = 2;
+	packed.reserved3[3] = 13;
+	UnPackPlayer(packed, Players[1]);
+	EXPECT_EQ(Players[1].lastFreeTownPortalSection, 1);
+	packed.reserved3[2] = 1;
+	packed.reserved3[3] = 7;
+	UnPackPlayer(packed, Players[1]);
+	EXPECT_EQ(Players[1].lastFreeTownPortalSection, 1);
 }
 
 TEST_F(NetPackTest, UnPackNetPlayer_valid)

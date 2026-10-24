@@ -20,6 +20,7 @@
 #include "fpv/fpv.hpp"
 #include "fpv/fpv_state.hpp"
 #include "fpv/fpv_viewmodel_inputs.hpp"
+#include "fpv/view_provider.hpp"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "monster.h"
@@ -232,7 +233,8 @@ void DrawHud(const Surface &ui)
 		DrawSlash(ui, centre, viewHeight, now - hud.slashStart, hud.slashMirrored);
 
 	const bool attackable = (target.kind == TargetKind::Monster || target.kind == TargetKind::Player) && target.inRange;
-	DrawCrosshair(ui, centre, attackable);
+	if (!GetVrControl().active) // in VR the controller laser aims; a crosshair on the floating screen would mislead
+		DrawCrosshair(ui, centre, attackable);
 	if (now < hud.hitMarkerUntil)
 		DrawHitMarker(ui, centre);
 
@@ -262,9 +264,18 @@ void DrawHud(const Surface &ui)
 		}
 	}
 
-	if (now < hud.helpUntil) {
+	if (IsPointerLockLost()) {
+		DrawTextBox(ui, _("Click to look around"), centre.y + 18, UiFlags::ColorWhitegold, true);
+	} else if (now < hud.helpUntil) {
 		const int y = std::min(mainPanel.position.y, viewHeight) - 58;
-		DrawTextBox(ui, _("WASD move   Mouse look   LMB attack   RMB spell   E use   Alt cursor   G view"), y, UiFlags::ColorWhite, true);
+		if (IsThirdPerson()) {
+			const bool orbit = *GetOptions().Graphics.thirdPersonStyle == ThirdPersonStyle::Orbit;
+			DrawTextBox(ui, orbit ? _("WASD move   LMB walk/attack   Shift+LMB attack   Wheel zoom   E use   Alt cursor   T view")
+			                      : _("WASD move   LMB attack   RMB spell   Wheel zoom   MMB shoulder   E use   Alt cursor   T view"),
+			    y, UiFlags::ColorWhite, true);
+		} else {
+			DrawTextBox(ui, _("WASD move   Mouse look   LMB attack   RMB spell   E use   Alt cursor   G/T view"), y, UiFlags::ColorWhite, true);
+		}
 	}
 
 	if (now < hud.bannerUntil && !hud.bannerText.empty()) {

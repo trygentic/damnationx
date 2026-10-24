@@ -242,10 +242,11 @@ bool BlitFrame()
 		const bool isIndexedOutputFormat = SDLBackport_IsPixelFormatIndexed(outputSurface->format);
 #else
 
+		// The output surface's format, not the window's: a WebGPU canvas has no SDL window surface and reports an unknown format.
 #ifdef USE_SDL3
-		const SDL_PixelFormat wndFormat = SDL_GetWindowPixelFormat(ghMainWnd);
+		const SDL_PixelFormat wndFormat = outputSurface->format;
 #else
-		const Uint32 wndFormat = SDL_GetWindowPixelFormat(ghMainWnd);
+		const Uint32 wndFormat = outputSurface->format->format;
 #endif
 		const bool isIndexedOutputFormat = SDL_ISPIXELFORMAT_INDEXED(wndFormat);
 #endif

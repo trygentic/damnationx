@@ -31,6 +31,7 @@
 #include "engine/render/text_render.hpp"
 #include "engine/render/ui_scale.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "options.h"
 #include "stores.h"
 #include "utils/language.h"
@@ -185,6 +186,8 @@ TMenuItem *sgpCurrentMenu;
 
 void gmenu_draw_pause(const Surface &out)
 {
+	if (sgpCurrentMenu != nullptr && host::NativeGameMenu())
+		return;
 	if (leveltype != DTYPE_TOWN)
 		RedBack(out);
 	if (sgpCurrentMenu == nullptr) {
@@ -252,6 +255,8 @@ void gmenu_set_items(TMenuItem *pItem, void (*gmFunc)())
 void gmenu_draw(const Surface &out)
 {
 	if (sgpCurrentMenu != nullptr) {
+		if (host::NativeGameMenu())
+			return;
 		GameMenuMove();
 		if (gmenu_current_option != nullptr)
 			gmenu_current_option();
@@ -282,6 +287,8 @@ bool gmenu_presskeys(SDL_Keycode vkey)
 {
 	if (sgpCurrentMenu == nullptr)
 		return false;
+	if (host::NativeGameMenu())
+		return true; // The host owns modal navigation and dispatches native actions.
 	switch (vkey) {
 	case SDLK_KP_ENTER:
 	case SDLK_RETURN:
@@ -316,6 +323,10 @@ bool gmenu_presskeys(SDL_Keycode vkey)
 
 bool gmenu_on_mouse_move()
 {
+	if (sgpCurrentMenu != nullptr && host::NativeGameMenu()) {
+		isDraggingSlider = false;
+		return true;
+	}
 	if (!isDraggingSlider)
 		return false;
 
@@ -329,6 +340,10 @@ bool gmenu_on_mouse_move()
 
 bool gmenu_left_mouse(bool isDown)
 {
+	if (sgpCurrentMenu != nullptr && host::NativeGameMenu()) {
+		isDraggingSlider = false;
+		return true;
+	}
 	if (!isDown) {
 		if (isDraggingSlider) {
 			isDraggingSlider = false;

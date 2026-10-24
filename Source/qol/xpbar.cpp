@@ -50,7 +50,7 @@ void DrawEndCap(const Surface &out, Point point, int idx, const ColorGradient &g
 	out.SetPixel({ point.x, point.y + 1 }, gradient[idx * 3 / 4]);
 	out.SetPixel({ point.x, point.y + 2 }, gradient[idx]);
 	out.SetPixel({ point.x, point.y + 3 }, gradient[idx / 2]);
-	// Surface::SetPixel has no G-buffer hook: tag the cap as UI (a no-op unless the frame is stamping).
+	// Surface::SetPixel has no G-buffer hook: tag the cap as UI (SPEC §5.4; a no-op unless the frame is stamping).
 	gbuffer::StampUnlit(out, Rectangle { { point.x, point.y + 1 }, { 1, 3 } });
 }
 

@@ -310,4 +310,81 @@ struct BlitOut {
 }
 )";
 
+/**
+ * Stereo overlays drawn last in a WorldGpuRenderViews() eye pass (docs/design/vr.md): the 2D game screen as a panel in
+ * the world, the controller laser and the comfort vignette. Depth test Always, no depth write.
+ */
+constexpr char kWorldOverlayWgsl[] = R"(
+struct Overlay {
+  panelMvp: mat4x4f,
+  laserMvp: mat4x4f,
+  laserColor: vec4f,
+  params: vec4f, // vignette strength, panel opacity, laser length, unused
+};
+
+@group(0) @binding(0) var<uniform> overlay: Overlay;
+@group(0) @binding(1) var panelImage: texture_2d<f32>;
+@group(0) @binding(2) var panelSampler: sampler;
+
+struct OverlayOut {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
+
+fn quadCorner(index: u32) -> vec2f {
+  let corners = array<vec2f, 6>(vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0), vec2f(0.0, 0.0), vec2f(1.0, 1.0), vec2f(0.0, 1.0));
+  return corners[index % 6u];
+}
+
+// Unit quad x, y in [-0.5, 0.5] at z = 0 facing +z; the top edge (y = +0.5) is row 0 of the image.
+@vertex fn panelVertex(@builtin(vertex_index) index: u32) -> OverlayOut {
+  let c = quadCorner(index);
+  var output: OverlayOut;
+  output.position = overlay.panelMvp * vec4f(c.x - 0.5, c.y - 0.5, 0.0, 1.0);
+  output.uv = vec2f(c.x, 1.0 - c.y);
+  return output;
+}
+
+@fragment fn panelFragment(input: OverlayOut) -> @location(0) vec4f {
+  let texel = textureSample(panelImage, panelSampler, input.uv);
+  let a = texel.a * overlay.params.y;
+  return vec4f(texel.rgb * a, a);
+}
+
+// Two crossed thin quads along -z of the laser space (x and y in [-0.5, 0.5], z in [0, -1]).
+@vertex fn laserVertex(@builtin(vertex_index) index: u32) -> OverlayOut {
+  let c = quadCorner(index);
+  var local = vec3f(c.x - 0.5, 0.0, -c.y);
+  if (index >= 6u) { local = vec3f(0.0, c.x - 0.5, -c.y); }
+  var output: OverlayOut;
+  output.position = overlay.laserMvp * vec4f(local, 1.0);
+  output.uv = c;
+  return output;
+}
+
+@fragment fn laserFragment(input: OverlayOut) -> @location(0) vec4f {
+  let edge = 1.0 - abs(input.uv.x * 2.0 - 1.0);
+  let fade = 1.0 - input.uv.y * 0.85;
+  let a = overlay.laserColor.a * edge * fade;
+  return vec4f(overlay.laserColor.rgb * a, a);
+}
+
+@vertex fn vignetteVertex(@builtin(vertex_index) index: u32) -> OverlayOut {
+  let positions = array<vec2f, 3>(vec2f(-1.0, -1.0), vec2f(3.0, -1.0), vec2f(-1.0, 3.0));
+  var output: OverlayOut;
+  output.position = vec4f(positions[index], 0.0, 1.0);
+  output.uv = positions[index];
+  return output;
+}
+
+// Tunnel vignette: clear centre, black edge; strength 0..1 shrinks the clear area.
+@fragment fn vignetteFragment(input: OverlayOut) -> @location(0) vec4f {
+  let s = clamp(overlay.params.x, 0.0, 1.0);
+  let r = length(input.uv);
+  let inner = mix(1.4, 0.45, s);
+  let a = smoothstep(inner, inner + 0.35, r) * s;
+  return vec4f(0.0, 0.0, 0.0, a);
+}
+)";
+
 } // namespace devilution::render3d

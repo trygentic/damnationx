@@ -36,6 +36,8 @@ void sound_init();
 void ui_sound_init();
 void effects_play_sound(SfxID);
 int GetSFXLength(SfxID nSFX);
+/** The effects.tsv entry of a sound (its file path and sfx_flag bits), or nullptr; loads the table on first use. */
+const TSFX *GetSfxEntry(SfxID id);
 
 std::expected<HeroSpeech, std::string> ParseHeroSpeech(std::string_view value);
 

@@ -21,6 +21,7 @@
 #include "engine/point.hpp"
 #include "engine/render/scrollrt.h"
 #include "game_mode.hpp"
+#include "free_town_portal.hpp"
 #include "interfac.h"
 #include "items.h"
 #include "items/validation.h"
@@ -304,6 +305,8 @@ struct Player {
 
 	uint8_t plrlevel;
 	bool plrIsOnSetLevel;
+	/** Last normal dungeon section visited; independent of highest floor and player-cast portals. */
+	uint8_t lastFreeTownPortalSection = 1;
 	ActorPosition position;
 	Direction _pdir; // Direction faced by player (direction enum)
 	HeroClass _pClass;
@@ -888,6 +891,9 @@ public:
 	{
 		this->plrlevel = level;
 		this->plrIsOnSetLevel = false;
+		const uint8_t section = FreeTownPortalSectionForLevel(level);
+		if (section != 0)
+			this->lastFreeTownPortalSection = section;
 	}
 	void setLevel(_setlevels level)
 	{

@@ -1,0 +1,390 @@
+{
+  "asset": "warrior.glb",
+  "variants": {
+    "warrior.glb": {
+      "texture_size": 2048,
+      "bytes": 9549476,
+      "equipment_atlas_size": 1024
+    },
+    "warrior_1024.glb": {
+      "texture_size": 1024,
+      "bytes": 4514656,
+      "equipment_atlas_size": 512
+    }
+  },
+  "source": "handoff v3 warrior_bake.blend (Blender 4.5.3 scene), exported with Blender 5.2.2 glTF exporter; equipment materials baked to a shared PBR atlas (export_warrior_baked.py, Cycles), shield planks warmed (warm_shield.py)",
+  "units": "meters",
+  "up_axis": "+Y",
+  "forward_axis": "+Z",
+  "anatomical_right_axis": "-X",
+  "axis_note": "glTF Y-up. Actor faces +Z (Blender -Y, facing s=0 with BakeFacingRoot removed). Origin at ground between feet. Sword hand is -X, shield/sheath side is +X.",
+  "model_height_m": 1.85,
+  "bounding_box": {
+    "rest_pose_body": {
+      "min": [
+        -0.4848,
+        -0.0,
+        -0.2741
+      ],
+      "max": [
+        0.4761,
+        1.85,
+        0.2419
+      ]
+    },
+    "stand_frame1_body": {
+      "min": [
+        -0.4728,
+        -0.0,
+        -0.3
+      ],
+      "max": [
+        0.4836,
+        1.805,
+        0.4814
+      ]
+    }
+  },
+  "joint_count": 33,
+  "joint_names": [
+    "mixamorig:Hips",
+    "mixamorig:Spine",
+    "mixamorig:Spine1",
+    "mixamorig:Spine2",
+    "mixamorig:Neck",
+    "mixamorig:Head",
+    "mixamorig:HeadTop_End",
+    "mixamorig:LeftShoulder",
+    "mixamorig:LeftArm",
+    "mixamorig:LeftForeArm",
+    "mixamorig:LeftHand",
+    "mixamorig:LeftHandIndex1",
+    "mixamorig:LeftHandIndex2",
+    "mixamorig:LeftHandIndex3",
+    "mixamorig:LeftHandIndex4",
+    "mixamorig:RightShoulder",
+    "mixamorig:RightArm",
+    "mixamorig:RightForeArm",
+    "mixamorig:RightHand",
+    "mixamorig:RightHandIndex1",
+    "mixamorig:RightHandIndex2",
+    "mixamorig:RightHandIndex3",
+    "mixamorig:RightHandIndex4",
+    "mixamorig:LeftUpLeg",
+    "mixamorig:LeftLeg",
+    "mixamorig:LeftFoot",
+    "mixamorig:LeftToeBase",
+    "mixamorig:LeftToe_End",
+    "mixamorig:RightUpLeg",
+    "mixamorig:RightLeg",
+    "mixamorig:RightFoot",
+    "mixamorig:RightToeBase",
+    "mixamorig:RightToe_End"
+  ],
+  "skin": "Armature (single skin shared by body and Town_Scabbard_Frog)",
+  "max_joint_influences": 4,
+  "weights_normalized": true,
+  "tri_count": {
+    "total": 25740,
+    "body": 20228,
+    "per_node": {
+      "Shield_LEFT": 3208,
+      "Sword_RIGHT": 720,
+      "Sword_Town_Stowed": 720,
+      "Town_Scabbard": 108,
+      "Town_Scabbard_Frog": 648,
+      "Town_Scabbard_Gold_Chape": 108,
+      "Warrior_Textured_Rigged": 20228
+    }
+  },
+  "texture": {
+    "base_color_size": [
+      2048,
+      2048
+    ],
+    "format": "png",
+    "used_by": "Warrior_Textured_Rigged (both primitives)"
+  },
+  "equipment_nodes": [
+    "Sword_RIGHT",
+    "Shield_LEFT",
+    "Sword_Town_Stowed",
+    "Town_Scabbard",
+    "Town_Scabbard_Frog",
+    "Town_Scabbard_Gold_Chape"
+  ],
+  "equipment_attach": {
+    "Sword_RIGHT": {
+      "type": "bone_parented",
+      "joint": "mixamorig:RightHand"
+    },
+    "Shield_LEFT": {
+      "type": "bone_parented",
+      "joint": "mixamorig:LeftHand"
+    },
+    "Sword_Town_Stowed": {
+      "type": "bone_parented",
+      "joint": "mixamorig:Hips"
+    },
+    "Town_Scabbard": {
+      "type": "bone_parented",
+      "joint": "mixamorig:Hips"
+    },
+    "Town_Scabbard_Frog": {
+      "type": "skinned",
+      "joints": [
+        "mixamorig:Hips",
+        "mixamorig:Spine"
+      ]
+    },
+    "Town_Scabbard_Gold_Chape": {
+      "type": "bone_parented",
+      "joint": "mixamorig:Hips"
+    }
+  },
+  "equipment_material_note": "Equipment uses baked PBR textures (base colour, normal, metallic-roughness) from the procedural Blender materials, all in one shared atlas; factors are 1 (the chape keeps metallic 0.8 via its texels). Image order in the file is by first use: the body image is not images[0].",
+  "body_nodes": [
+    "Warrior_Textured_Rigged"
+  ],
+  "equipment_visibility": {
+    "rule": "show only the listed nodes for context x appearance; all other equipment nodes hidden",
+    "clip_context": {
+      "attack": "dungeon",
+      "walk": "dungeon",
+      "block": "dungeon",
+      "hit": "dungeon",
+      "cast": "dungeon",
+      "stand": "dungeon",
+      "death": "death",
+      "town_stand": "town",
+      "town_walk": "town"
+    },
+    "appearances": [
+      "sword_shield",
+      "sword",
+      "unarmed_shield",
+      "unarmed"
+    ],
+    "by_context": {
+      "dungeon": {
+        "sword_shield": [
+          "Sword_RIGHT",
+          "Town_Scabbard",
+          "Town_Scabbard_Frog",
+          "Town_Scabbard_Gold_Chape",
+          "Shield_LEFT"
+        ],
+        "sword": [
+          "Sword_RIGHT",
+          "Town_Scabbard",
+          "Town_Scabbard_Frog",
+          "Town_Scabbard_Gold_Chape"
+        ],
+        "unarmed_shield": [
+          "Shield_LEFT"
+        ],
+        "unarmed": []
+      },
+      "town": {
+        "sword_shield": [
+          "Sword_Town_Stowed",
+          "Town_Scabbard",
+          "Town_Scabbard_Frog",
+          "Town_Scabbard_Gold_Chape",
+          "Shield_LEFT"
+        ],
+        "sword": [
+          "Sword_Town_Stowed",
+          "Town_Scabbard",
+          "Town_Scabbard_Frog",
+          "Town_Scabbard_Gold_Chape"
+        ],
+        "unarmed_shield": [
+          "Shield_LEFT"
+        ],
+        "unarmed": []
+      },
+      "death": {
+        "sword_shield": [],
+        "sword": [],
+        "unarmed_shield": [],
+        "unarmed": []
+      }
+    },
+    "notes": [
+      "Town_Scabbard trio stays visible for sword appearances while alive, also outside town (empty sheath).",
+      "Sword_Town_Stowed only for armed town idle/walk; Sword_RIGHT hidden in town.",
+      "death hides all equipment.",
+      "No sword-draw transition is authored."
+    ]
+  },
+  "clips": [
+    {
+      "name": "attack",
+      "source_action": "warrior_attack",
+      "source_frame_range": [
+        1,
+        46
+      ],
+      "fps": 60,
+      "duration_s": 0.75,
+      "loop": false,
+      "gltf_keyframes": 46,
+      "sprite_sample_count": 16,
+      "context": "dungeon",
+      "hit_source_frame": 25.0,
+      "hit_time_s": 0.4,
+      "hit_note": "sprite sample 9 of 16 (samples 1,4,...46; duplicate49excluded)"
+    },
+    {
+      "name": "walk",
+      "source_action": "warrior_walk_grounded",
+      "source_frame_range": [
+        1,
+        67
+      ],
+      "fps": 60,
+      "duration_s": 1.1,
+      "loop": true,
+      "gltf_keyframes": 67,
+      "sprite_sample_count": 24,
+      "context": "dungeon",
+      "loop_note": "last keyframe duplicates first; wrap time modulo duration"
+    },
+    {
+      "name": "block",
+      "source_action": "warrior_block_shield_guard_torso_aligned",
+      "source_frame_range": [
+        1,
+        35
+      ],
+      "fps": 60,
+      "duration_s": 0.566667,
+      "loop": false,
+      "gltf_keyframes": 35,
+      "sprite_sample_count": 12,
+      "context": "dungeon",
+      "mocap_source_fps_note": "original mocap was 30 fps; retargeted 1:1 into the 60 fps scene, durations here are at 60 fps"
+    },
+    {
+      "name": "hit",
+      "source_action": "warrior_hit_shield_guard_torso_aligned",
+      "source_frame_range": [
+        1,
+        43
+      ],
+      "fps": 60,
+      "duration_s": 0.7,
+      "loop": false,
+      "gltf_keyframes": 43,
+      "sprite_sample_count": 12,
+      "context": "dungeon",
+      "mocap_source_fps_note": "original mocap was 30 fps; retargeted 1:1 into the 60 fps scene, durations here are at 60 fps"
+    },
+    {
+      "name": "cast",
+      "source_action": "warrior_cast_shield_guard_torso_aligned_grip_clear",
+      "source_frame_range": [
+        1,
+        179
+      ],
+      "fps": 60,
+      "duration_s": 2.966667,
+      "loop": false,
+      "gltf_keyframes": 179,
+      "sprite_sample_count": 24,
+      "context": "dungeon",
+      "mocap_source_fps_note": "original mocap was 30 fps; retargeted 1:1 into the 60 fps scene, durations here are at 60 fps"
+    },
+    {
+      "name": "death",
+      "source_action": "warrior_death_torso_aligned",
+      "source_frame_range": [
+        1,
+        139
+      ],
+      "fps": 60,
+      "duration_s": 2.3,
+      "loop": false,
+      "gltf_keyframes": 139,
+      "sprite_sample_count": 24,
+      "context": "death",
+      "mocap_source_fps_note": "original mocap was 30 fps; retargeted 1:1 into the 60 fps scene, durations here are at 60 fps",
+      "root_motion_note": "hips travel ~0.4 m backward/sideways as authored fall; not removed"
+    },
+    {
+      "name": "stand",
+      "source_action": "warrior_stand_reference_repair",
+      "source_frame_range": [
+        1,
+        121
+      ],
+      "fps": 60,
+      "duration_s": 2.0,
+      "loop": true,
+      "gltf_keyframes": 121,
+      "sprite_sample_count": 20,
+      "context": "dungeon",
+      "loop_note": "last keyframe duplicates first; wrap time modulo duration"
+    },
+    {
+      "name": "town_stand",
+      "source_action": "warrior_town_stand_reference_repair_side_carry_v3",
+      "source_frame_range": [
+        1,
+        241
+      ],
+      "fps": 60,
+      "duration_s": 4.0,
+      "loop": true,
+      "gltf_keyframes": 241,
+      "sprite_sample_count": 40,
+      "context": "town",
+      "loop_note": "last keyframe duplicates first; wrap time modulo duration"
+    },
+    {
+      "name": "town_walk",
+      "source_action": "warrior_town_walk_stowed_side_carry_v3",
+      "source_frame_range": [
+        1,
+        67
+      ],
+      "fps": 60,
+      "duration_s": 1.1,
+      "loop": true,
+      "gltf_keyframes": 67,
+      "sprite_sample_count": 24,
+      "context": "town",
+      "loop_note": "last keyframe duplicates first; wrap time modulo duration"
+    }
+  ],
+  "equipment_textures": {
+    "images": {
+      "Equip_Atlas_BaseColor": "sRGB base colour",
+      "Equip_Atlas_Normal": "tangent-space normal, OpenGL +Y (glTF), no vertex tangents exported: build the TBN from derivatives",
+      "Equip_Atlas_ORM": "metallicRoughnessTexture: R = 1, G = roughness, B = metallic"
+    },
+    "size": {
+      "warrior.glb": [
+        1024,
+        1024
+      ],
+      "warrior_1024.glb": [
+        512,
+        512
+      ]
+    },
+    "format": "png",
+    "used_by": [
+      "Shield_Old_Oak",
+      "Shield_Dark_Iron",
+      "Shield_Intentional_Grip_Contact",
+      "Equipment_Worn_Steel",
+      "Sword_Leather_Grip",
+      "Town_Scabbard_Dark_Red_Leather",
+      "Town_Frog_Brown_Leather",
+      "Town_Chape_Aged_Gold"
+    ],
+    "look": "shield: dark oak planks, iron rim, rivets and boss; sword: steel blade with lighter edges and a fuller, leather-wrapped grip, aged brass guard and pommel; scabbard: red leather with a gold chape"
+  }
+}

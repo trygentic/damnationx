@@ -1,17 +1,17 @@
 /**
  * @file clx_normal_map.cpp
  *
- * Per-sprite normal-plane generation and cache for the 2.5D hybrid lighting.
+ * Per-sprite normal-plane generation and cache for the 2.5D hybrid lighting (SPEC §7).
  *
- * Generation: the CLX frame is decoded into dense mask/luminance arrays held in one reused Scratch (with a
+ * Generation (§7.3): the CLX frame is decoded into dense mask/luminance arrays held in one reused Scratch (with a
  * one-pixel zero border so no neighbourhood pass needs a bounds check); a 3-4 chamfer distance transform drives a
  * silhouette dome (a table by chamfer distance), a Sobel of the palette luminance (de-lit by its opaque mean) adds
  * detail, the two are blended, mirrored on request and quantised through a 128x128 card-space direction->index table
- * built once from gbuffer::CardToTile + gbuffer::QuantizeNormal (the octahedral table specialised to the
+ * built once from gbuffer::CardToTile + gbuffer::QuantizeNormal (the octahedral table of §4.3 specialised to the
  * card hemisphere, which is all a sprite normal can span). Every pass visits only the pixels of each row's opaque
  * span, and the result is packed straight into the row-span layout (one byte per span column).
  *
- * Cache: keyed by pointer identity {pixelData, pixelDataSize, width, height, mirrored} with an
+ * Cache (§7.2): keyed by pointer identity {pixelData, pixelDataSize, width, height, mirrored} with an
  * open-addressing table and an intrusive LRU; every entry header and payload is carved from one arena
  * reserved by SetCacheBudget with a first-fit free list. HashPixels runs once per generated entry to match
  * authored overrides and to alias memcpy-duplicated frames (refcounted payload). Sprite memory that is freed
@@ -53,7 +53,7 @@ constexpr uint8_t MaskShadow = 2; // opaque, colour 0: ShadowByte, outside the s
 /**
  * Dense per-pixel working arrays for one frame, row 0 = feet row, with a one-pixel zero border on every side so the
  * neighbourhood passes need no bounds checks: pixel (x, y) lives at (y + 1) * stride + x + 1, stride = width + 2.
- * Grows to the largest frame seen and is reused.
+ * Grows to the largest frame seen and is reused (§7.3).
  */
 struct Scratch {
 	uint32_t width = 0;
@@ -221,7 +221,7 @@ bool DecodeFrame(ClxSprite sprite, const SDL_Color *palette, bool perceptual, Sc
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Generator
+// Generator (§7.3)
 // ---------------------------------------------------------------------------------------------------------
 
 /**
@@ -229,7 +229,7 @@ bool DecodeFrame(ClxSprite sprite, const SDL_Color *palette, bool perceptual, Sc
  * Everything outside the spans (including the frame edge) holds 0 from Scratch::prepare, so it counts as outside.
  * Each pass is split into a per-pixel gather from the neighbouring row (independent per pixel, vectorisable) and a
  * propagation along the row through a register-carried running value, so no pixel waits on a store to its
- * neighbour. The last stage also writes the silhouette dome height from the finished distance.
+ * neighbour. The last stage also writes the silhouette dome height (§7.3 step 3) from the finished distance.
  */
 void ChamferDistance(Scratch &s)
 {
@@ -380,12 +380,12 @@ struct NormalParams {
 	float detailStrength;
 	float meanGx;
 	float meanGy;
-	float mirrorSign; // -1 negates card x
+	float mirrorSign; // -1 negates card x (§7.3 step 6)
 };
 
 /**
  * Reciprocal square root from the bit-hack seed refined by Newton steps: one step is within 0.18 % (far inside the
- * ~15 degree LUT cells), two are within 5e-6. A handful of pipelined, vectorisable multiplies instead of an
+ * ~15 degree LUT cells, §4.3), two are within 5e-6. A handful of pipelined, vectorisable multiplies instead of an
  * fsqrt + fdiv chain per normalisation. Deterministic: fixed IEEE single-precision operations, no platform
  * intrinsics.
  */
@@ -403,7 +403,7 @@ DVL_ALWAYS_INLINE float FastRsqrt(float x)
 }
 
 /**
- * Dome normal, detail normal, blend and mirror for every span pixel, in place: gx/gy/lum
+ * §7.3 steps 3 (dome normal), 4b (detail normal), 5 (blend) and 6 (mirror) for every span pixel, in place: gx/gy/lum
  * become the unit card-space normal (cx right, cy up, cz toward the camera). Pure float arithmetic over the spans
  * (vectorises); what it leaves at non-body span pixels is never read.
  */
@@ -461,7 +461,7 @@ void BlendNormals(Scratch &s, const NormalParams &p)
 	}
 }
 
-/** Runs every frame-wide pass on a decoded frame; afterwards gx/gy/lum hold the card normals. */
+/** Runs every frame-wide pass of §7.3 (steps 2-6) on a decoded frame; afterwards gx/gy/lum hold the card normals. */
 void ComputeCardNormals(Scratch &s, const Options &opts, bool mirrored)
 {
 	BuildDomeTable(s, opts);
@@ -486,7 +486,7 @@ void ComputeCardNormals(Scratch &s, const Options &opts, bool mirrored)
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// Quantisation: 128x128 card-space direction -> LUT index table built once from
+// Quantisation (§4.3, §7.3 step 7): 128x128 card-space direction -> LUT index table built once from
 // gbuffer::CardToTile + gbuffer::QuantizeNormal. Every normal that reaches it is a unit vector with cz > 0 (generated
 // and authored alike), so (cx, cy) identifies the direction and the lookup needs neither the card->tile multiply
 // nor a projection: one table load per pixel.
@@ -580,7 +580,7 @@ inline Plane ViewPacked(const uint8_t *bytes, uint16_t width, uint16_t height)
 
 /**
  * Lays `out` out as a packed plane over the decoded spans and fills every span byte from `byteAt(i)`, `i` being the
- * Scratch index of that pixel. Returns a view into `out`.
+ * Scratch index of that pixel (§7.3 step 8). Returns a view into `out`.
  */
 template <typename ByteAt>
 Plane PackRowSpans(const Scratch &s, std::vector<uint8_t> &out, ByteAt byteAt)
@@ -615,7 +615,7 @@ Plane PackRowSpans(const Scratch &s, std::vector<uint8_t> &out, ByteAt byteAt)
 	return ViewPacked(out.data(), static_cast<uint16_t>(w), static_cast<uint16_t>(h));
 }
 
-/** Packs the computed card normals: Card byte / ShadowByte / 0. */
+/** Packs the computed card normals: Card byte / ShadowByte / 0 (§7.3 steps 7-8). */
 Plane PackGenerated(const Scratch &s, const Quantizer &q, std::vector<uint8_t> &out)
 {
 	const uint8_t *const mask = s.mask.data();
@@ -658,7 +658,7 @@ inline Key MakeKey(ClxSprite sprite, bool mirrored)
 	return k;
 }
 
-/** Cheap mix of the pointer key (no pixel hashing on lookup). */
+/** Cheap mix of the pointer key (no pixel hashing on lookup, §7.2). */
 inline uint64_t HashKey(const Key &k)
 {
 	uint64_t h = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(k.pixelData));
@@ -669,7 +669,7 @@ inline uint64_t HashKey(const Key &k)
 	return h ^ (h >> 29);
 }
 
-/** Authored override: packed lazily per mirrored flag over the first sprite seen with that content hash; never in the arena. */
+/** Authored override (§7.6): packed lazily per mirrored flag over the first sprite seen with that content hash; never in the arena. */
 struct AuthoredPlane {
 	uint16_t width = 0;
 	uint16_t height = 0;
@@ -725,7 +725,7 @@ struct FreeBlock {
 
 [[maybe_unused]] constexpr size_t DefaultNativeBudget = 64U * 1024U * 1024U;
 /**
- * Emscripten default, derived from the packed/dense ratio measured by clx_normal_map_benchmark
+ * Emscripten default, derived per SPEC §7.2 from the packed/dense ratio measured by clx_normal_map_benchmark
  * (BM_GeneratePlane/128 monster-like frame 0.27, disc.clx 0.37, ramp.clx 0.45; see test/fixtures/normal_map/README.md):
  *   frames      = 8 types x 616 frames/type x (2 of 6 anims: Stand, Walk) = 1643 frames at 128 px
  *   bytes/frame = 128*128*ratio + rowOffset (129*4) + rowX0 (128*2) + pad + payload header + entry header
@@ -1083,7 +1083,7 @@ AuthoredPlane *FindAuthored(Cache &c, uint64_t contentHash, uint16_t w, uint16_t
 	return a;
 }
 
-/** Packs the authored RGB normals over the sprite's opaque pixels (mirrored/converted/quantised like generated ones). */
+/** Packs the authored RGB normals over the sprite's opaque pixels (mirrored/converted/quantised like generated ones, §7.6). */
 bool BuildAuthoredPacked(Cache &c, AuthoredPlane &a, ClxSprite sprite, bool mirrored)
 {
 	const size_t m = mirrored ? 1 : 0;
@@ -1296,7 +1296,7 @@ Plane GetOrBuildNormalPlane(ClxSprite sprite, bool mirrored)
 			return EntryView(c, e);
 		}
 		// Queued (prewarm, or over budget in an earlier frame) but not yet generated: a miss under budget generates
-		// now instead of waiting for Pump to reach it in FIFO order. Pump skips entries that are no longer Queued.
+		// now (§7.4) instead of waiting for Pump to reach it in FIFO order. Pump skips entries that are no longer Queued.
 		++c.misses;
 		if (UnderFrameBudget(c) && BuildEntryNow(c, e))
 			return EntryView(c, e);
@@ -1370,7 +1370,7 @@ void RegisterAuthoredNormalMap(uint64_t contentHash, uint64_t materialVersion, s
 		c.authored.erase(it);
 	}
 	// Generated planes already cached for this content are superseded so that "authored wins" holds regardless of
-	// registration order. Queued entries resolve through FindAuthored when they are built.
+	// registration order (§7.6). Queued entries resolve through FindAuthored when they are built.
 	{
 		std::vector<Entry *> victims;
 		for (Entry *e : c.slots) {

@@ -2,7 +2,7 @@
  * @file dun_render_golden_test.cpp
  *
  * Classic byte-identity goldens for the dungeon tile blitter and the
- * G-buffer capture-mode coverage-parity checks.
+ * G-buffer capture-mode coverage-parity checks (SPEC §6.1, §12.1).
  *
  * Every case is driven through the public `RenderTileFrame` +
  * `FlushTileRenderCommands` pair into a 96x96 surface. Frames come from
@@ -389,7 +389,7 @@ std::vector<uint8_t> CopyPixels(const Surface &out)
 	return pixels;
 }
 
-/** Sentinel-filled G-buffer planes mirroring `out` (the test wires the globals instead of calling gbuffer::Allocate). */
+/** Sentinel-filled G-buffer planes mirroring `out` (gbuffer::Allocate is a T0 stub, so the test wires the globals). */
 struct TestPlanes {
 	std::vector<uint8_t> aux;
 	std::vector<uint8_t> base;
@@ -423,7 +423,7 @@ struct TestPlanes {
 	}
 };
 
-/** Equivalent of gbuffer::SetTileContext: fills the four globals the blitter reads. */
+/** Equivalent of gbuffer::SetTileContext (a T0 stub): fills the four globals the blitter reads. */
 void SetContext(gbuffer::Kind kind, uint8_t normal, int anchorRow, int leftX, gbuffer::FootKind foot)
 {
 	gbuffer::CurrentTileAux = gbuffer::PackAux(kind, normal);
@@ -440,7 +440,7 @@ struct TileContext {
 	gbuffer::FootKind foot;
 };
 
-/** The kind a world-pass caller would set for this frame shape (call sites). */
+/** The kind a world-pass caller would set for this frame shape (SPEC §6.1 call sites). */
 TileContext ContextFor(TileType tile)
 {
 	switch (tile) {

@@ -1523,16 +1523,17 @@ void HdUiGpuRelease()
 #include <string>
 
 #include "engine/render/hd_ui.hpp"
+#include "host/host_hooks.hpp"
 
 namespace devilution {
 
-bool HdUiGpuWanted() { return false; }
-bool HdUiGpuFetchIndex(std::string &, bool &failed)
+// Without WebGPU only an embedding host (Hd2D render mode, host/host_hd.cpp) draws the HD UI; it loads the sheets.
+bool HdUiGpuWanted() { return host::HdUiWanted(); }
+bool HdUiGpuFetchIndex(std::string &text, bool &failed)
 {
-	failed = true;
-	return false;
+	return host::HdFetchText("hd/ui.txt", text, failed);
 }
-bool HdUiGpuSheetReady(int) { return false; }
+bool HdUiGpuSheetReady(int) { return host::HdUiAvailable(); }
 
 } // namespace devilution
 

@@ -51,6 +51,12 @@ float WrapAngle(float radians);
 float DirectionToYaw(Direction dir);
 Direction YawToDirection(float yaw);
 
+/**
+ * Tile-step movement: the classic facing whose single tile step is closest to the world movement vector (dirX, dirZ)
+ * (x = tile x, z = tile y), e.g. (0, 1) = one tile toward +y = SouthWest.
+ */
+Direction StepDirectionFor(float dirX, float dirZ);
+
 /** Vertical FOV (degrees) for a horizontal FOV (degrees) at the given aspect (width / height). */
 float HorizontalToVerticalFov(float horizontalDeg, float aspect);
 

@@ -29,6 +29,10 @@
 #include "movie.h"
 #include "options.h"
 #include "pfile.h"
+#include "host/host_hooks.hpp"
+#ifdef DAMNATION_S1_BRIDGE
+#include "s1_bridge.hpp"
+#endif
 #include "storm/storm_net.hpp"
 #include "utils/language.h"
 
@@ -121,6 +125,8 @@ bool mainmenu_select_hero_dialog(GameData *gameData)
 	if (demo::IsRunning()) {
 		pfile_ui_set_hero_infos(DummyGetHeroInfo);
 		gbLoadGame = true;
+	} else if (host::SelectAutoStartHero(gameData)) {
+		// Embedded with --host-hero: the host picked (or created) the hero.
 	} else if (!gbIsMultiplayer) {
 		pSaveNumberFromOptions = gbIsHellfire ? &GetOptions().Hellfire.lastSinglePlayerHero : &GetOptions().Diablo.lastSinglePlayerHero;
 		gSaveNumber = **pSaveNumberFromOptions;
@@ -131,7 +137,11 @@ bool mainmenu_select_hero_dialog(GameData *gameData)
 		    pfile_ui_set_class_stats,
 		    &dlgresult,
 		    &gSaveNumber,
-		    &gameData->nDifficulty);
+		    &gameData->nDifficulty
+#ifdef DAMNATION_S1_BRIDGE
+		    , s1_bridge::HeroTick
+#endif
+		);
 
 		gbLoadGame = (dlgresult == SELHERO_CONTINUE);
 	} else {
@@ -174,7 +184,7 @@ void mainmenu_loop()
 		ApplyPendingSoundPack();
 #endif
 		_mainmenu_selections menu = MAINMENU_NONE;
-		if (demo::IsRunning())
+		if (demo::IsRunning() || host::TakeAutoStart())
 			menu = MAINMENU_SINGLE_PLAYER;
 #ifdef DEVILUTIONX_LOBBY
 		else if (static bool deepLinkAttempted = false; !deepLinkAttempted && !net::lobby::DeepLinkGameId().empty()) {
@@ -182,7 +192,11 @@ void mainmenu_loop()
 			menu = MAINMENU_MULTIPLAYER;
 		}
 #endif
-		else if (!UiMainMenuDialog(gszProductName, &menu, 30))
+		else if (!UiMainMenuDialog(gszProductName, &menu, 30
+#ifdef DAMNATION_S1_BRIDGE
+            , s1_bridge::MenuTick
+#endif
+        ))
 			app_fatal(_("Unable to display mainmenu"));
 
 		switch (menu) {

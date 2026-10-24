@@ -1,7 +1,8 @@
 /**
  * @file hd_tiles.hpp
  *
- * Opt-in HD (4x art, stored at 1..4 texels per game pixel) level tiles in the WebGPU browser build (`?hdTiles=1`): town and Cathedral walls, roofs, trees, bridges, rocks, graves, pillars,
+ * Opt-in HD (4x art, stored at 1..4 texels per game pixel) level tiles in the WebGPU browser build (`?hdTiles=1`,
+ * DamnationX HD runtime contract v1 section 3): town and Cathedral walls, roofs, trees, bridges, rocks, graves, pillars,
  * arches, doors, stairs and floors.
  *
  * The classic renderer stays the source of visibility and draw order: every piece is still drawn into the 8-bit back

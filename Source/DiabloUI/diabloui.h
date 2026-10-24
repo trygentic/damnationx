@@ -91,10 +91,10 @@ void UnloadUiGFX();
 void UiInitialize();
 bool UiValidPlayerName(std::string_view name); /* check */
 void UiSelHeroMultDialog(bool (*fninfo)(bool (*fninfofunc)(_uiheroinfo *)), bool (*fncreate)(_uiheroinfo *), bool (*fnremove)(_uiheroinfo *), void (*fnstats)(HeroClass, _uidefaultstats *), _selhero_selections *dlgresult, uint32_t *saveNumber);
-void UiSelHeroSingDialog(bool (*fninfo)(bool (*fninfofunc)(_uiheroinfo *)), bool (*fncreate)(_uiheroinfo *), bool (*fnremove)(_uiheroinfo *), void (*fnstats)(HeroClass, _uidefaultstats *), _selhero_selections *dlgresult, uint32_t *saveNumber, _difficulty *difficulty);
+void UiSelHeroSingDialog(bool (*fninfo)(bool (*fninfofunc)(_uiheroinfo *)), bool (*fncreate)(_uiheroinfo *), bool (*fnremove)(_uiheroinfo *), void (*fnstats)(HeroClass, _uidefaultstats *), _selhero_selections *dlgresult, uint32_t *saveNumber, _difficulty *difficulty, bool (*autoContinue)() = nullptr);
 bool UiCreditsDialog();
 bool UiSupportDialog();
-bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int attractTimeOut);
+bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int attractTimeOut, bool (*autoStart)() = nullptr);
 bool UiProgressDialog(int (*fnfunc)());
 bool UiSelectGame(GameData *gameData, int *playerId);
 bool UiSelectProvider(GameData *gameData);

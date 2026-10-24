@@ -80,7 +80,7 @@ struct LightSpec {
 
 /**
  * Wires sentinel-free planes over the benchmark surface and a wall tile context for the
- * duration of a capture-mode run (without going through gbuffer::Allocate/SetTileContext).
+ * duration of a capture-mode run (gbuffer::Allocate/SetTileContext are stubs until T1 lands).
  */
 class CaptureScope {
 public:

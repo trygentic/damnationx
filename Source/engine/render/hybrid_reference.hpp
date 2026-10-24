@@ -20,7 +20,7 @@ struct MaskTexel {
 	float r = 1.0F, g = 1.0F, b = 1.0F, a = 0.0F;
 };
 
-/** Mirrors GpuHybridParams + GpuPresentParams field for field. */
+/** Mirrors GpuHybridParams + GpuPresentParams (SPEC §9.1) field for field. */
 struct Params {
 	float originX = 0.0F, originY = 0.0F;                                          // screenOriginViewport.xy
 	uint32_t viewportHeight = 0;                                                   // screenOriginViewport.z / present.values.x (output rows)
@@ -51,12 +51,12 @@ struct Mask {
 struct Footprint {
 	Vec2 lo, hi;
 };
-using Volume = std::span<const uint32_t>; // gridW * gridH cells (layout)
+using Volume = std::span<const uint32_t>; // gridW * gridH cells (SPEC §8.1 layout)
 using Lut = std::span<const std::array<float, 4>, 32>;
 using Emissive = std::span<const float, 256>;
 using Palette = std::span<const Rgb, 256>; // sRGB 0..1
 
-// ---- prelude ----
+// ---- prelude (§9.2) ----
 [[nodiscard]] bool IsWallKind(uint32_t kind);
 [[nodiscard]] bool HasHeight(uint32_t kind);
 [[nodiscard]] bool PassThrough(uint32_t kind);
@@ -65,7 +65,7 @@ using Palette = std::span<const Rgb, 256>; // sRGB 0..1
 [[nodiscard]] uint32_t AuxTexelAt(const Planes &planes, Point px);
 [[nodiscard]] uint32_t IndexTexelAt(const Planes &planes, Point px);
 
-// ---- compute pass ----
+// ---- compute pass (§9.3) ----
 [[nodiscard]] Vec2 ScreenToWorld(Vec2 screen, const Params &p);
 [[nodiscard]] uint32_t CellRaw(Point c, Volume v, const Params &p);
 [[nodiscard]] uint32_t CellForMarch(Point c, Volume v, const Params &p);
@@ -104,7 +104,7 @@ struct Receiver {
 [[nodiscard]] MaskTexel LightTexel(Point maskTexel, const Planes &planes, Volume v, std::span<const Light> lights, Lut lut, const Params &p);
 void RunLightPass(Mask &mask, const Planes &planes, Volume v, std::span<const Light> lights, Lut lut, const Params &p);
 
-// ---- present pass ----
+// ---- present pass (§9.4, §9.5) ----
 [[nodiscard]] Rgb SrgbToLinear(Rgb c);
 [[nodiscard]] Rgb LinearToSrgb(Rgb c);
 [[nodiscard]] float PaletteEmissiveAt(Emissive e, uint32_t idx);

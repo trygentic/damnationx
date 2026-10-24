@@ -1,7 +1,7 @@
 /**
  * @file hd_tiles_core.hpp
  *
- * Engine-independent parts of the opt-in HD level tiles: the
+ * Engine-independent parts of the opt-in HD level tiles (DamnationX HD runtime contract v1, section 3): the
  * hd/tiles-<tileset>.txt manifest parser and lookup, and the "dynamic write" plane that tells which HD tile texels the
  * characters, items, missiles and UI drawn after them hide.
  *

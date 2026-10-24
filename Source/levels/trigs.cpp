@@ -107,11 +107,6 @@ bool IsWarpOpen(dungeon_type type)
 	return false;
 }
 
-bool IsTownCathedralPortalEnabled()
-{
-	return *GetOptions().Gameplay.cathedralPortal;
-}
-
 void InitTownTriggers()
 {
 	numtrigs = 0;
@@ -149,13 +144,6 @@ void InitTownTriggers()
 		trigs[numtrigs].position = { 36, 24 };
 		trigs[numtrigs]._tmsg = WM_DIABTOWNWARP;
 		trigs[numtrigs]._tlvl = 21;
-		numtrigs++;
-	}
-
-	// Portal to the Cathedral beside the fountain (last, so the classic town triggers keep their indices)
-	if (IsTownCathedralPortalEnabled()) {
-		trigs[numtrigs].position = TownCathedralPortalPosition;
-		trigs[numtrigs]._tmsg = WM_DIABNEXTLVL;
 		numtrigs++;
 	}
 
@@ -362,13 +350,6 @@ void InitVPTriggers()
 
 bool ForceTownTrig()
 {
-	if (IsTownCathedralPortalEnabled() && EntranceBoundaryContains(TownCathedralPortalPosition, cursPosition)) {
-		InfoString = _("Portal to");
-		AddInfoBoxString(_("The Cathedral"));
-		cursPosition = TownCathedralPortalPosition;
-		return true;
-	}
-
 	for (const uint16_t tileId : TownDownList) {
 		if (dPiece[cursPosition.x][cursPosition.y] == tileId) {
 			InfoString = _("Down to dungeon");

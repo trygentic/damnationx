@@ -26,13 +26,17 @@
 #include "multi.h"
 #include "nthread.h"
 #include "options.h"
+#include "items.h"
 #include "player.h"
+#include "tables/itemdat.h"
 #include "fpv/fpv_viewmodel_inputs.hpp"
+#include "fpv/view_provider.hpp"
 #include "render3d/fpv_contract.hpp"
 #include "render3d/gltf_model.hpp"
 #include "render3d/world_renderer.hpp"
 #include "render3d/world_shaders.hpp"
 #include "utils/log.hpp"
+#include "utils/str_cat.hpp"
 #include "utils/ui_fwd.h"
 
 namespace devilution::render3d {
@@ -41,12 +45,15 @@ namespace {
 using skm::Mat4;
 using skm::Vec3;
 
-// The model ships in the HD art pack (hd/3d/warrior/), not with the game. Without it the HD sprites are drawn.
+// The models ship in the HD art pack (hd/3d/<class>/), not with the game. Without one the HD sprites are drawn.
 #if defined(__EMSCRIPTEN__) || defined(__ANDROID__)
-// 1024 px base colour: a quarter of the browser download, and half the GPU memory on phones.
-constexpr char ModelAsset[] = "hd/3d/warrior/warrior_1024.glb";
+// Textures at most 1024 px: a quarter of the browser download, and half the GPU memory on phones.
+#define DVL_SKINNED_VARIANT "_1024"
+/** Longest side of the texture pages (equipment, normal and metallic-roughness maps). */
+constexpr int MaxPageSize = 512;
 #else
-constexpr char ModelAsset[] = "hd/3d/warrior/warrior.glb";
+#define DVL_SKINNED_VARIANT ""
+constexpr int MaxPageSize = 1024;
 #endif
 
 constexpr float Pi = 3.14159265358979F;
@@ -54,8 +61,12 @@ constexpr float Pi = 3.14159265358979F;
 constexpr float AttackHitTime = 0.4F;
 /** Angular speed of the smoothed facing (rad/s): an 8-way turn of 180 degrees takes ~0.16 s. */
 constexpr float TurnSpeed = 20.0F;
+/** Palette entries the shader holds (joints + rigid mesh nodes). */
+constexpr size_t MaxPalette = 128;
+/** Mesh parts the visibility mask covers. */
+constexpr size_t MaxParts = 128;
 
-// ---- Bake camera and lights (warrior_bake.blend, converted from Blender Z-up to glTF Y-up) ----
+// ---- Bake camera and lights (handoff warrior_bake.blend, converted from Blender Z-up to glTF Y-up) ----
 constexpr float BakeOrthoWidth = 4.403918743F; // meters across the 640 px frame
 constexpr float BakeElevationDeg = 35.0F;
 struct BakeLight {
@@ -75,10 +86,8 @@ constexpr float BakeExposure = 0.70710678F; // -0.5 EV
 
 // ---- Model state ----
 enum class LoadState : uint8_t { Unloaded, Loading, Loaded, Failed };
-LoadState State = LoadState::Unloaded;
 /** The GPU side failed (shader / pipeline / resources): draw the prerendered sprites instead. */
 bool GpuBroken = false;
-GltfModel Model;
 /** One decoded image mip chain, RGBA8, level 0 first. */
 struct ImageLevel {
 	int width = 0;
@@ -86,33 +95,151 @@ struct ImageLevel {
 	std::vector<uint8_t> pixels;
 };
 using MipChain = std::vector<ImageLevel>;
-/** Decoded GltfModel::images (same indices); an empty chain when an image could not be decoded. */
-std::vector<MipChain> Images;
-/**
- * The texture sets the shader samples: the body's base colour (Model.bodyImage) and the equipment's base colour,
- * tangent-space normal and metallic-roughness atlases (the first material using each, e.g. the baked sword / shield
- * atlas). Indices into Images, -1 when absent.
- */
-struct TextureSets {
-	int body = -1;
-	int equipBase = -1;
-	int equipNormal = -1;
-	int equipMr = -1;
-} Textures;
 
-struct ClipIds {
-	int stand = -1, walk = -1, townStand = -1, townWalk = -1, attack = -1, block = -1, hit = -1, cast = -1, death = -1;
-} Clips;
+/** Bit set over mesh parts (GltfModel::partNames indices). */
+using PartMask = std::array<uint32_t, MaxParts / 32>;
 
-struct PartBits {
-	uint32_t swordRight = 0, shield = 0, swordStowed = 0, scabbard = 0, frog = 0, chape = 0;
-	uint32_t equipment = 0; // every equipment part
-} Parts;
-
-uint32_t PartBit(std::string_view name)
+void SetPart(PartMask &mask, int part)
 {
-	const int part = Model.findPart(name);
-	return part >= 0 && part < 32 ? 1U << part : 0U;
+	if (part >= 0 && static_cast<size_t>(part) < MaxParts)
+		mask[static_cast<size_t>(part) / 32] |= 1U << (part % 32);
+}
+
+bool HasPart(const PartMask &mask, int part)
+{
+	return part >= 0 && static_cast<size_t>(part) < MaxParts && (mask[static_cast<size_t>(part) / 32] & (1U << (part % 32))) != 0;
+}
+
+/** Actions of the character clips (`<action>` or `<action>_<family>` in the glTF). */
+enum class Action : uint8_t { Stand, Walk, TownStand, TownWalk, Attack, Block, Hit, Cast, Death, Count };
+constexpr std::array<std::string_view, static_cast<size_t>(Action::Count)> ActionNames { "stand", "walk", "town_stand", "town_walk", "attack", "block", "hit", "cast",
+	"death" };
+
+/** Weapon families of the clips, in PlayerWeaponGraphic order. */
+constexpr std::array<std::string_view, 9> FamilyNames { "unarmed", "unarmed_shield", "sword", "sword_shield", "bow", "axe", "mace", "mace_shield", "staff" };
+/** The family without its shield (sword_shield -> sword), the next clip tried when a shield clip is missing. */
+constexpr std::array<uint8_t, 9> FamilyWithoutShield { 0, 0, 2, 2, 4, 5, 6, 6, 8 };
+
+/** What a part is: the body (always drawn) or a state of an equipment item. */
+enum class PartKind : uint8_t { Body, InHand, TwoHanded, Stowed, SheathEmpty, Shield, Scabbard, BowInHand, Quiver, Arrow };
+
+/** The 3D characters. ViewModel is the first-person weapon model (its sword and shield must be rigid mesh nodes). */
+enum class CharacterId : uint8_t { Warrior, Rogue, ViewModel, Count };
+
+struct CharacterInfo {
+	const char *label;
+	std::array<const char *, 2> files; // tried in order
+};
+constexpr std::array<CharacterInfo, static_cast<size_t>(CharacterId::Count)> CharacterInfos { {
+	{ "3D warrior", { "hd/3d/warrior/warrior" DVL_SKINNED_VARIANT ".glb", nullptr } },
+	{ "3D rogue", { "hd/3d/rogue/rogue" DVL_SKINNED_VARIANT ".glb", nullptr } },
+	// Older packs have only the warrior model, which carries the rigid sword and shield the viewmodel needs.
+	{ "3D viewmodel", { "hd/3d/warrior/warrior_viewmodel" DVL_SKINNED_VARIANT ".glb", "hd/3d/warrior/warrior" DVL_SKINNED_VARIANT ".glb" } },
+} };
+
+struct Character {
+	CharacterId id = CharacterId::Warrior;
+	LoadState state = LoadState::Unloaded;
+	size_t fileIndex = 0;
+	std::string file;
+	GltfModel model;
+	/** Decoded GltfModel::images (same indices); an empty chain when an image could not be decoded. */
+	std::vector<MipChain> images;
+	/**
+	 * Textures: the body's base colour keeps its own texture (Model.bodyImage); every other image is a layer of the
+	 * colour pages (sRGB, base colour maps) or the data pages (linear: normal and metallic-roughness maps), resized to
+	 * one page size. colourLayer / dataLayer: image -> layer, -1 when not in that array.
+	 */
+	std::vector<int> colourLayer;
+	std::vector<int> dataLayer;
+	/** clips[action][family]: the clip index, -1 when the model has none for it (or a fallback). */
+	std::array<std::array<int, FamilyNames.size()>, static_cast<size_t>(Action::Count)> clips {};
+	std::vector<PartKind> partKinds;
+	PartMask bodyParts {};
+	/** Stand / walk clips exist (the model is usable). */
+	bool usable = false;
+#if DEVILUTIONX_WEBGPU
+	// GPU (WebGPU section below)
+	WGPUBuffer vertexBuffer = nullptr;
+	WGPUBuffer indexBuffer = nullptr;
+	WGPUBuffer materialBuffer = nullptr;
+	WGPUTexture baseColor = nullptr;
+	WGPUTextureView baseColorView = nullptr;
+	WGPUTexture colourPages = nullptr;
+	WGPUTextureView colourPagesView = nullptr;
+	WGPUTexture dataPages = nullptr;
+	WGPUTextureView dataPagesView = nullptr;
+	WGPUBindGroup bindGroup = nullptr;
+#endif
+	bool gpuFailed = false;
+
+	[[nodiscard]] const char *label() const { return CharacterInfos[static_cast<size_t>(id)].label; }
+#if DEVILUTIONX_WEBGPU
+	[[nodiscard]] bool gpuReady() const { return state == LoadState::Loaded && bindGroup != nullptr && !gpuFailed; }
+#endif
+};
+
+std::array<Character, static_cast<size_t>(CharacterId::Count)> Characters = [] {
+	std::array<Character, static_cast<size_t>(CharacterId::Count)> characters;
+	for (size_t i = 0; i < characters.size(); ++i)
+		characters[i].id = static_cast<CharacterId>(i);
+	return characters;
+}();
+
+/** The character the functions below work on (set by the entry points before building a pose or a draw). */
+Character *Cur = &Characters[0];
+
+Character &CharacterOf(CharacterId id)
+{
+	return Characters[static_cast<size_t>(id)];
+}
+
+/** The model drawing `player`, or nullptr for a class without one. */
+Character *CharacterFor(const Player &player)
+{
+	// Developer knob: DVL_W3D_CHARACTER=warrior|rogue draws every hero with that model (e.g. the rogue on shareware).
+	static const char *Override = std::getenv("DVL_W3D_CHARACTER");
+	if (Override != nullptr) {
+		const std::string_view name = Override;
+		if (name == "warrior")
+			return &CharacterOf(CharacterId::Warrior);
+		if (name == "rogue")
+			return &CharacterOf(CharacterId::Rogue);
+	}
+	switch (player._pClass) {
+	case HeroClass::Warrior: return &CharacterOf(CharacterId::Warrior);
+	case HeroClass::Rogue: return &CharacterOf(CharacterId::Rogue);
+	default: return nullptr;
+	}
+}
+
+bool EndsWith(std::string_view text, std::string_view suffix)
+{
+	return text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix;
+}
+
+/** Part naming of the character exports (README of the HD characters): `<Item>_RIGHT`, `_TWOHANDED`, `_Town_Stowed`, ... */
+PartKind KindOfPart(std::string_view name)
+{
+	if (EndsWith(name, "_TWOHANDED"))
+		return PartKind::TwoHanded;
+	if (EndsWith(name, "_Town_Stowed"))
+		return PartKind::Stowed;
+	if (EndsWith(name, "_Sheath_Empty"))
+		return PartKind::SheathEmpty;
+	if (EndsWith(name, "_LEFT"))
+		return PartKind::Shield;
+	if (EndsWith(name, "_RIGHT"))
+		return PartKind::InHand;
+	if (name.starts_with("Town_Scabbard") || name.starts_with("Scabbard_"))
+		return PartKind::Scabbard;
+	if (name.starts_with("Quiver"))
+		return PartKind::Quiver;
+	if (name.starts_with("Arrow_"))
+		return PartKind::Arrow;
+	if (name.starts_with("Bow_"))
+		return PartKind::BowInHand;
+	return PartKind::Body;
 }
 
 bool DecodeImage(const std::vector<uint8_t> &bytes, MipChain &chain)
@@ -150,155 +277,298 @@ bool DecodeImage(const std::vector<uint8_t> &bytes, MipChain &chain)
 #endif
 	chain.clear();
 	chain.push_back(std::move(level));
-	// Box-filtered mips: the 2048 px texture covers a ~250 px tall figure.
-	while (chain.back().width > 1 || chain.back().height > 1) {
-		const ImageLevel &source = chain.back();
-		ImageLevel next;
-		next.width = std::max(source.width / 2, 1);
-		next.height = std::max(source.height / 2, 1);
-		next.pixels.resize(static_cast<size_t>(next.width) * next.height * 4);
-		for (int y = 0; y < next.height; ++y) {
-			for (int x = 0; x < next.width; ++x) {
-				for (int c = 0; c < 4; ++c) {
-					int sum = 0;
-					for (int dy = 0; dy < 2; ++dy) {
-						for (int dx = 0; dx < 2; ++dx) {
-							const int sx = std::min(x * 2 + dx, source.width - 1);
-							const int sy = std::min(y * 2 + dy, source.height - 1);
-							sum += source.pixels[(static_cast<size_t>(sy) * source.width + sx) * 4 + c];
-						}
-					}
-					next.pixels[(static_cast<size_t>(y) * next.width + x) * 4 + c] = static_cast<uint8_t>((sum + 2) / 4);
-				}
-			}
-		}
-		chain.push_back(std::move(next));
-	}
 	return true;
 #endif
 }
 
-/** Fetches the model from the HD pack; Loading while the browser fetch is in flight. */
-LoadState LoadModel()
+ImageLevel HalveImage(const ImageLevel &image)
+{
+	ImageLevel half;
+	half.width = std::max(image.width / 2, 1);
+	half.height = std::max(image.height / 2, 1);
+	half.pixels.resize(static_cast<size_t>(half.width) * half.height * 4);
+	for (int y = 0; y < half.height; ++y) {
+		for (int x = 0; x < half.width; ++x) {
+			for (int c = 0; c < 4; ++c) {
+				int sum = 0;
+				for (int k = 0; k < 4; ++k) {
+					const int sx = std::min(x * 2 + (k & 1), image.width - 1);
+					const int sy = std::min(y * 2 + (k >> 1), image.height - 1);
+					sum += image.pixels[(static_cast<size_t>(sy) * image.width + sx) * 4 + c];
+				}
+				half.pixels[(static_cast<size_t>(y) * half.width + x) * 4 + c] = static_cast<uint8_t>((sum + 2) / 4);
+			}
+		}
+	}
+	return half;
+}
+
+/** Box-filtered mips below chain[0] (2 x 2 averages, odd sizes clamp). */
+void BuildMips(MipChain &chain)
+{
+	chain.resize(1);
+	while (chain.back().width > 1 || chain.back().height > 1)
+		chain.push_back(HalveImage(chain.back()));
+}
+
+/** `image` resampled to size x size (box-halved while more than twice as large, then bilinear). */
+ImageLevel ResizeImage(ImageLevel image, int size)
+{
+	while (image.width >= size * 2 && image.height >= size * 2)
+		image = HalveImage(image);
+	if (image.width == size && image.height == size)
+		return image;
+	ImageLevel out;
+	out.width = size;
+	out.height = size;
+	out.pixels.resize(static_cast<size_t>(size) * size * 4);
+	for (int y = 0; y < size; ++y) {
+		const float fy = std::max((static_cast<float>(y) + 0.5F) * static_cast<float>(image.height) / static_cast<float>(size) - 0.5F, 0.0F);
+		const int y0 = std::min(static_cast<int>(fy), image.height - 1);
+		const int y1 = std::min(y0 + 1, image.height - 1);
+		const float ty = fy - static_cast<float>(y0);
+		for (int x = 0; x < size; ++x) {
+			const float fx = std::max((static_cast<float>(x) + 0.5F) * static_cast<float>(image.width) / static_cast<float>(size) - 0.5F, 0.0F);
+			const int x0 = std::min(static_cast<int>(fx), image.width - 1);
+			const int x1 = std::min(x0 + 1, image.width - 1);
+			const float tx = fx - static_cast<float>(x0);
+			for (int c = 0; c < 4; ++c) {
+				const auto at = [&](int sx, int sy) { return static_cast<float>(image.pixels[(static_cast<size_t>(sy) * image.width + sx) * 4 + c]); };
+				const float top = at(x0, y0) + (at(x1, y0) - at(x0, y0)) * tx;
+				const float bottom = at(x0, y1) + (at(x1, y1) - at(x0, y1)) * tx;
+				out.pixels[(static_cast<size_t>(y) * size + x) * 4 + c] = static_cast<uint8_t>(std::clamp(top + (bottom - top) * ty + 0.5F, 0.0F, 255.0F));
+			}
+		}
+	}
+	return out;
+}
+
+int FindClipIn(const GltfModel &model, Action action, size_t family)
+{
+	const std::string_view actionName = ActionNames[static_cast<size_t>(action)];
+	if (const int clip = model.findClip(StrCat(actionName, "_", FamilyNames[family])); clip >= 0)
+		return clip;
+	if (const size_t base = FamilyWithoutShield[family]; base != family) {
+		if (const int clip = model.findClip(StrCat(actionName, "_", FamilyNames[base])); clip >= 0)
+			return clip;
+	}
+	return model.findClip(actionName);
+}
+
+/** Fetches `c`'s model from the HD pack; Loading while the browser fetch is in flight. */
+LoadState LoadCharacter(Character &c)
 {
 	const auto start = std::chrono::steady_clock::now();
+	const CharacterInfo &info = CharacterInfos[static_cast<size_t>(c.id)];
 #if DEVILUTIONX_WEBGPU
 	std::string file;
-	bool fetchFailed = false;
-	if (!hd_loader::FetchText(ModelAsset, file, fetchFailed, /*optional=*/true)) {
+	while (true) {
+		const char *asset = c.fileIndex < info.files.size() ? info.files[c.fileIndex] : nullptr;
+		if (asset == nullptr) {
+			Log("{}: {} is not in the HD pack; drawing the HD sprites", c.label(), info.files[0]);
+			return LoadState::Failed;
+		}
+		bool fetchFailed = false;
+		if (hd_loader::FetchText(asset, file, fetchFailed, /*optional=*/true)) {
+			c.file = asset;
+			break;
+		}
 		if (!fetchFailed)
 			return LoadState::Loading;
-		Log("3D warrior: {} is not in the HD pack; drawing the HD sprites", ModelAsset);
-		return LoadState::Failed;
+		++c.fileIndex;
 	}
 	const std::string_view bytes = file;
 #else
 	const std::string_view bytes;
 	return LoadState::Failed;
 #endif
+	GltfModel &model = c.model;
 	std::string error;
-	if (!LoadGltfModel(std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()), Model, error)) {
-		LogError("3D warrior: {}: {}", ModelAsset, error);
+	if (!LoadGltfModel(std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size()), model, error)) {
+		LogError("{}: {}: {}", c.label(), c.file, error);
 		return LoadState::Failed;
 	}
-	Images.assign(Model.images.size(), {});
-	for (size_t i = 0; i < Model.images.size(); ++i) {
-		if (!DecodeImage(Model.images[i].bytes, Images[i]))
-			LogError("3D warrior: could not decode image {} ({})", i, Model.images[i].mimeType);
-		Model.images[i].bytes.clear();
-		Model.images[i].bytes.shrink_to_fit();
-	}
-	if (Model.bodyImage >= 0 && Images[static_cast<size_t>(Model.bodyImage)].empty()) {
-		LogError("3D warrior: could not decode the base colour image");
+	if (model.paletteSize() > MaxPalette || model.partNames.size() > MaxParts) {
+		LogError("{}: {} palette entries, {} parts (max {}, {})", c.label(), model.paletteSize(), model.partNames.size(), MaxPalette, MaxParts);
 		return LoadState::Failed;
 	}
-	Model.imageBytes.clear();
-	Model.imageBytes.shrink_to_fit();
-	// Texture sets: the body's base colour, then the first equipment material's base colour / normal / metallic-roughness.
-	const auto decoded = [](int image) { return image >= 0 && !Images[static_cast<size_t>(image)].empty() ? image : -1; };
-	Textures = {};
-	Textures.body = decoded(Model.bodyImage);
-	for (const GltfMaterial &material : Model.materials) {
-		if (Textures.equipBase < 0 && material.baseColorImage != Model.bodyImage)
-			Textures.equipBase = decoded(material.baseColorImage);
-		if (Textures.equipNormal < 0)
-			Textures.equipNormal = decoded(material.normalImage);
-		if (Textures.equipMr < 0)
-			Textures.equipMr = decoded(material.metallicRoughnessImage);
+	c.images.assign(model.images.size(), {});
+	for (size_t i = 0; i < model.images.size(); ++i) {
+		if (!DecodeImage(model.images[i].bytes, c.images[i]))
+			LogError("{}: could not decode image {} ({})", c.label(), i, model.images[i].mimeType);
+		model.images[i].bytes.clear();
+		model.images[i].bytes.shrink_to_fit();
 	}
-	if (Model.paletteSize() > 64) {
-		LogError("3D warrior: {} palette entries (max 64)", Model.paletteSize());
+	model.imageBytes.clear();
+	model.imageBytes.shrink_to_fit();
+	if (model.bodyImage >= 0 && c.images[static_cast<size_t>(model.bodyImage)].empty()) {
+		LogError("{}: could not decode the base colour image", c.label());
 		return LoadState::Failed;
 	}
-	Clips.stand = Model.findClip("stand");
-	Clips.walk = Model.findClip("walk");
-	Clips.townStand = Model.findClip("town_stand");
-	Clips.townWalk = Model.findClip("town_walk");
-	Clips.attack = Model.findClip("attack");
-	Clips.block = Model.findClip("block");
-	Clips.hit = Model.findClip("hit");
-	Clips.cast = Model.findClip("cast");
-	Clips.death = Model.findClip("death");
-	if (Clips.stand < 0 || Clips.walk < 0) {
-		LogError("3D warrior: the stand / walk clips are missing");
+
+	// Texture layers: base colour maps (other than the body's) in the colour pages, normal and metallic-roughness maps in
+	// the data pages.
+	c.colourLayer.assign(model.images.size(), -1);
+	c.dataLayer.assign(model.images.size(), -1);
+	int colourLayers = 0;
+	int dataLayers = 0;
+	const auto decoded = [&](int image) { return image >= 0 && static_cast<size_t>(image) < c.images.size() && !c.images[static_cast<size_t>(image)].empty(); };
+	for (const GltfMaterial &material : model.materials) {
+		if (decoded(material.baseColorImage) && material.baseColorImage != model.bodyImage && c.colourLayer[static_cast<size_t>(material.baseColorImage)] < 0)
+			c.colourLayer[static_cast<size_t>(material.baseColorImage)] = colourLayers++;
+		for (const int image : { material.normalImage, material.metallicRoughnessImage }) {
+			if (decoded(image) && c.dataLayer[static_cast<size_t>(image)] < 0)
+				c.dataLayer[static_cast<size_t>(image)] = dataLayers++;
+		}
+	}
+	if (decoded(model.bodyImage))
+		BuildMips(c.images[static_cast<size_t>(model.bodyImage)]);
+
+	c.clips = {};
+	for (size_t action = 0; action < ActionNames.size(); ++action) {
+		for (size_t family = 0; family < FamilyNames.size(); ++family)
+			c.clips[action][family] = FindClipIn(model, static_cast<Action>(action), family);
+	}
+	const auto clip = [&](Action action) { return c.clips[static_cast<size_t>(action)][0]; };
+	c.usable = clip(Action::Stand) >= 0 && clip(Action::Walk) >= 0;
+	if (!c.usable) {
+		LogError("{}: the stand / walk clips are missing", c.label());
 		return LoadState::Failed;
 	}
-	Parts.swordRight = PartBit("Sword_RIGHT");
-	Parts.shield = PartBit("Shield_LEFT");
-	Parts.swordStowed = PartBit("Sword_Town_Stowed");
-	Parts.scabbard = PartBit("Town_Scabbard");
-	Parts.frog = PartBit("Town_Scabbard_Frog");
-	Parts.chape = PartBit("Town_Scabbard_Gold_Chape");
-	Parts.equipment = Parts.swordRight | Parts.shield | Parts.swordStowed | Parts.scabbard | Parts.frog | Parts.chape;
+	c.partKinds.clear();
+	c.bodyParts = {};
+	for (size_t part = 0; part < model.partNames.size(); ++part) {
+		const PartKind kind = part == 0 ? PartKind::Body : KindOfPart(model.partNames[part]);
+		c.partKinds.push_back(kind);
+		if (kind == PartKind::Body)
+			SetPart(c.bodyParts, static_cast<int>(part));
+	}
 	const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
-	const auto width = [](int image) { return image >= 0 ? Images[static_cast<size_t>(image)][0].width : 0; };
-	Log("3D warrior: {} vertices, {} triangles, {} joints, {} clips, {} px body texture, equipment {} / {} / {} px ({} ms)", Model.vertices.size(),
-	    Model.indices.size() / 3, Model.joints.size(), Model.clips.size(), width(Textures.body), width(Textures.equipBase), width(Textures.equipNormal),
-	    width(Textures.equipMr), elapsed);
+	const int bodyWidth = decoded(model.bodyImage) ? c.images[static_cast<size_t>(model.bodyImage)][0].width : 0;
+	Log("{}: {} vertices, {} triangles, {} joints, {} parts, {} clips, {} px body texture, {} colour + {} data pages ({} ms)", c.label(), model.vertices.size(),
+	    model.indices.size() / 3, model.joints.size(), model.partNames.size(), model.clips.size(), bodyWidth, colourLayers, dataLayers, elapsed);
 	return LoadState::Loaded;
+}
+
+/** Loads `c` on the first call; false while loading or after it failed (logged once). */
+bool CharacterLoaded(Character &c)
+{
+	if (c.state == LoadState::Unloaded || c.state == LoadState::Loading)
+		c.state = LoadCharacter(c);
+	return c.state == LoadState::Loaded;
 }
 
 // ---- Pose from the player ----
 
 struct Pose {
+	CharacterId character = CharacterId::Warrior;
 	int clip = -1;
 	float time = 0.0F;
 	bool loop = false;
-	uint32_t visibleParts = 1; // the body
-	float worldYaw = 0.0F;     // fpv_contract yaw
+	PartMask visibleParts {};
+	float worldYaw = 0.0F; // fpv_contract yaw
 };
 
-enum class Appearance : uint8_t { SwordShield, Sword, UnarmedShield, Unarmed };
-
-Appearance AppearanceOf(const Player &player)
+/** The mesh base name of an item (its base type, e.g. "Short Sword" -> "Short_Sword"), "" for none. */
+std::string ItemMeshName(const Item &item)
 {
-	switch (static_cast<PlayerWeaponGraphic>(player._pgfxnum & 0xF)) {
-	case PlayerWeaponGraphic::UnarmedShield:
-		return Appearance::UnarmedShield;
-	case PlayerWeaponGraphic::Sword:
-	case PlayerWeaponGraphic::Axe:
-	case PlayerWeaponGraphic::Mace:
-		return Appearance::Sword;
-	case PlayerWeaponGraphic::SwordShield:
-	case PlayerWeaponGraphic::MaceShield:
-		return Appearance::SwordShield;
-	default: // unarmed, bow, staff: the model has no such weapon
-		return Appearance::Unarmed;
+	if (item.isEmpty() || item.IDidx < 0 || static_cast<size_t>(item.IDidx) >= AllItemsList.size())
+		return {};
+	std::string name = AllItemsList[static_cast<size_t>(item.IDidx)].iName;
+	if (name == "Quarter Staff")
+		name = "Short Staff"; // the export's Short Staff stands in for it
+	std::replace(name.begin(), name.end(), ' ', '_');
+	std::replace(name.begin(), name.end(), '-', '_');
+	return name;
+}
+
+/** The family default mesh name when an item has none of its own (Flail, Maul, Two-Handed Sword, ...). */
+std::string_view DefaultMeshName(ItemType type)
+{
+	switch (type) {
+	case ItemType::Sword: return "Sword";
+	case ItemType::Axe: return "Axe";
+	case ItemType::Mace: return "Mace";
+	case ItemType::Staff: return "Staff";
+	case ItemType::Shield: return "Shield";
+	default: return {};
 	}
 }
 
-/** warrior_manifest.json equipment_visibility.by_context. */
-uint32_t VisibleParts(Appearance appearance, bool inTown, bool dead)
+/** First part named `base` + one of `suffixes`, else `fallback` + one of them; -1 for none. */
+int FindItemPart(const Character &c, std::string_view base, std::string_view fallback, std::initializer_list<std::string_view> suffixes)
 {
-	uint32_t parts = ~Parts.equipment; // the body (and anything not listed)
+	for (const std::string_view name : { base, fallback }) {
+		if (name.empty())
+			continue;
+		for (const std::string_view suffix : suffixes) {
+			if (const int part = c.model.findPart(StrCat(name, suffix)); part >= 0)
+				return part;
+		}
+	}
+	return -1;
+}
+
+/**
+ * The parts drawn for `player`: the body, the equipped weapon in hand (in the dungeon) or stowed (in town) with its
+ * empty sheath or scabbard, the shield, and for a bow its limbs, string and quiver (the nocked arrow while attacking).
+ * Dead characters drop their equipment, like the prerendered sprites.
+ */
+PartMask EquipmentParts(const Character &c, const Player &player, bool inTown, bool dead, bool attacking)
+{
+	PartMask parts = c.bodyParts;
 	if (dead)
 		return parts;
-	const bool sword = appearance == Appearance::Sword || appearance == Appearance::SwordShield;
-	const bool shield = appearance == Appearance::SwordShield || appearance == Appearance::UnarmedShield;
-	if (sword)
-		parts |= (inTown ? Parts.swordStowed : Parts.swordRight) | Parts.scabbard | Parts.frog | Parts.chape;
-	if (shield)
-		parts |= Parts.shield;
+	const auto setKind = [&](PartKind kind) {
+		for (size_t part = 0; part < c.partKinds.size(); ++part) {
+			if (c.partKinds[part] == kind)
+				SetPart(parts, static_cast<int>(part));
+		}
+	};
+	for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+		const Item &item = player.InvBody[hand];
+		if (item.isEmpty())
+			continue;
+		const std::string name = ItemMeshName(item);
+		const std::string_view fallback = DefaultMeshName(item._itype);
+		switch (item._itype) {
+		case ItemType::Shield:
+			SetPart(parts, FindItemPart(c, name, fallback, { "_LEFT" }));
+			break;
+		case ItemType::Bow:
+			if (inTown) {
+				SetPart(parts, c.model.findPart("Bow_Town_Stowed"));
+			} else {
+				setKind(PartKind::BowInHand);
+				if (attacking)
+					setKind(PartKind::Arrow);
+			}
+			setKind(PartKind::Quiver);
+			break;
+		case ItemType::Sword:
+		case ItemType::Axe:
+		case ItemType::Mace:
+		case ItemType::Staff: {
+			int weapon = inTown ? FindItemPart(c, name, fallback, { "_Town_Stowed" }) : -1;
+			if (weapon < 0)
+				weapon = FindItemPart(c, name, fallback, { "_RIGHT", "_TWOHANDED" });
+			if (weapon < 0 && !inTown)
+				weapon = c.model.findPart("Sword_RIGHT"); // a model with only a sword (the viewmodel) shows it for any weapon
+			SetPart(parts, weapon);
+			if (item._itype == ItemType::Sword) {
+				// Drawn: the item's own empty sheath, else the generic scabbard; stowed, the scabbard holds it.
+				const int sheath = inTown ? -1 : FindItemPart(c, name, {}, { "_Sheath_Empty" });
+				if (sheath >= 0)
+					SetPart(parts, sheath);
+				else if (FindItemPart(c, name, {}, { "_Sheath_Empty" }) < 0)
+					setKind(PartKind::Scabbard);
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
 	return parts;
 }
 
@@ -355,45 +625,66 @@ float SmoothedYaw(const Player &player)
 	return state.yaw;
 }
 
-bool BuildPose(const Player &player, Pose &pose)
+/** The action of the player's current game animation. */
+Action ActionOf(const Player &player, bool inTown)
 {
-	const bool inTown = leveltype == DTYPE_TOWN;
-	const player_graphic graphic = player.getGraphic();
-	const float progress = AnimationProgress(player.AnimInfo);
-	int clip = -1;
-	switch (graphic) {
-	case player_graphic::Stand:
-		clip = inTown && Clips.townStand >= 0 ? Clips.townStand : Clips.stand;
-		break;
-	case player_graphic::Walk:
-		clip = inTown && Clips.townWalk >= 0 ? Clips.townWalk : Clips.walk;
-		break;
-	case player_graphic::Attack:
-		clip = Clips.attack;
-		break;
-	case player_graphic::Block:
-		clip = Clips.block;
-		break;
-	case player_graphic::Hit:
-		clip = Clips.hit;
-		break;
+	switch (player.getGraphic()) {
+	case player_graphic::Stand: return inTown ? Action::TownStand : Action::Stand;
+	case player_graphic::Walk: return inTown ? Action::TownWalk : Action::Walk;
+	case player_graphic::Attack: return Action::Attack;
+	case player_graphic::Block: return Action::Block;
+	case player_graphic::Hit: return Action::Hit;
 	case player_graphic::Lightning:
 	case player_graphic::Fire:
-	case player_graphic::Magic:
-		clip = Clips.cast;
-		break;
-	case player_graphic::Death:
-		clip = Clips.death;
-		break;
+	case player_graphic::Magic: return Action::Cast;
+	case player_graphic::Death: return Action::Death;
 	}
+	return Action::Stand;
+}
+
+/**
+ * The clip for `action` with the player's weapon family; town actions fall back to the dungeon ones, block / hit / cast
+ * to stand. -1 for death without a death clip: the caller draws the prerendered sprite instead of a standing corpse.
+ */
+int ClipFor(const Character &c, Action action, size_t family)
+{
+	const auto get = [&](Action a) { return c.clips[static_cast<size_t>(a)][family]; };
+	int clip = get(action);
+	if (clip < 0 && action == Action::TownStand)
+		clip = get(Action::Stand);
+	if (clip < 0 && action == Action::TownWalk)
+		clip = get(Action::Walk);
+	if (clip < 0 && (action == Action::Block || action == Action::Hit || action == Action::Cast))
+		clip = get(Action::Stand);
+	return clip;
+}
+
+size_t FamilyOf(const Player &player)
+{
+	return std::min<size_t>(player._pgfxnum & 0xF, FamilyNames.size() - 1);
+}
+
+/** The pose of `player` with its class's model (Cur is set to it); false when it cannot be drawn with the model. */
+bool BuildPose(const Player &player, Pose &pose)
+{
+	Character *character = CharacterFor(player);
+	if (character == nullptr || character->state != LoadState::Loaded)
+		return false;
+	Cur = character;
+	const GltfModel &model = character->model;
+	const bool inTown = leveltype == DTYPE_TOWN;
+	const float progress = AnimationProgress(player.AnimInfo);
+	const Action action = ActionOf(player, inTown);
+	const int clip = ClipFor(*character, action, FamilyOf(player));
 	if (clip < 0)
-		clip = Clips.stand;
-	const GltfClip &source = Model.clips[clip];
+		return false;
+	const GltfClip &source = model.clips[static_cast<size_t>(clip)];
+	pose.character = character->id;
 	pose.clip = clip;
-	pose.loop = clip == Clips.stand || clip == Clips.walk || clip == Clips.townStand || clip == Clips.townWalk;
+	pose.loop = action == Action::Stand || action == Action::Walk || action == Action::TownStand || action == Action::TownWalk;
 	if (pose.loop) {
 		pose.time = progress * source.duration;
-	} else if (clip == Clips.attack && source.duration > AttackHitTime) {
+	} else if (action == Action::Attack && source.duration > AttackHitTime) {
 		// Align the game's action frame (the hit, AnimInfo frame _pAFNum - 1) with the clip's hit at 0.4 s.
 		const float frames = static_cast<float>(std::max<int>(player.AnimInfo.numberOfFrames, 2));
 		const float hitFrame = std::clamp(static_cast<float>(player._pAFNum - 1), 1.0F, frames - 1.0F);
@@ -406,7 +697,7 @@ bool BuildPose(const Player &player, Pose &pose)
 	}
 	if (!pose.loop)
 		pose.time = std::min(pose.time, source.duration);
-	pose.visibleParts = VisibleParts(AppearanceOf(player), inTown, graphic == player_graphic::Death);
+	pose.visibleParts = EquipmentParts(*character, player, inTown, action == Action::Death, action == Action::Attack);
 	pose.worldYaw = SmoothedYaw(player);
 	return true;
 }
@@ -415,11 +706,12 @@ std::vector<NodePose> ScratchPose;
 std::vector<Mat4> ScratchGlobals;
 std::vector<Mat4> ScratchPalette;
 
+/** Palette of `pose` with Cur's model into the scratch buffers. */
 void ComputePosePalette(const Pose &pose)
 {
-	SampleClip(Model, pose.clip, pose.time, pose.loop, ScratchPose);
-	ComputeGlobalMatrices(Model, ScratchPose, ScratchGlobals);
-	ComputePalette(Model, ScratchGlobals, ScratchPalette);
+	SampleClip(Cur->model, pose.clip, pose.time, pose.loop, ScratchPose);
+	ComputeGlobalMatrices(Cur->model, ScratchPose, ScratchGlobals);
+	ComputePalette(Cur->model, ScratchGlobals, ScratchPalette);
 }
 
 // ---- Imposter requests (world pass) ----
@@ -435,7 +727,8 @@ std::array<ImposterRequest, MAX_PLRS> Requests;
 bool SkinnedPlayerWanted(const Player &player)
 {
 #if DEVILUTIONX_WEBGPU
-	return player._pClass == HeroClass::Warrior && *GetOptions().Graphics.warrior3dModel && State != LoadState::Failed && !GpuBroken;
+	const Character *character = CharacterFor(player);
+	return character != nullptr && *GetOptions().Graphics.warrior3dModel && character->state != LoadState::Failed && !character->gpuFailed && !GpuBroken;
 #else
 	(void)player;
 	return false;
@@ -444,9 +737,7 @@ bool SkinnedPlayerWanted(const Player &player)
 
 bool SkinnedModelLoaded()
 {
-	if (State == LoadState::Unloaded || State == LoadState::Loading)
-		State = LoadModel();
-	return State == LoadState::Loaded;
+	return CharacterLoaded(CharacterOf(CharacterId::Warrior));
 }
 
 float SkinnedPlayerYaw(const Player &player)
@@ -462,7 +753,8 @@ void SkinnedBeginWorldPass()
 
 bool SkinnedRequestImposter(const Player &player, int clip)
 {
-	if (!SkinnedPlayerWanted(player) || !SkinnedModelLoaded() || clip < 0)
+	Character *character = CharacterFor(player);
+	if (!SkinnedPlayerWanted(player) || character == nullptr || !CharacterLoaded(*character) || clip < 0)
 		return false;
 	const size_t id = player.getId();
 	if (id >= Requests.size())
@@ -496,27 +788,28 @@ struct Draw {
   params: vec4f,        // exposure, light count, diffuse wrap, 1 = the target is *Srgb (write linear)
   ambientUp: vec4f,     // viewmodel (world lit): rim light colour
   ambientDown: vec4f,   // viewmodel (world lit): fill
-  visible: vec4u,       // x: part mask; y, z: palette entry mask (entries 0-31, 32-63) used when w != 0 (viewmodel);
+  visible: vec4u,       // x: unused; y, z: palette entry mask (entries 0-31, 32-63) used when w != 0 (viewmodel);
                         // w: 0 actor / imposter, 1 viewmodel, 2 viewmodel whose world light 0 is the player's own
+  parts: vec4u,         // visible mesh parts 0-127 (bit set)
   rim: vec4f,           // viewmodel: world direction towards the rim light (xyz), strength
   glow: vec4f,          // spell glow colour (rgb), strength (0: none)
   glowCentre: vec4f,    // spell glow centre (world xyz), radius
   lights: array<Light, 16>,
-  palette: array<mat4x4f, 64>,
+  palette: array<mat4x4f, 128>,
 };
 struct Material {
   baseColor: vec4f,
-  params: vec4f, // metallic, roughness, specular factor, base colour texture (0 none, 1 body, 2 equipment atlas)
-  maps: vec4f,   // equipment normal map (0 / 1), metallic-roughness map (0 / 1), normal scale, unused
+  params: vec4f, // metallic, roughness, specular factor, base colour texture (0 none, 1 body, 2 colour page)
+  maps: vec4f,   // normal map (0 / 1), metallic-roughness map (0 / 1), normal scale, unused
+  layers: vec4f, // colour page of the base colour, data pages of the normal and metallic-roughness maps
 };
 
 @group(0) @binding(0) var<uniform> draw: Draw;
 @group(0) @binding(1) var<storage, read> materials: array<Material>;
 @group(0) @binding(2) var baseColorTexture: texture_2d<f32>;
 @group(0) @binding(3) var baseColorSampler: sampler;
-@group(0) @binding(4) var equipBaseTexture: texture_2d<f32>;
-@group(0) @binding(5) var equipNormalTexture: texture_2d<f32>;
-@group(0) @binding(6) var equipMrTexture: texture_2d<f32>;
+@group(0) @binding(4) var colourPages: texture_2d_array<f32>; // base colour maps other than the body's (sRGB)
+@group(0) @binding(5) var dataPages: texture_2d_array<f32>;   // normal and metallic-roughness maps (linear)
 
 struct VertexInput {
   @location(0) position: vec3f,
@@ -536,8 +829,8 @@ struct VertexOutput {
 
 @vertex fn vertexMain(v: VertexInput) -> VertexOutput {
   var out: VertexOutput;
-  let part = (v.packed >> 8u) & 31u;
-  if ((draw.visible.x & (1u << part)) == 0u) {
+  let part = (v.packed >> 8u) & 127u;
+  if ((draw.parts[part >> 5u] & (1u << (part & 31u))) == 0u) {
     // Hidden equipment: outside the depth range, so the whole triangle is clipped.
     out.clip = vec4f(0.0, 0.0, -2.0, 1.0);
     out.world = vec3f(0.0);
@@ -546,7 +839,7 @@ struct VertexOutput {
     out.material = 0u;
     return out;
   }
-  let j = min(v.joints, vec4u(63u));
+  let j = min(v.joints, vec4u(127u));
   if (draw.visible.w != 0u) {
     // Viewmodel: keep only the vertices mostly weighted to the selected palette entries (arm, hand, weapon).
     var kept = 0.0;
@@ -620,15 +913,15 @@ struct SurfaceInput {
 
 // Material inputs. Every texture is sampled and the derivatives taken before any branch (uniform control flow).
 fn surfaceInput(input: VertexOutput, front: bool) -> SurfaceInput {
+  let m = materials[input.material];
   let bodyTexel = textureSample(baseColorTexture, baseColorSampler, input.uv).rgb;
-  let equipTexel = textureSample(equipBaseTexture, baseColorSampler, input.uv).rgb;
-  let normalTexel = textureSample(equipNormalTexture, baseColorSampler, input.uv).xyz;
-  let mrTexel = textureSample(equipMrTexture, baseColorSampler, input.uv).rgb;
+  let equipTexel = textureSample(colourPages, baseColorSampler, input.uv, i32(m.layers.x)).rgb;
+  let normalTexel = textureSample(dataPages, baseColorSampler, input.uv, i32(m.layers.y)).xyz;
+  let mrTexel = textureSample(dataPages, baseColorSampler, input.uv, i32(m.layers.z)).rgb;
   let dp1 = dpdx(input.world);
   let dp2 = dpdy(input.world);
   let duv1 = dpdx(input.uv);
   let duv2 = dpdy(input.uv);
-  let m = materials[input.material];
   var s: SurfaceInput;
   s.albedo = m.baseColor.rgb;
   if (m.params.w > 1.5) {
@@ -839,6 +1132,12 @@ fn viewModelShade(p: vec3f, s: SurfaceInput) -> vec3f {
   let display = pow(s.albedo, vec3f(1.0 / 2.2));
   return vec4f(worldShade(input.world, s.n, display, false), 1.0);
 }
+
+// Planar shadow of an actor (its model matrix flattened onto the floor): translucent black. Every shadow fragment lies
+// on the same plane and the depth test is Less, so each pixel is darkened once however many triangles overlap.
+@fragment fn fragmentShadow(input: VertexOutput) -> @location(0) vec4f {
+  return vec4f(0.0, 0.0, 0.0, draw.rim.w);
+}
 )";
 
 /**
@@ -911,20 +1210,22 @@ struct alignas(16) GpuDraw {
 	std::array<float, 4> ambientUp;
 	std::array<float, 4> ambientDown;
 	std::array<uint32_t, 4> visible;
+	PartMask parts;
 	std::array<float, 4> rim;        // viewmodel: world direction towards the rim light, strength
 	std::array<float, 4> glow;       // spell glow colour, strength
 	std::array<float, 4> glowCentre; // spell glow centre (world), radius
 	std::array<GpuLight, 16> lights;
-	std::array<std::array<float, 16>, 64> palette;
+	std::array<std::array<float, 16>, MaxPalette> palette;
 };
-static_assert(sizeof(GpuDraw) == 4928);
-constexpr uint64_t DrawSlotStride = 5120; // 256-aligned dynamic offsets
+static_assert(sizeof(GpuDraw) == 9040);
+constexpr uint64_t DrawSlotStride = 9216; // 256-aligned dynamic offsets
 constexpr uint32_t DrawSlots = 64;
 
 struct GpuMaterial {
 	std::array<float, 4> baseColor;
-	std::array<float, 4> params; // metallic, roughness, specular, base colour texture (0 none, 1 body, 2 equipment)
+	std::array<float, 4> params; // metallic, roughness, specular, base colour texture (0 none, 1 body, 2 colour page)
 	std::array<float, 4> maps;   // normal map, metallic-roughness map, normal scale, unused
+	std::array<float, 4> layers; // colour page, normal data page, metallic-roughness data page
 };
 
 /** One viewmodel effect draw (EffectsShaderSource `Fx`). */
@@ -946,6 +1247,7 @@ struct PipelineKey {
 	uint32_t samples;
 	bool imposter;
 	bool worldLit = false; // lit by the world pass's frame uniforms (group 0), see WorldLitFragmentSource
+	bool shadow = false;   // worldLit only: the planar shadow (fragmentShadow, alpha blended)
 	bool operator==(const PipelineKey &) const = default;
 };
 
@@ -954,10 +1256,7 @@ struct ImposterSlot {
 	int height = 0;
 	WGPUTexture texture = nullptr; // 2 width x height: [colour | normal]
 	WGPUTextureView view = nullptr;
-	uint64_t generation = 0;
 };
-
-uint64_t ImposterGeneration = 0;
 
 /** 4x MSAA colour + normal + depth and their single-sample resolves, shared by the slots rendered one after another. */
 struct RenderTargets {
@@ -971,15 +1270,8 @@ struct Gpu {
 	WGPUDevice device = nullptr;
 	WGPUQueue queue = nullptr;
 	bool failed = false;
-	WGPUBuffer vertexBuffer = nullptr;
-	WGPUBuffer indexBuffer = nullptr;
-	WGPUBuffer materialBuffer = nullptr;
+	/** Shared by every character (each has its own buffers, textures and bind group, see Character). */
 	WGPUBuffer drawBuffer = nullptr;
-	WGPUTexture baseColor = nullptr;
-	WGPUTextureView baseColorView = nullptr;
-	/** Equipment atlases: base colour (sRGB), tangent-space normal and metallic-roughness (linear). */
-	std::array<WGPUTexture, 3> equipTextures {};
-	std::array<WGPUTextureView, 3> equipViews {};
 	WGPUSampler sampler = nullptr;
 	/** Viewmodel effects (motion trail, cast glow): own module, layout and per-frame uniform slots. */
 	WGPUShaderModule fxShader = nullptr;
@@ -999,7 +1291,8 @@ struct Gpu {
 	bool rendererRegistered = false;
 	WGPUBindGroupLayout bindGroupLayout = nullptr;
 	WGPUPipelineLayout pipelineLayout = nullptr;
-	WGPUBindGroup bindGroup = nullptr;
+	/** The shared resources exist (shaders, layouts, draw buffer, sampler). */
+	bool sharedReady = false;
 	std::vector<std::pair<PipelineKey, WGPURenderPipeline>> pipelines;
 	uint32_t slotsUsed = 0;
 	bool loggedSlots = false;
@@ -1106,58 +1399,161 @@ WGPUTexture CreateTexture(const char *label, int width, int height, WGPUTextureF
 	return wgpuDeviceCreateTexture(G.device, &descriptor);
 }
 
-bool CreateModelResources()
+/** Uploads `levels` (mip chain, level 0 first) into layer `layer` of `texture`. */
+void WriteLevels(WGPUTexture texture, const MipChain &levels, uint32_t layer)
 {
-	G.vertexBuffer = CreateBuffer("DamnationX skinned vertices", WGPUBufferUsage_Vertex, Model.vertices.size() * sizeof(SkinnedVertex), Model.vertices.data());
-	G.indexBuffer = CreateBuffer("DamnationX skinned indices", WGPUBufferUsage_Index, Model.indices.size() * sizeof(uint32_t), Model.indices.data());
+	for (size_t level = 0; level < levels.size(); ++level) {
+		const ImageLevel &source = levels[level];
+		WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+		destination.texture = texture;
+		destination.mipLevel = static_cast<uint32_t>(level);
+		destination.origin = { 0, 0, layer };
+		WGPUTexelCopyBufferLayout layout = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
+		layout.bytesPerRow = static_cast<uint32_t>(source.width * 4);
+		layout.rowsPerImage = static_cast<uint32_t>(source.height);
+		const WGPUExtent3D extent = { static_cast<uint32_t>(source.width), static_cast<uint32_t>(source.height), 1 };
+		wgpuQueueWriteTexture(G.queue, &destination, source.pixels.data(), source.pixels.size(), &layout, &extent);
+	}
+}
+
+/**
+ * A 2D array texture of the images whose layer `layerOf` gives, each resized to one square page size (the largest
+ * image side, at most MaxPageSize); a single 1 x 1 `fallbackTexel` layer when there are none.
+ */
+bool CreatePages(const char *label, const Character &c, const std::vector<int> &layerOf, std::array<uint8_t, 4> fallbackTexel, WGPUTextureFormat format,
+    WGPUTexture &texture, WGPUTextureView &view)
+{
+	int layers = 0;
+	int size = 1;
+	for (size_t image = 0; image < layerOf.size(); ++image) {
+		if (layerOf[image] < 0)
+			continue;
+		layers = std::max(layers, layerOf[image] + 1);
+		const ImageLevel &level = c.images[image][0];
+		size = std::max({ size, level.width, level.height });
+	}
+	size = std::min(size, MaxPageSize);
+	MipChain fallback { ImageLevel { 1, 1, { fallbackTexel[0], fallbackTexel[1], fallbackTexel[2], fallbackTexel[3] } } };
+	if (layers == 0)
+		size = 1;
+	MipChain mips;
+	uint32_t mipCount = 1;
+	for (int s = size; s > 1; s /= 2)
+		++mipCount;
+	WGPUTextureDescriptor descriptor = WGPU_TEXTURE_DESCRIPTOR_INIT;
+	descriptor.label = View(label);
+	descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst;
+	descriptor.dimension = WGPUTextureDimension_2D;
+	descriptor.size = { static_cast<uint32_t>(size), static_cast<uint32_t>(size), static_cast<uint32_t>(std::max(layers, 1)) };
+	descriptor.format = format;
+	descriptor.mipLevelCount = mipCount;
+	texture = wgpuDeviceCreateTexture(G.device, &descriptor);
+	if (texture == nullptr)
+		return false;
+	if (layers == 0) {
+		WriteLevels(texture, fallback, 0);
+	} else {
+		for (size_t image = 0; image < layerOf.size(); ++image) {
+			if (layerOf[image] < 0)
+				continue;
+			mips.clear();
+			mips.push_back(ResizeImage(c.images[image][0], size));
+			BuildMips(mips);
+			WriteLevels(texture, mips, static_cast<uint32_t>(layerOf[image]));
+		}
+	}
+	WGPUTextureViewDescriptor viewDescriptor = WGPU_TEXTURE_VIEW_DESCRIPTOR_INIT;
+	viewDescriptor.dimension = WGPUTextureViewDimension_2DArray;
+	view = wgpuTextureCreateView(texture, &viewDescriptor);
+	return view != nullptr;
+}
+
+/** Buffers, textures and bind group of one character (needs the shared resources). */
+bool CreateCharacterResources(Character &c)
+{
+	const GltfModel &model = c.model;
+	c.vertexBuffer = CreateBuffer("DamnationX skinned vertices", WGPUBufferUsage_Vertex, model.vertices.size() * sizeof(SkinnedVertex), model.vertices.data());
+	c.indexBuffer = CreateBuffer("DamnationX skinned indices", WGPUBufferUsage_Index, model.indices.size() * sizeof(uint32_t), model.indices.data());
+	const auto layer = [](const std::vector<int> &layerOf, int image) {
+		return image >= 0 && static_cast<size_t>(image) < layerOf.size() ? layerOf[static_cast<size_t>(image)] : -1;
+	};
+	const bool hasBody = model.bodyImage >= 0 && !c.images[static_cast<size_t>(model.bodyImage)].empty();
 	std::vector<GpuMaterial> materials;
-	for (const GltfMaterial &material : Model.materials) {
+	for (const GltfMaterial &material : model.materials) {
 		float baseTexture = 0.0F;
-		if (material.textured && material.baseColorImage == Textures.body && Textures.body >= 0)
+		const int colourLayer = layer(c.colourLayer, material.baseColorImage);
+		if (material.textured && hasBody && material.baseColorImage == model.bodyImage)
 			baseTexture = 1.0F;
-		else if (material.textured && material.baseColorImage == Textures.equipBase && Textures.equipBase >= 0)
+		else if (material.textured && colourLayer >= 0)
 			baseTexture = 2.0F;
-		const bool normalMap = material.normalImage >= 0 && material.normalImage == Textures.equipNormal;
-		const bool mrMap = material.metallicRoughnessImage >= 0 && material.metallicRoughnessImage == Textures.equipMr;
+		const int normalLayer = layer(c.dataLayer, material.normalImage);
+		const int mrLayer = layer(c.dataLayer, material.metallicRoughnessImage);
 		materials.push_back({ { material.baseColor[0], material.baseColor[1], material.baseColor[2], material.baseColor[3] },
 		    { material.metallic, material.roughness, material.specular, baseTexture },
-		    { normalMap ? 1.0F : 0.0F, mrMap ? 1.0F : 0.0F, material.normalScale, 0.0F } });
+		    { normalLayer >= 0 ? 1.0F : 0.0F, mrLayer >= 0 ? 1.0F : 0.0F, material.normalScale, 0.0F },
+		    { static_cast<float>(std::max(colourLayer, 0)), static_cast<float>(std::max(normalLayer, 0)), static_cast<float>(std::max(mrLayer, 0)), 0.0F } });
 	}
-	G.materialBuffer = CreateBuffer("DamnationX skinned materials", WGPUBufferUsage_Storage, materials.size() * sizeof(GpuMaterial), materials.data());
-	G.drawBuffer = CreateBuffer("DamnationX skinned draws", WGPUBufferUsage_Uniform, DrawSlotStride * DrawSlots, nullptr);
+	c.materialBuffer = CreateBuffer("DamnationX skinned materials", WGPUBufferUsage_Storage, materials.size() * sizeof(GpuMaterial), materials.data());
 
-	// Textures with their mips; 1 x 1 stand-ins (white, flat normal, white metallic-roughness) for the missing ones.
-	const auto upload = [](const char *label, int image, std::array<uint8_t, 4> fallbackTexel, WGPUTextureFormat format, WGPUTexture &texture,
-	                        WGPUTextureView &view) {
-		MipChain fallback;
-		const MipChain *levels = image >= 0 ? &Images[static_cast<size_t>(image)] : nullptr;
-		if (levels == nullptr || levels->empty()) {
-			fallback.push_back({ 1, 1, { fallbackTexel[0], fallbackTexel[1], fallbackTexel[2], fallbackTexel[3] } });
-			levels = &fallback;
-		}
-		texture = CreateTexture(label, (*levels)[0].width, (*levels)[0].height, format, WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst, 1,
-		    static_cast<uint32_t>(levels->size()));
-		if (texture == nullptr)
-			return;
-		for (size_t level = 0; level < levels->size(); ++level) {
-			const ImageLevel &source = (*levels)[level];
-			WGPUTexelCopyTextureInfo destination = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
-			destination.texture = texture;
-			destination.mipLevel = static_cast<uint32_t>(level);
-			WGPUTexelCopyBufferLayout layout = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
-			layout.bytesPerRow = static_cast<uint32_t>(source.width * 4);
-			layout.rowsPerImage = static_cast<uint32_t>(source.height);
-			const WGPUExtent3D extent = { static_cast<uint32_t>(source.width), static_cast<uint32_t>(source.height), 1 };
-			wgpuQueueWriteTexture(G.queue, &destination, source.pixels.data(), source.pixels.size(), &layout, &extent);
-		}
-		view = wgpuTextureCreateView(texture, nullptr);
-	};
-	upload("DamnationX skinned base colour", Textures.body, { 255, 255, 255, 255 }, WGPUTextureFormat_RGBA8UnormSrgb, G.baseColor, G.baseColorView);
-	upload("DamnationX equipment base colour", Textures.equipBase, { 255, 255, 255, 255 }, WGPUTextureFormat_RGBA8UnormSrgb, G.equipTextures[0], G.equipViews[0]);
-	upload("DamnationX equipment normal", Textures.equipNormal, { 128, 128, 255, 255 }, WGPUTextureFormat_RGBA8Unorm, G.equipTextures[1], G.equipViews[1]);
-	upload("DamnationX equipment metallic-roughness", Textures.equipMr, { 255, 255, 255, 255 }, WGPUTextureFormat_RGBA8Unorm, G.equipTextures[2], G.equipViews[2]);
-	if (G.baseColorView == nullptr || G.equipViews[0] == nullptr || G.equipViews[1] == nullptr || G.equipViews[2] == nullptr)
+	// The body's base colour with its mips (a white 1 x 1 stand-in without one), then the page arrays.
+	MipChain white { ImageLevel { 1, 1, { 255, 255, 255, 255 } } };
+	const MipChain &body = hasBody ? c.images[static_cast<size_t>(model.bodyImage)] : white;
+	c.baseColor = CreateTexture("DamnationX skinned base colour", body[0].width, body[0].height, WGPUTextureFormat_RGBA8UnormSrgb,
+	    WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst, 1, static_cast<uint32_t>(body.size()));
+	if (c.baseColor == nullptr)
 		return false;
+	WriteLevels(c.baseColor, body, 0);
+	c.baseColorView = wgpuTextureCreateView(c.baseColor, nullptr);
+	if (!CreatePages("DamnationX skinned colour pages", c, c.colourLayer, { 255, 255, 255, 255 }, WGPUTextureFormat_RGBA8UnormSrgb, c.colourPages, c.colourPagesView)
+	    || !CreatePages("DamnationX skinned data pages", c, c.dataLayer, { 128, 128, 255, 255 }, WGPUTextureFormat_RGBA8Unorm, c.dataPages, c.dataPagesView))
+		return false;
+
+	std::array<WGPUBindGroupEntry, 6> entries {};
+	entries.fill(WGPU_BIND_GROUP_ENTRY_INIT);
+	entries[0].binding = 0;
+	entries[0].buffer = G.drawBuffer;
+	entries[0].size = sizeof(GpuDraw);
+	entries[1].binding = 1;
+	entries[1].buffer = c.materialBuffer;
+	entries[1].size = materials.size() * sizeof(GpuMaterial);
+	entries[2].binding = 2;
+	entries[2].textureView = c.baseColorView;
+	entries[3].binding = 3;
+	entries[3].sampler = G.sampler;
+	entries[4].binding = 4;
+	entries[4].textureView = c.colourPagesView;
+	entries[5].binding = 5;
+	entries[5].textureView = c.dataPagesView;
+	WGPUBindGroupDescriptor bindGroupDescriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+	bindGroupDescriptor.label = View("DamnationX skinned bind group");
+	bindGroupDescriptor.layout = G.bindGroupLayout;
+	bindGroupDescriptor.entryCount = entries.size();
+	bindGroupDescriptor.entries = entries.data();
+	c.bindGroup = wgpuDeviceCreateBindGroup(G.device, &bindGroupDescriptor);
+	// The page arrays hold resized copies; the CPU images (the body's included) are not needed any more.
+	c.images.clear();
+	c.images.shrink_to_fit();
+	return c.vertexBuffer != nullptr && c.indexBuffer != nullptr && c.materialBuffer != nullptr && c.baseColorView != nullptr && c.bindGroup != nullptr;
+}
+
+void ReleaseCharacterGpu(Character &c)
+{
+	if (c.bindGroup != nullptr)
+		wgpuBindGroupRelease(c.bindGroup);
+	c.bindGroup = nullptr;
+	ReleaseTexture(c.baseColor, c.baseColorView);
+	ReleaseTexture(c.colourPages, c.colourPagesView);
+	ReleaseTexture(c.dataPages, c.dataPagesView);
+	ReleaseBuffer(c.vertexBuffer);
+	ReleaseBuffer(c.indexBuffer);
+	ReleaseBuffer(c.materialBuffer);
+	c.gpuFailed = false;
+}
+
+/** Shaders, layouts, the draw buffer and the sampler, shared by every character. */
+bool CreateSharedResources()
+{
+	G.drawBuffer = CreateBuffer("DamnationX skinned draws", WGPUBufferUsage_Uniform, DrawSlotStride * DrawSlots, nullptr);
 
 	WGPUSamplerDescriptor samplerDescriptor = WGPU_SAMPLER_DESCRIPTOR_INIT;
 	samplerDescriptor.addressModeU = WGPUAddressMode_Repeat;
@@ -1175,7 +1571,7 @@ bool CreateModelResources()
 	moduleDescriptor.label = View("DamnationX skinned mesh shader");
 	G.shader = wgpuDeviceCreateShaderModule(G.device, &moduleDescriptor);
 
-	std::array<WGPUBindGroupLayoutEntry, 7> layoutEntries {};
+	std::array<WGPUBindGroupLayoutEntry, 6> layoutEntries {};
 	layoutEntries.fill(WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT);
 	layoutEntries[0].binding = 0;
 	layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
@@ -1192,11 +1588,11 @@ bool CreateModelResources()
 	layoutEntries[3].binding = 3;
 	layoutEntries[3].visibility = WGPUShaderStage_Fragment;
 	layoutEntries[3].sampler.type = WGPUSamplerBindingType_Filtering;
-	for (uint32_t i = 4; i < 7; ++i) {
+	for (uint32_t i = 4; i < 6; ++i) {
 		layoutEntries[i].binding = i;
 		layoutEntries[i].visibility = WGPUShaderStage_Fragment;
 		layoutEntries[i].texture.sampleType = WGPUTextureSampleType_Float;
-		layoutEntries[i].texture.viewDimension = WGPUTextureViewDimension_2D;
+		layoutEntries[i].texture.viewDimension = WGPUTextureViewDimension_2DArray;
 	}
 	WGPUBindGroupLayoutDescriptor layoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
 	layoutDescriptor.label = View("DamnationX skinned layout");
@@ -1207,29 +1603,6 @@ bool CreateModelResources()
 	pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
 	pipelineLayoutDescriptor.bindGroupLayouts = &G.bindGroupLayout;
 	G.pipelineLayout = wgpuDeviceCreatePipelineLayout(G.device, &pipelineLayoutDescriptor);
-
-	std::array<WGPUBindGroupEntry, 7> entries {};
-	entries.fill(WGPU_BIND_GROUP_ENTRY_INIT);
-	entries[0].binding = 0;
-	entries[0].buffer = G.drawBuffer;
-	entries[0].size = sizeof(GpuDraw);
-	entries[1].binding = 1;
-	entries[1].buffer = G.materialBuffer;
-	entries[1].size = materials.size() * sizeof(GpuMaterial);
-	entries[2].binding = 2;
-	entries[2].textureView = G.baseColorView;
-	entries[3].binding = 3;
-	entries[3].sampler = G.sampler;
-	for (uint32_t i = 4; i < 7; ++i) {
-		entries[i].binding = i;
-		entries[i].textureView = G.equipViews[i - 4];
-	}
-	WGPUBindGroupDescriptor bindGroupDescriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
-	bindGroupDescriptor.label = View("DamnationX skinned bind group");
-	bindGroupDescriptor.layout = G.bindGroupLayout;
-	bindGroupDescriptor.entryCount = entries.size();
-	bindGroupDescriptor.entries = entries.data();
-	G.bindGroup = wgpuDeviceCreateBindGroup(G.device, &bindGroupDescriptor);
 
 	// World-lit variant: the world pass's frame uniforms and occluder grid at group 0, this shader at group 1.
 	std::string worldSource = ShaderSource;
@@ -1261,11 +1634,11 @@ bool CreateModelResources()
 	worldPipelineLayoutDescriptor.bindGroupLayouts = worldLayouts.data();
 	G.worldPipelineLayout = wgpuDeviceCreatePipelineLayout(G.device, &worldPipelineLayoutDescriptor);
 
-	return G.worldShader != nullptr && G.worldPipelineLayout != nullptr && G.vertexBuffer != nullptr && G.indexBuffer != nullptr && G.materialBuffer != nullptr && G.drawBuffer != nullptr
-	    && G.baseColorView != nullptr && G.sampler != nullptr && G.shader != nullptr && G.pipelineLayout != nullptr && G.bindGroup != nullptr;
+	return G.worldShader != nullptr && G.worldPipelineLayout != nullptr && G.drawBuffer != nullptr && G.sampler != nullptr && G.shader != nullptr
+	    && G.pipelineLayout != nullptr && G.bindGroupLayout != nullptr;
 }
 
-/** GPU resources for the current device; false when they cannot exist (logged once). */
+/** Shared GPU resources for the current device; false when they cannot exist (logged once). */
 bool EnsureGpu(WGPUDevice device, WGPUQueue queue)
 {
 	if (device == nullptr)
@@ -1277,21 +1650,39 @@ bool EnsureGpu(WGPUDevice device, WGPUQueue queue)
 	}
 	if (G.failed)
 		return false;
-	if (G.bindGroup != nullptr)
+	if (G.sharedReady)
 		return true;
-	if (!SkinnedModelLoaded())
-		return false;
-	const auto start = std::chrono::steady_clock::now();
 	PushScope();
-	const bool created = CreateModelResources();
+	const bool created = CreateSharedResources();
 	PopScope("creating the GPU resources");
 	if (!created) {
-		LogError("3D warrior: could not create the GPU resources");
+		LogError("3D characters: could not create the GPU resources");
 		G.failed = true;
 		GpuBroken = true;
 		return false;
 	}
-	Log("3D warrior: GPU resources ready ({} ms)", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
+	G.sharedReady = true;
+	return true;
+}
+
+/** `c` loaded and on the GPU (created on first use); false while loading or after a failure (logged once). */
+bool EnsureCharacterGpu(Character &c)
+{
+	if (!G.sharedReady || G.failed || c.gpuFailed || !CharacterLoaded(c))
+		return false;
+	if (c.bindGroup != nullptr)
+		return true;
+	const auto start = std::chrono::steady_clock::now();
+	PushScope();
+	const bool created = CreateCharacterResources(c);
+	PopScope("creating a character's GPU resources");
+	if (!created) {
+		LogError("{}: could not create the GPU resources", c.label());
+		ReleaseCharacterGpu(c);
+		c.gpuFailed = true;
+		return false;
+	}
+	Log("{}: GPU resources ready ({} ms)", c.label(), std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
 	return true;
 }
 
@@ -1319,9 +1710,14 @@ void WithPipelineDescriptor(const PipelineKey &key, Use &&use)
 	targets[1].format = key.color;
 	WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
 	fragment.module = key.worldLit ? G.worldShader : G.shader;
-	fragment.entryPoint = View(key.imposter ? "fragmentImposter" : (key.worldLit ? "fragmentWorldLit" : "fragmentWorld"));
+	fragment.entryPoint = View(key.imposter ? "fragmentImposter" : (key.shadow ? "fragmentShadow" : (key.worldLit ? "fragmentWorldLit" : "fragmentWorld")));
 	fragment.targetCount = key.imposter ? 2 : 1;
 	fragment.targets = targets.data();
+	WGPUBlendState shadowBlend = WGPU_BLEND_STATE_INIT;
+	shadowBlend.color = { WGPUBlendOperation_Add, WGPUBlendFactor_SrcAlpha, WGPUBlendFactor_OneMinusSrcAlpha };
+	shadowBlend.alpha = { WGPUBlendOperation_Add, WGPUBlendFactor_Zero, WGPUBlendFactor_One };
+	if (key.shadow)
+		targets[0].blend = &shadowBlend;
 
 	WGPUDepthStencilState depth = WGPU_DEPTH_STENCIL_STATE_INIT;
 	depth.format = key.depth;
@@ -1370,7 +1766,7 @@ WGPURenderPipeline GetPipeline(const PipelineKey &key)
 		LogError("3D warrior: pipeline creation failed");
 		GpuBroken = true;
 	} else {
-		Log("3D warrior: {} pipeline ({} ms)", key.imposter ? "imposter" : "world",
+		Log("3D warrior: {} pipeline ({} ms)", key.imposter ? "imposter" : (key.shadow ? "shadow" : "world"),
 		    std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count());
 	}
 	G.pipelines.emplace_back(key, pipeline);
@@ -1394,7 +1790,7 @@ void CopyMatrix(std::array<float, 16> &out, const Mat4 &matrix)
 	out = matrix.m;
 }
 
-/** Common uniform fields: matrices, palette, visibility. */
+/** Common uniform fields: matrices, palette (of Cur's model), visibility. */
 void FillDraw(GpuDraw &draw, const Pose &pose, const Mat4 &viewProj, const Mat4 &model)
 {
 	ComputePosePalette(pose);
@@ -1403,22 +1799,25 @@ void FillDraw(GpuDraw &draw, const Pose &pose, const Mat4 &viewProj, const Mat4 
 	CopyMatrix(draw.normalToOut, Mat4::Identity());
 	for (size_t i = 0; i < draw.palette.size(); ++i)
 		draw.palette[i] = i < ScratchPalette.size() ? ScratchPalette[i].m : Mat4::Identity().m;
-	draw.visible = { pose.visibleParts, 0, 0, 0 };
+	draw.visible = { 0, 0, 0, 0 };
+	draw.parts = pose.visibleParts;
 }
 
+/** Draws Cur's mesh with the uniforms in `slot`. */
 void EncodeDraw(WGPURenderPassEncoder pass, WGPURenderPipeline pipeline, int slot, WGPUBindGroup worldGroup = nullptr)
 {
 	const uint32_t offset = static_cast<uint32_t>(slot * DrawSlotStride);
 	wgpuRenderPassEncoderSetPipeline(pass, pipeline);
 	if (worldGroup != nullptr) {
 		wgpuRenderPassEncoderSetBindGroup(pass, 0, worldGroup, 0, nullptr);
-		wgpuRenderPassEncoderSetBindGroup(pass, 1, G.bindGroup, 1, &offset);
+		wgpuRenderPassEncoderSetBindGroup(pass, 1, Cur->bindGroup, 1, &offset);
 	} else {
-		wgpuRenderPassEncoderSetBindGroup(pass, 0, G.bindGroup, 1, &offset);
+		wgpuRenderPassEncoderSetBindGroup(pass, 0, Cur->bindGroup, 1, &offset);
 	}
-	wgpuRenderPassEncoderSetVertexBuffer(pass, 0, G.vertexBuffer, 0, Model.vertices.size() * sizeof(SkinnedVertex));
-	wgpuRenderPassEncoderSetIndexBuffer(pass, G.indexBuffer, WGPUIndexFormat_Uint32, 0, Model.indices.size() * sizeof(uint32_t));
-	wgpuRenderPassEncoderDrawIndexed(pass, static_cast<uint32_t>(Model.indices.size()), 1, 0, 0, 0);
+	const GltfModel &model = Cur->model;
+	wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Cur->vertexBuffer, 0, model.vertices.size() * sizeof(SkinnedVertex));
+	wgpuRenderPassEncoderSetIndexBuffer(pass, Cur->indexBuffer, WGPUIndexFormat_Uint32, 0, model.indices.size() * sizeof(uint32_t));
+	wgpuRenderPassEncoderDrawIndexed(pass, static_cast<uint32_t>(model.indices.size()), 1, 0, 0, 0);
 }
 
 // ---- Imposters ----
@@ -1451,7 +1850,6 @@ bool EnsureSlot(ImposterSlot &slot, int width, int height)
 	slot.view = slot.texture != nullptr ? wgpuTextureCreateView(slot.texture, nullptr) : nullptr;
 	slot.width = width;
 	slot.height = height;
-	slot.generation = ++ImposterGeneration;
 	return slot.view != nullptr;
 }
 
@@ -1530,6 +1928,7 @@ void RenderImposter(WGPUCommandEncoder encoder, WGPURenderPipeline pipeline, con
 	const int drawSlot = AllocateSlot();
 	if (drawSlot < 0)
 		return;
+	Cur = &CharacterOf(request.pose.character);
 	GpuDraw draw {};
 	// Bake facing (s = 0, e = +90 degrees about +y) = world yaw - 45 degrees (the bake's +z is the screen's south).
 	const float bakeYaw = request.pose.worldYaw - Pi / 4.0F;
@@ -1700,7 +2099,7 @@ Mat4 RotationBetween(Vec3 from, Vec3 to)
  * (always within reach, slightly bent) and the elbow bends towards `pole`. Writes the upper arm, forearm and clavicle
  * palette entries (camera meters).
  */
-void SolveArm(const ArmChain &c, const Mat4 &rigid, Vec3 shoulderHint, Vec3 pole, std::array<std::array<float, 16>, 64> &palette)
+void SolveArm(const ArmChain &c, const Mat4 &rigid, Vec3 shoulderHint, Vec3 pole, std::array<std::array<float, 16>, MaxPalette> &palette)
 {
 	if (c.armJoint < 0 || c.foreArmJoint < 0 || c.armNode < 0 || c.foreArmNode < 0 || c.handNode < 0)
 		return;
@@ -1743,13 +2142,13 @@ void SolveArm(const ArmChain &c, const Mat4 &rigid, Vec3 shoulderHint, Vec3 pole
 	}
 	const Mat4 armNew = skm::Translation(s) * RotationBetween(d0, skm::Normalize(e - s)) * alongBone * skm::Translation(a0 * -1.0F) * armOld;
 	const Mat4 foreNew = skm::Translation(e) * RotationBetween(lower * (1.0F / l2), skm::Normalize(w - e)) * skm::Translation(e0 * -1.0F) * foreOld;
-	palette[static_cast<size_t>(c.armJoint)] = (armNew * Model.inverseBind[static_cast<size_t>(c.armJoint)]).m;
-	palette[static_cast<size_t>(c.foreArmJoint)] = (foreNew * Model.inverseBind[static_cast<size_t>(c.foreArmJoint)]).m;
+	palette[static_cast<size_t>(c.armJoint)] = (armNew * Cur->model.inverseBind[static_cast<size_t>(c.armJoint)]).m;
+	palette[static_cast<size_t>(c.foreArmJoint)] = (foreNew * Cur->model.inverseBind[static_cast<size_t>(c.foreArmJoint)]).m;
 	Mat4 armOldInverse;
 	if (c.shoulderJoint >= 0 && c.shoulderNode >= 0 && skm::Inverse(armOld, armOldInverse)) {
 		// The clavicle follows the upper arm, so vertices partly weighted to it stay on the shoulder.
 		const Mat4 shoulderOld = rigid * ScratchGlobals[static_cast<size_t>(c.shoulderNode)];
-		palette[static_cast<size_t>(c.shoulderJoint)] = (armNew * armOldInverse * shoulderOld * Model.inverseBind[static_cast<size_t>(c.shoulderJoint)]).m;
+		palette[static_cast<size_t>(c.shoulderJoint)] = (armNew * armOldInverse * shoulderOld * Cur->model.inverseBind[static_cast<size_t>(c.shoulderJoint)]).m;
 	}
 }
 
@@ -1768,6 +2167,7 @@ struct ViewModelRig {
 	int swordNode = -1;
 	int shieldNode = -1;
 	int leftHandNode = -1;
+	int swordPart = -1;
 	Frame swordLocal;  // grip at the origin
 	Frame shieldLocal; // face centre at the origin
 	/** Distances along the blade from the grip centre (meters): where the blade leaves the guard, and the tip. */
@@ -1785,10 +2185,14 @@ void SetMaskBit(std::array<uint32_t, 2> &mask, size_t entry)
 void BuildViewModelRig()
 {
 	Rig.built = true;
+	Character &viewModel = CharacterOf(CharacterId::ViewModel);
+	if (!CharacterLoaded(viewModel))
+		return;
+	Cur = &viewModel;
 	const auto joint = [](std::string_view name) {
-		const int node = Model.findNode(name);
-		for (size_t j = 0; j < Model.joints.size(); ++j) {
-			if (Model.joints[j] == node)
+		const int node = Cur->model.findNode(name);
+		for (size_t j = 0; j < Cur->model.joints.size(); ++j) {
+			if (Cur->model.joints[j] == node)
 				return static_cast<int>(j);
 		}
 		return -1;
@@ -1810,30 +2214,36 @@ void BuildViewModelRig()
 		c.shoulderJoint = joint(shoulder);
 		c.armJoint = joint(arm);
 		c.foreArmJoint = joint(foreArm);
-		c.shoulderNode = Model.findNode(shoulder);
-		c.armNode = Model.findNode(arm);
-		c.foreArmNode = Model.findNode(foreArm);
-		c.handNode = Model.findNode(hand);
+		c.shoulderNode = Cur->model.findNode(shoulder);
+		c.armNode = Cur->model.findNode(arm);
+		c.foreArmNode = Cur->model.findNode(foreArm);
+		c.handNode = Cur->model.findNode(hand);
 		return c;
 	};
 	Rig.rightArm = chain("mixamorig:RightShoulder", "mixamorig:RightArm", "mixamorig:RightForeArm", "mixamorig:RightHand");
 	Rig.leftArm = chain("mixamorig:LeftShoulder", "mixamorig:LeftArm", "mixamorig:LeftForeArm", "mixamorig:LeftHand");
-	Rig.swordNode = Model.findNode("Sword_RIGHT");
-	Rig.shieldNode = Model.findNode("Shield_LEFT");
-	Rig.leftHandNode = Model.findNode("mixamorig:LeftHand");
-	for (size_t r = 0; r < Model.rigidNodes.size(); ++r) {
-		if (Model.rigidNodes[r] == Rig.swordNode)
-			SetMaskBit(Rig.rightMask, Model.joints.size() + r);
-		if (Model.rigidNodes[r] == Rig.shieldNode)
-			SetMaskBit(Rig.leftMask, Model.joints.size() + r);
+	Rig.swordNode = Cur->model.findNode("Sword_RIGHT");
+	Rig.shieldNode = Cur->model.findNode("Shield_LEFT");
+	Rig.leftHandNode = Cur->model.findNode("mixamorig:LeftHand");
+	for (size_t r = 0; r < Cur->model.rigidNodes.size(); ++r) {
+		if (Cur->model.rigidNodes[r] == Rig.swordNode)
+			SetMaskBit(Rig.rightMask, Cur->model.joints.size() + r);
+		if (Cur->model.rigidNodes[r] == Rig.shieldNode)
+			SetMaskBit(Rig.leftMask, Cur->model.joints.size() + r);
 	}
-	const int swordPart = Model.findPart("Sword_RIGHT");
-	const int shieldPart = Model.findPart("Shield_LEFT");
-	if (Rig.swordNode < 0 || Rig.shieldNode < 0 || Rig.leftHandNode < 0 || swordPart < 0 || shieldPart < 0 || Clips.stand < 0)
+	const int swordPart = Cur->model.findPart("Sword_RIGHT");
+	const int shieldPart = Cur->model.findPart("Shield_LEFT");
+	const int standClip = Cur->model.findClip("stand");
+	const auto rigid = [&](int node) { return std::find(Cur->model.rigidNodes.begin(), Cur->model.rigidNodes.end(), node) != Cur->model.rigidNodes.end(); };
+	if (Rig.swordNode < 0 || Rig.shieldNode < 0 || Rig.leftHandNode < 0 || swordPart < 0 || shieldPart < 0 || standClip < 0 || !rigid(Rig.swordNode) || !rigid(Rig.shieldNode)) {
+		Log("3D viewmodel: {} has no rigid Sword_RIGHT / Shield_LEFT; the first-person weapon stays 2D", viewModel.file);
 		return;
+	}
+	Rig.swordPart = swordPart;
 
 	// The arm pose: the dungeon stand clip's first key (sword and shield gripped).
-	Rig.armPose.clip = Clips.stand;
+	Rig.armPose.character = CharacterId::ViewModel;
+	Rig.armPose.clip = standClip;
 	Rig.armPose.time = 0.0F;
 	Rig.armPose.loop = true;
 	ComputePosePalette(Rig.armPose);
@@ -1841,13 +2251,13 @@ void BuildViewModelRig()
 	// Sword: blade = principal axis, oriented from the leather grip towards the tip.
 	std::vector<Vec3> swordPoints;
 	std::vector<Vec3> gripPoints;
-	for (const SkinnedVertex &v : Model.vertices) {
+	for (const SkinnedVertex &v : Cur->model.vertices) {
 		if (static_cast<int>((v.packed >> 8) & 255) != swordPart)
 			continue;
 		const Vec3 p { v.position[0], v.position[1], v.position[2] };
 		swordPoints.push_back(p);
 		const int material = static_cast<int>(v.packed & 255);
-		if (Model.materials[static_cast<size_t>(material)].name.find("Grip") != std::string::npos)
+		if (Cur->model.materials[static_cast<size_t>(material)].name.find("Grip") != std::string::npos)
 			gripPoints.push_back(p);
 	}
 	const PrincipalAxes sword = ComputePrincipalAxes(swordPoints);
@@ -1872,7 +2282,7 @@ void BuildViewModelRig()
 
 	// Shield: normal = smallest spread, pointing away from the hand; up = model +y in the stand pose.
 	std::vector<Vec3> shieldPoints;
-	for (const SkinnedVertex &v : Model.vertices) {
+	for (const SkinnedVertex &v : Cur->model.vertices) {
 		if (static_cast<int>((v.packed >> 8) & 255) == shieldPart)
 			shieldPoints.push_back({ v.position[0], v.position[1], v.position[2] });
 	}
@@ -2342,6 +2752,10 @@ void EncodeViewModelDraws(WGPURenderPassEncoder pass, WGPURenderPipeline pipelin
 		BuildViewModelRig();
 	if (!Rig.valid || params.player == nullptr || params.view == nullptr)
 		return;
+	Character &viewModel = CharacterOf(CharacterId::ViewModel);
+	if (!EnsureCharacterGpu(viewModel))
+		return;
+	Cur = &viewModel;
 	const Player &player = *params.player;
 	const Mat4 view = Mat4::FromArray(params.view);
 	Mat4 cameraToWorld;
@@ -2369,10 +2783,13 @@ void EncodeViewModelDraws(WGPURenderPassEncoder pass, WGPURenderPipeline pipelin
 		handView = state.handTarget * ViewModelDistance + sway;
 	}
 	const bool inTown = leveltype == DTYPE_TOWN;
-	uint32_t parts = VisibleParts(AppearanceOf(player), inTown, /*dead=*/false);
-	parts &= ~(Parts.swordStowed | Parts.scabbard | Parts.frog | Parts.chape);
-	if (state.hideShield)
-		parts &= ~Parts.shield;
+	// The weapon in hand and the shield only (no stowed weapon, scabbard or sheath; no sword in town).
+	PartMask parts = EquipmentParts(viewModel, player, inTown, /*dead=*/false, /*attacking=*/false);
+	for (size_t part = 0; part < viewModel.partKinds.size(); ++part) {
+		const PartKind kind = viewModel.partKinds[part];
+		if (kind == PartKind::Stowed || kind == PartKind::Scabbard || kind == PartKind::SheathEmpty || (state.hideShield && kind == PartKind::Shield))
+			parts[part / 32] &= ~(1U << (part % 32));
+	}
 
 	// camera meters -> world units -> world; the projection is the viewmodel's own (narrower FOV than the world's).
 	const float scale = fpv::kWarriorMetersToWorld;
@@ -2416,7 +2833,8 @@ void EncodeViewModelDraws(WGPURenderPassEncoder pass, WGPURenderPipeline pipelin
 			draw.palette[i] = i < restPalette.size() ? (model * restPalette[i]).m : model.m;
 		SolveArm(arm, model, shoulder, pole, draw.palette);
 		CopyMatrix(draw.model, cameraMetersToWorld);
-		draw.visible = { parts, mask[0], mask[1], mode };
+		draw.visible = { 0, mask[0], mask[1], mode };
+		draw.parts = parts;
 		draw.glow = { state.glowColor.x, state.glowColor.y, state.glowColor.z, glow };
 		draw.glowCentre = { glowWorld.x, glowWorld.y, glowWorld.z, 0.35F * scale };
 		wgpuQueueWriteBuffer(G.queue, G.drawBuffer, static_cast<uint64_t>(slot) * DrawSlotStride, &draw, sizeof(draw));
@@ -2429,7 +2847,7 @@ void EncodeViewModelDraws(WGPURenderPassEncoder pass, WGPURenderPipeline pipelin
 	encodeHand(leftModel, Rig.leftMask, state.glow, Rig.leftArm, { -0.75F, -1.6F, 0.3F }, { -0.8F, -1.0F, 0.1F });
 
 	// Effects: the swept motion trail of the blade, and the glow orb in the casting hand.
-	const bool trail = state.swinging && (parts & Parts.swordRight) != 0;
+	const bool trail = state.swinging && HasPart(parts, Rig.swordPart);
 	if (!trail && state.glow <= 0.0F)
 		return;
 	WGPURenderPipeline fxPipeline = GetFxPipeline(params.colorFormat, params.depthFormat);
@@ -2520,14 +2938,97 @@ WGPUBindGroup WorldBindGroup(const SkinnedDrawContext &context)
 	return G.worldBindGroup;
 }
 
+/**
+ * True for the joints the first-person body leaves out: everything above the lower spine (upper spine, neck, head,
+ * shoulders, arms, hands) and whatever hangs from them, by Mixamo joint name, so it works for any class's rig.
+ */
+bool IsUpperBodyNode(const GltfModel &model, int node)
+{
+	for (; node >= 0 && static_cast<size_t>(node) < model.nodes.size(); node = model.nodes[static_cast<size_t>(node)].parent) {
+		std::string_view name = model.nodes[static_cast<size_t>(node)].name;
+		if (const size_t colon = name.rfind(':'); colon != std::string_view::npos)
+			name.remove_prefix(colon + 1); // "mixamorig:LeftArm" -> "LeftArm"
+		if (name.rfind("Armature", 0) == 0)
+			continue; // the rig's root node, not an arm
+		for (const std::string_view part : { "Spine1", "Spine2", "Head", "Neck", "Shoulder", "Arm", "Hand" }) {
+			if (name.find(part) != std::string_view::npos)
+				return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * First-person full-body awareness on top of `draw`'s palette (FillDraw with Cur's model just ran): every palette
+ * entry of an upper-body joint, and of anything carried by one (sword, shield, hair), collapses onto that joint's own
+ * origin, so the hips and legs stay and the torso, head and arms (which the camera sits inside) shrink to nothing.
+ * Works for any class's rig and joint count, with the normal actor shading.
+ */
+void CollapseUpperBody(GpuDraw &draw)
+{
+	const GltfModel &model = Cur->model;
+	const auto collapse = [&](size_t entry, int node) {
+		if (entry >= draw.palette.size() || !IsUpperBodyNode(model, node))
+			return;
+		Mat4 point = Mat4::Zero();
+		if (static_cast<size_t>(node) < ScratchGlobals.size()) {
+			const Mat4 &global = ScratchGlobals[static_cast<size_t>(node)];
+			point(0, 3) = global(0, 3);
+			point(1, 3) = global(1, 3);
+			point(2, 3) = global(2, 3);
+		}
+		point(3, 3) = 1.0F;
+		draw.palette[entry] = point.m;
+	};
+	for (size_t j = 0; j < model.joints.size(); ++j)
+		collapse(j, model.joints[j]);
+	for (size_t r = 0; r < model.rigidNodes.size(); ++r)
+		collapse(model.joints.size() + r, model.rigidNodes[r]);
+}
+
+/**
+ * Flattens world positions onto the floor plane y = `floorY` along the light direction `l` (pointing away from the
+ * light, l.y < 0): the planar shadow's matrix, applied after the model matrix.
+ */
+Mat4 PlanarShadowMatrix(float floorY, Vec3 l)
+{
+	const float sx = -l.x / l.y;
+	const float sz = -l.z / l.y;
+	Mat4 m = Mat4::Identity();
+	m(0, 1) = sx;
+	m(1, 1) = 0.0F;
+	m(2, 1) = sz;
+	m(0, 3) = -sx * floorY;
+	m(1, 3) = floorY;
+	m(2, 3) = -sz * floorY;
+	return m;
+}
+
+/** Feet of the first-person body relative to the eye along the view (positive: behind): right under it. */
+constexpr float FirstPersonBodyBack = 0.0F;
+
+/** Model matrix of the first-person body: under the camera, turned with the view's yaw. */
+Mat4 FirstPersonBodyMatrix()
+{
+	const fpv::CameraState &camera = fpv::GetCamera();
+	const float fx = std::sin(camera.yaw);
+	const float fz = std::cos(camera.yaw);
+	const float x = camera.x - fx * FirstPersonBodyBack;
+	const float z = camera.z - fz * FirstPersonBodyBack;
+	return skm::Translation({ x, FloorHeightAt(camera.x, camera.z), z }) * skm::RotationY(camera.yaw) * skm::Scale(fpv::kWarriorMetersToWorld);
+}
+
 bool WorldWantsPlayer(int playerId)
 {
 	if (playerId < 0 || static_cast<size_t>(playerId) >= Players.size() || !SkinnedReady())
 		return false;
-	return SkinnedPlayerWanted(Players[static_cast<size_t>(playerId)]);
+	const Player &player = Players[static_cast<size_t>(playerId)];
+	Character *character = CharacterFor(player);
+	Pose pose;
+	return SkinnedPlayerWanted(player) && character != nullptr && EnsureCharacterGpu(*character) && BuildPose(player, pose);
 }
 
-/** Other warriors in the first-person 3D pass, lit by the world's lights and shadows. */
+/** Other players with a 3D model in the 3D pass, lit by the world's lights and shadows. */
 void WorldDrawActors(const SkinnedDrawContext &context)
 {
 	if (context.pass == nullptr || context.device != G.device || !SkinnedReady())
@@ -2536,9 +3037,21 @@ void WorldDrawActors(const SkinnedDrawContext &context)
 	if (worldGroup == nullptr)
 		return;
 	WGPURenderPipeline pipeline = nullptr;
+	WGPURenderPipeline shadowPipeline = nullptr;
 	const std::array<float, 16> viewProj = ToArray(context.viewProjection);
+	const fpv::ViewOutput &view = fpv::GetViewOutput();
+	// Developer camera (DVL_W3D_POS, world_renderer.hpp) away from the eye: the local player is drawn whole too.
+	const bool detachedCamera = std::getenv("DVL_W3D_POS") != nullptr;
 	for (const Player &player : Players) {
-		if (&player == MyPlayer || !player.plractive || !player.isOnActiveLevel() || !SkinnedPlayerWanted(player))
+		const bool local = &player == MyPlayer;
+		// The local player: its whole body in third person, the legs-and-torso cut in first person (full-body awareness).
+		const bool firstPersonBody = local && !detachedCamera && view.drawFirstPersonBody && fpv::IsFirstPerson();
+		if ((local && !detachedCamera && !view.drawLocalPlayer && !firstPersonBody) || !player.plractive || !player.isOnActiveLevel()
+		    || !SkinnedPlayerWanted(player))
+			continue;
+		Character *character = CharacterFor(player);
+		Pose pose;
+		if (character == nullptr || !EnsureCharacterGpu(*character) || !BuildPose(player, pose)) // BuildPose sets Cur
 			continue;
 		if (pipeline == nullptr)
 			pipeline = GetPipeline({ context.colorFormat, context.depthFormat, 1, false, true });
@@ -2547,15 +3060,34 @@ void WorldDrawActors(const SkinnedDrawContext &context)
 		const int slot = AllocateSlot();
 		if (slot < 0)
 			return;
-		Pose pose;
-		BuildPose(player, pose);
 		float model[16];
 		SkinnedPlayerModelMatrix(player, model);
 		GpuDraw draw {};
-		FillDraw(draw, pose, Mat4::FromArray(viewProj.data()), Mat4::FromArray(model));
+		FillDraw(draw, pose, Mat4::FromArray(viewProj.data()), firstPersonBody ? FirstPersonBodyMatrix() : Mat4::FromArray(model));
+		if (firstPersonBody)
+			CollapseUpperBody(draw);
 		draw.eye = { context.cameraPosition.x, context.cameraPosition.y, context.cameraPosition.z, 0.0F };
 		wgpuQueueWriteBuffer(G.queue, G.drawBuffer, static_cast<uint64_t>(slot) * DrawSlotStride, &draw, sizeof(draw));
 		EncodeDraw(context.pass, pipeline, slot, worldGroup);
+
+		// Its shadow on the floor: the whole body (also in first person, so the head and arms show in it), cast by the
+		// moon in town and from above and behind the player's light in the dungeon.
+		if (shadowPipeline == nullptr)
+			shadowPipeline = GetPipeline({ context.colorFormat, context.depthFormat, 1, false, true, true });
+		const int shadowSlot = shadowPipeline != nullptr ? AllocateSlot() : -1;
+		if (shadowSlot < 0)
+			continue;
+		const Mat4 bodyModel = firstPersonBody ? FirstPersonBodyMatrix() : Mat4::FromArray(model);
+		const float floorY = bodyModel(1, 3) + 0.004F;
+		const bool town = context.ambient > 0.3F;
+		const Vec3 light = skm::Normalize(town ? Vec3 { 0.45F, -0.8F, 0.35F } : Vec3 { 0.3F, -1.0F, 0.2F });
+		draw.model = (PlanarShadowMatrix(floorY, light) * bodyModel).m;
+		if (firstPersonBody) // the shadow keeps the head and arms
+			for (size_t i = 0; i < draw.palette.size(); ++i)
+				draw.palette[i] = i < ScratchPalette.size() ? ScratchPalette[i].m : Mat4::Identity().m;
+		draw.rim = { 0.0F, 0.0F, 0.0F, town ? 0.42F : 0.5F };
+		wgpuQueueWriteBuffer(G.queue, G.drawBuffer, static_cast<uint64_t>(shadowSlot) * DrawSlotStride, &draw, sizeof(draw));
+		EncodeDraw(context.pass, shadowPipeline, shadowSlot, worldGroup);
 	}
 }
 
@@ -2577,7 +3109,7 @@ float ViewFractionAbovePanel()
 void WorldDrawViewModel(const ViewModelDrawContext &context)
 {
 	if (context.pass == nullptr || context.device != G.device || MyPlayer == nullptr || !SkinnedReady() || !*GetOptions().Graphics.fpvWeapon
-	    || MyPlayer->_pClass != HeroClass::Warrior)
+	    || MyPlayer->_pClass != HeroClass::Warrior || !fpv::GetViewOutput().drawViewmodel)
 		return;
 	WGPUBindGroup worldGroup = WorldBindGroup(context);
 	if (worldGroup == nullptr)
@@ -2618,18 +3150,24 @@ void WorldDrawViewModel(const ViewModelDrawContext &context)
  */
 void RegisterWorldRenderers()
 {
-	const bool usable = State == LoadState::Loaded && !GpuBroken && G.bindGroup != nullptr && G.worldPipelineLayout != nullptr;
+	const bool usable = !GpuBroken && G.sharedReady && G.worldPipelineLayout != nullptr;
 	if (usable != G.rendererRegistered) {
 		SetSkinnedActorRenderer(usable ? &WorldDrawActors : nullptr, usable ? &WorldWantsPlayer : nullptr);
 		G.rendererRegistered = usable;
 	}
-	const bool viewModel = usable && MyPlayer != nullptr && MyPlayer->_pClass == HeroClass::Warrior && *GetOptions().Graphics.fpvWeapon;
+	bool viewModel = usable && MyPlayer != nullptr && MyPlayer->_pClass == HeroClass::Warrior && *GetOptions().Graphics.fpvWeapon;
+	if (viewModel) {
+		// The viewmodel needs its own model (rigid sword and shield); without it the 2D slash stays.
+		if (!Rig.built && CharacterLoaded(CharacterOf(CharacterId::ViewModel)))
+			BuildViewModelRig();
+		viewModel = Rig.valid;
+	}
 	static bool ViewModelRegistered = false;
 	if (viewModel != ViewModelRegistered) {
 		SetViewModelRenderer(viewModel ? &WorldDrawViewModel : nullptr);
 		ViewModelRegistered = viewModel;
 	}
-	if (!usable && *GetOptions().Graphics.firstPersonView)
+	if (!usable && *GetOptions().Graphics.cameraMode != CameraMode::Isometric)
 		(void)SkinnedReady(); // request the GPU resources even before the first imposter
 }
 
@@ -2644,7 +3182,7 @@ const SkinnedImposterOutput *SkinnedPrepareFrame(WGPUDevice device, WGPUQueue qu
 	bool any = false;
 	for (const ImposterRequest &request : Requests)
 		any = any || request.active;
-	if (G.wanted && G.bindGroup == nullptr && SkinnedModelLoaded())
+	if (G.wanted)
 		EnsureGpu(device, queue);
 	// Load the model and compile the imposter pipeline in the background on the first presented frames (title screen)
 	// rather than with the first in-game frame (~50 ms load + ~150 ms compile).
@@ -2670,10 +3208,10 @@ const SkinnedImposterOutput *SkinnedPrepareFrame(WGPUDevice device, WGPUQueue qu
 	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(G.device, &encoderDescriptor);
 	for (size_t i = 0; i < Requests.size(); ++i) {
 		const ImposterRequest &request = Requests[i];
-		if (!request.active || !EnsureSlot(G.slots[i], size, size))
+		if (!request.active || !EnsureCharacterGpu(CharacterOf(request.pose.character)) || !EnsureSlot(G.slots[i], size, size))
 			continue;
 		RenderImposter(encoder, pipeline, request, G.slots[i]);
-		G.outputs[static_cast<size_t>(count++)] = { request.clip, G.slots[i].view, G.slots[i].generation };
+		G.outputs[static_cast<size_t>(count++)] = { request.clip, G.slots[i].view };
 	}
 	WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
 	wgpuQueueSubmit(G.queue, 1, &commands);
@@ -2702,7 +3240,15 @@ void SkinnedReleaseGpu()
 		ReleaseTexture(slot.texture, slot.view);
 		slot = {};
 	}
-	if (G.bindGroup != nullptr) wgpuBindGroupRelease(G.bindGroup);
+	for (Character &c : Characters) {
+		// The CPU images are freed once uploaded: a new device reloads the model.
+		if (c.bindGroup != nullptr && c.state == LoadState::Loaded) {
+			c.state = LoadState::Unloaded;
+			c.fileIndex = 0;
+		}
+		ReleaseCharacterGpu(c);
+	}
+	Rig = {};
 	if (G.pipelineLayout != nullptr) wgpuPipelineLayoutRelease(G.pipelineLayout);
 	if (G.bindGroupLayout != nullptr) wgpuBindGroupLayoutRelease(G.bindGroupLayout);
 	if (G.shader != nullptr) wgpuShaderModuleRelease(G.shader);
@@ -2717,14 +3263,11 @@ void SkinnedReleaseGpu()
 	G.worldFrameBuffer = nullptr;
 	G.worldOccluderBuffer = nullptr;
 	if (G.sampler != nullptr) wgpuSamplerRelease(G.sampler);
-	G.bindGroup = nullptr;
+	G.sharedReady = false;
 	G.pipelineLayout = nullptr;
 	G.bindGroupLayout = nullptr;
 	G.shader = nullptr;
 	G.sampler = nullptr;
-	ReleaseTexture(G.baseColor, G.baseColorView);
-	for (size_t i = 0; i < G.equipTextures.size(); ++i)
-		ReleaseTexture(G.equipTextures[i], G.equipViews[i]);
 	for (auto &[key, pipeline] : G.fxPipelines) {
 		if (pipeline != nullptr)
 			wgpuRenderPipelineRelease(pipeline);
@@ -2740,9 +3283,6 @@ void SkinnedReleaseGpu()
 	G.fxShader = nullptr;
 	ReleaseBuffer(G.fxBuffer);
 	G.fxSlotsUsed = 0;
-	ReleaseBuffer(G.vertexBuffer);
-	ReleaseBuffer(G.indexBuffer);
-	ReleaseBuffer(G.materialBuffer);
 	ReleaseBuffer(G.drawBuffer);
 	G.device = nullptr;
 	G.queue = nullptr;
@@ -2753,7 +3293,7 @@ void SkinnedReleaseGpu()
 bool SkinnedReady()
 {
 	G.wanted = true;
-	return State == LoadState::Loaded && G.device != nullptr && G.bindGroup != nullptr && !G.failed;
+	return G.device != nullptr && G.sharedReady && !G.failed;
 }
 
 void SkinnedPlayerModelMatrix(const Player &player, float outModel[16])
@@ -2764,7 +3304,7 @@ void SkinnedPlayerModelMatrix(const Player &player, float outModel[16])
 	const float sy = static_cast<float>(offset.deltaY) / 16.0F;
 	const float tileX = static_cast<float>(player.position.tile.x) + 0.5F + (sx + sy) * 0.5F;
 	const float tileY = static_cast<float>(player.position.tile.y) + 0.5F + (sy - sx) * 0.5F;
-	const skm::Mat4 model = skm::Translation({ tileX, 0.0F, tileY }) * skm::RotationY(SkinnedPlayerYaw(player)) * skm::Scale(fpv::kWarriorMetersToWorld);
+	const skm::Mat4 model = skm::Translation({ tileX, FloorHeightAt(tileX, tileY), tileY }) * skm::RotationY(SkinnedPlayerYaw(player)) * skm::Scale(fpv::kWarriorMetersToWorld);
 	std::copy(model.m.begin(), model.m.end(), outModel);
 }
 
@@ -2794,16 +3334,18 @@ void SkinnedEncodePlayer(WGPURenderPassEncoder pass, const float viewProj[16], c
 
 void SkinnedEncodePlayerEx(WGPURenderPassEncoder pass, const Player &player, const SkinnedDrawParams &params)
 {
-	if (pass == nullptr || params.viewProj == nullptr || params.model == nullptr || !SkinnedReady() || !SkinnedModelLoaded())
+	Character *character = CharacterFor(player);
+	if (pass == nullptr || params.viewProj == nullptr || params.model == nullptr || !SkinnedReady() || character == nullptr || !EnsureCharacterGpu(*character))
 		return;
 	WGPURenderPipeline pipeline = GetPipeline({ params.colorFormat, params.depthFormat, std::max(params.sampleCount, 1U), false });
 	if (pipeline == nullptr)
 		return;
+	Pose pose;
+	if (!BuildPose(player, pose)) // sets Cur
+		return;
 	const int slot = AllocateSlot();
 	if (slot < 0)
 		return;
-	Pose pose;
-	BuildPose(player, pose);
 	GpuDraw draw {};
 	FillDraw(draw, pose, skm::Mat4::FromArray(params.viewProj), skm::Mat4::FromArray(params.model));
 	draw.eye = { params.eye[0], params.eye[1], params.eye[2], 0.0F };

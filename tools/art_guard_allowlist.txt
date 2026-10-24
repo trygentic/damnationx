@@ -1,0 +1,36 @@
+# Texture files under assets/ that tools/check_no_art.py accepts. Only original art belongs here: never a model
+# texture, an HD pack file or anything derived from the Diablo / Hellfire game files. Add an entry only after
+# checking where the image came from.
+
+# DevilutionX's own UI art (upstream).
+assets/ui_art/button.png
+assets/ui_art/directions.png
+assets/ui_art/directions2.png
+assets/ui_art/menu-levelup.png
+assets/ui_art/menu.png
+
+# DXM-A06 sample pack: generated original fixtures, CC-BY-4.0 (assets/samples/PROVENANCE.md).
+assets/samples/dungeon/floor.normal.png
+assets/samples/dungeon/floor.png
+assets/samples/dungeon/lava-0.png
+assets/samples/dungeon/lava-1.png
+assets/samples/dungeon/lava-2.png
+assets/samples/dungeon/lava.emissive.png
+assets/samples/dungeon/lava.normal.png
+assets/samples/dungeon/wall.normal.png
+assets/samples/dungeon/wall.png
+assets/samples/item/starshard.emissive.png
+assets/samples/item/starshard.normal.png
+assets/samples/item/starshard.png
+assets/samples/monster/gloomling-idle-0.png
+assets/samples/monster/gloomling-idle-1.png
+assets/samples/monster/gloomling-idle-2.png
+assets/samples/monster/gloomling-idle-3.png
+assets/samples/monster/gloomling.emissive.png
+assets/samples/monster/gloomling.normal.png
+assets/samples/ui/spellbook.png
+
+# Cathedral floor preview, described as original in assets/hd/README.md. Pending review: confirm it is not traced
+# from the game's floor art before the next public release.
+assets/hd/cathedral-floor-atlas.png
+assets/hd/cathedral-floor-source.png

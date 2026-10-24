@@ -190,7 +190,7 @@ TEST(Scroll_rt, calc_tiles_covered_by_panel_960_zoom)
 	EXPECT_EQ(RowsCoveredByPanel(), 2);
 }
 
-// ---- 2.5D hybrid lighting: world pass integration ----
+// ---- 2.5D hybrid lighting: world pass integration (SPEC §5) ----
 
 namespace {
 
@@ -475,7 +475,7 @@ TEST_F(HybridSpriteFunnelTest, HybridSetsCardKind)
 
 TEST_F(HybridSpriteFunnelTest, HybridRunsPrimitivesFullBright)
 {
-	// Hybrid runs the same primitives with shadeIndex = 0; the presenter lights the card. A lit
+	// SPEC §5.3: hybrid runs the same primitives with shadeIndex = 0; the presenter lights the card. A lit
 	// authoritative index must therefore not select a light table (fully dark is the next test).
 	for (const int shadeIndex : { 0, 3, static_cast<int>(LightsMax) - 1 }) {
 		EXPECT_EQ(DrawWith({ .feet = Feet, .sprite = sprite(), .shadeIndex = shadeIndex }, /*hybrid=*/true),
@@ -495,7 +495,7 @@ TEST_F(HybridSpriteFunnelTest, HybridRunsPrimitivesFullBright)
 
 TEST_F(HybridSpriteFunnelTest, FullyDarkSpritesStayBlackAndPassThrough)
 {
-	// No-reveal: items, light-flagged missiles and arches on a dLight == 15 cell reach the funnel with
+	// No-reveal (SPEC §1): items, light-flagged missiles and arches on a dLight == 15 cell reach the funnel with
 	// LightsMax and no cull. Hybrid keeps the classic dark table and tags them pass-through, so the presenter cannot
 	// light them; a semantic TRN still wins, as in classic.
 	for (const bool blended : { false, true }) {
@@ -530,7 +530,7 @@ TEST_F(HybridSpriteFunnelTest, HybridArchFunnelSetsWallContext)
 		const std::vector<uint8_t> image = DrawWith({ .feet = Feet, .sprite = sprite(), .blended = true, .archKind = archKind }, /*hybrid=*/true);
 		EXPECT_EQ(image, DrawReferenceBytes(Primitive::Blended, nullptr)) << "arch pixels are drawn with the same primitive";
 		EXPECT_EQ(gbuffer::CurrentCardKind, archKind) << "arches route the ClxDraw through the WallLeft/WallRight constant-aux path";
-		// SetTileContext fills CurrentTileAux when the real gbuffer.cpp is linked; a stub leaves the sentinel.
+		// SetTileContext fills CurrentTileAux once T1's gbuffer.cpp is in; the T0 stub leaves the sentinel.
 		const uint8_t expectedNormal = archKind == gbuffer::Kind::WallLeft ? gbuffer::NormalWallLeft : gbuffer::NormalWallRight;
 		if (gbuffer::CurrentTileAux != Sentinel) {
 			EXPECT_EQ(gbuffer::CurrentTileAux, gbuffer::PackAux(archKind, expectedNormal));
@@ -599,7 +599,7 @@ TEST(HybridLatch, LatchResetsModeAndLatchesPalette)
 TEST(HybridLatch, RepresentPathStampsUnlitWhenEnabled)
 {
 	LatchHybridRepresentFrame(EnablingLatchInput(DTYPE_CATHEDRAL));
-	// A gbuffer stub never enables the mode; with the real implementation the dungeon input enables it.
+	// Natively the T0 gbuffer stub never enables the mode; with T1's implementation the dungeon input enables it.
 	EXPECT_EQ(gbuffer::CurrentMode, gbuffer::Enabled() ? gbuffer::Mode::StampUnlit : gbuffer::Mode::Off);
 	gbuffer::EndFrame();
 	EXPECT_EQ(gbuffer::CurrentMode, gbuffer::Mode::Off);
@@ -616,7 +616,7 @@ TEST(HybridLatch, WorldPathLatchesWithoutArmingStamp)
 
 TEST(HybridLatch, WorldPathStartsANewNormalMapFrameBudget)
 {
-	// The on-demand generation budget and the hit / miss counters are per game frame. Without the reset in
+	// SPEC §7.4: the on-demand generation budget and the hit / miss counters are per game frame. Without the reset in
 	// LatchHybridWorldFrame the first generations of a session spent the budget for good and every later miss was flat.
 	const bool savedNormalMaps = *GetOptions().Graphics.hybridNormalMaps;
 	GetOptions().Graphics.hybridNormalMaps.SetValue(true);
@@ -663,7 +663,7 @@ TEST(HybridLatch, WorldPathStartsANewNormalMapFrameBudget)
 
 TEST(HybridLatch, RepurposedBackBufferIsNeverComposited)
 {
-	// Loading screens (ShowProgress -> ClearScreenBuffer) and in-game movies (play_movie) reuse the back buffer
+	// SPEC §9.9: loading screens (ShowProgress -> ClearScreenBuffer) and in-game movies (play_movie) reuse the back buffer
 	// while gbRunGame stays true; their presents must not go through the composite over the last world frame's planes.
 	OwnedSurface backBuffer(64, 32);
 	gbuffer::Allocate(backBuffer.begin(), static_cast<uint16_t>(backBuffer.pitch()), 64, 32);

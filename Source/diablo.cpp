@@ -47,6 +47,10 @@
 #include "controls/plrctrls.h"
 #include "controls/remap_keyboard.h"
 #include "diablo.h"
+#ifdef DAMNATION_S1_BRIDGE
+#include "s1_bridge.hpp"
+#include "s1_headless.hpp"
+#endif
 #include "diablo_msg.hpp"
 #include "discord/discord.h"
 #include "doom.h"
@@ -75,6 +79,7 @@
 #include "gamemenu.h"
 #include "gmenu.h"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "help.h"
 #include "hwcursor.hpp"
 #include "init.hpp"
@@ -153,6 +158,10 @@
 #include <gperftools/heap-profiler.h>
 #endif
 
+#ifdef DEVILUTIONX_TRAINER
+#include "lua/trainer_socket.hpp"
+#endif
+#include "xr/xr.hpp"
 
 namespace devilution {
 
@@ -243,7 +252,7 @@ void StartGame(interface_mode uMsg)
 #ifdef _DEBUG
 	LoadDebugGFX();
 #endif
-	assert(HeadlessMode || ghMainWnd);
+	assert(HeadlessMode || ghMainWnd || host::IsActive());
 	music_stop();
 	InitMonsterHealthBar();
 	InitXPBar();
@@ -281,6 +290,7 @@ void FreeGame()
 
 bool ProcessInput()
 {
+	if (CompanionHeadless()) return PauseMode != 2; // Bridge commands drive headless clients; no empty-device movement cancellation.
 	if (PauseMode == 2) {
 		return false;
 	}
@@ -869,6 +879,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 	case SDL_EVENT_MOUSE_BUTTON_DOWN:
 		if (!fpv::IsMouseLook())
 			SetMousePositionFromScreen({ SDLC_EventButtonIntX(event), SDLC_EventButtonIntY(event) });
+		if (fpv::HandleMouseDown(MousePosition))
+			return; // browser: this click only takes the pointer lock back
 		HandleMouseButtonDown(event.button.button, modState);
 		return;
 	case SDL_EVENT_MOUSE_BUTTON_UP:
@@ -891,7 +903,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				Stash.PreviousPage();
 			} else if ((SDL_GetModState() & ZoomWheelModifiers) != 0) {
 				StepZoomLevel(1); // the automap zooms along (GetAutomapScale)
-			} else {
+			} else if (!fpv::HandleWheel(1)) { // third person: the wheel zooms the camera
 				KeymapperPress(MouseScrollUpButton);
 			}
 		} else if (SDLC_EventWheelIntY(event) < 0) { // down
@@ -907,7 +919,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				Stash.NextPage();
 			} else if ((SDL_GetModState() & ZoomWheelModifiers) != 0) {
 				StepZoomLevel(-1); // the automap zooms along (GetAutomapScale)
-			} else {
+			} else if (!fpv::HandleWheel(-1)) {
 				KeymapperPress(MouseScrollDownButton);
 			}
 		} else if (SDLC_EventWheelIntX(event) > 0) { // left
@@ -947,7 +959,7 @@ void RunGameLoop(interface_mode uMsg)
 
 	nthread_ignore_mutex(true);
 	StartGame(uMsg);
-	assert(HeadlessMode || ghMainWnd);
+	assert(HeadlessMode || ghMainWnd || host::IsActive());
 	EventHandler previousHandler = SetEventHandler(GameEventHandler);
 	run_delta_info();
 	gbRunGame = true;
@@ -991,6 +1003,9 @@ void RunGameLoop(interface_mode uMsg)
 		}
 #endif
 
+#ifdef DEVILUTIONX_TRAINER
+		TrainerSocketPoll();
+#endif
 
 		SDL_Event event;
 		uint16_t modState;
@@ -1005,6 +1020,9 @@ void RunGameLoop(interface_mode uMsg)
 		}
 		if (!gbRunGame)
 			break;
+#ifdef DAMNATION_S1_BRIDGE
+		s1_bridge::Poll();
+#endif
 
 		bool drawGame = true;
 		bool processInput = true;
@@ -1014,6 +1032,7 @@ void RunGameLoop(interface_mode uMsg)
 
 		discord_manager::UpdateGame();
 
+		if (CompanionHeadless()) SDL_Delay(1); // Preserve network ticks without a rendering frame limiter.
 		if (!runGameLoop) {
 			if (processInput)
 				ProcessInput();
@@ -1109,6 +1128,14 @@ extern "C" void SdlLogToFile(void *userdata, int /*category*/, SDL_LogPriority p
 	PrintHelpOption("--save-dir", _(/* TRANSLATORS: Commandline Option */ "Specify the folder of save files"));
 	PrintHelpOption("--config-dir", _(/* TRANSLATORS: Commandline Option */ "Specify the location of diablo.ini"));
 	PrintHelpOption("--set", _(/* TRANSLATORS: Commandline Option */ "Set a diablo.ini value, e.g. \"Graphics.Zoom Level=2\""));
+#ifdef DAMNATION_S1_BRIDGE
+	PrintHelpOption("--headless", "Run a multiplayer companion without graphics, audio or menus");
+	PrintHelpOption("--bot-hero NAME", "Select a multiplayer hero by name");
+	PrintHelpOption("--bot-class CLASS", "Explicitly create a missing hero: rogue, sorcerer or warrior");
+	PrintHelpOption("--bot-join HOST_OR_GAME_ID", "Join a TCP host or relay game");
+	PrintHelpOption("--bot-transport tcp|relay", "Select companion transport (default relay)");
+	PrintHelpOption("--bot-host", "Host a headless TCP game for local development");
+#endif
 	PrintHelpOption("--lang", _(/* TRANSLATORS: Commandline Option */ "Specify the language code (e.g. en or pt_BR)"));
 	PrintHelpOption("-n", _(/* TRANSLATORS: Commandline Option */ "Skip startup videos"));
 	PrintHelpOption("-f", _(/* TRANSLATORS: Commandline Option */ "Display frames per second"));
@@ -1118,6 +1145,9 @@ extern "C" void SdlLogToFile(void *userdata, int /*category*/, SDL_LogPriority p
 	PrintHelpOption("--hd-dir <path>", "Folder of the HD art (default: an hd folder next to DIABDAT.MPQ, in the settings folder or next to the game)");
 	PrintHelpOption("--hd-flag <name>", "Enable one WebGPU launch flag, e.g. hdUi or hdAtlasFloor");
 	PrintHelpOption("--no-webgpu", "Present with the SDL renderer instead of WebGPU");
+#if DEVILUTIONX_XR
+	PrintHelpOption("--vr", "Play in a VR headset through the running OpenXR runtime (Quest Link, Air Link, Virtual Desktop, SteamVR)");
+#endif
 #endif
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 #ifdef DEVILUTIONX_LOBBY
@@ -1186,6 +1216,9 @@ void DiabloParseFlags(int argc, char **argv)
 			printInConsole(PROJECT_VERSION);
 			printNewlineInConsole();
 			diablo_quit(0);
+#ifdef DAMNATION_S1_BRIDGE
+		} else if (s1_headless::ParseFlag(arg, i, argc, argv)) {
+#endif
 		} else if (arg == "--data-dir") {
 			if (i + 1 == argc) {
 				PrintFlagRequiresArgument("--data-dir");
@@ -1282,6 +1315,10 @@ void DiabloParseFlags(int argc, char **argv)
 			SetWebGpuLaunchFlag(argv[++i]);
 		} else if (arg == "--no-webgpu") {
 			SetWebGpuDisabled(true);
+#if DEVILUTIONX_XR
+		} else if (arg == "--vr") {
+			xr::RequestFromCommandLine();
+#endif
 #endif
 #if defined(DEVILUTIONX_D2_SOUND_IMPORT) && !defined(__EMSCRIPTEN__)
 		} else if (arg == "--import-d2-sounds") {
@@ -1383,13 +1420,26 @@ void ApplicationInit()
 	if (*GetOptions().Graphics.showFPS)
 		EnableFrameCount();
 
-	init_create_window();
-	was_window_init = true;
-#ifdef DEVILUTIONX_LOBBY
-	net::lobby::ListenForDeepLinkUrls(); // SDL_Init replaced the URL handler
+	if (CompanionHeadless()) {
+#ifdef USE_SDL3
+		if (!SDL_Init(SDL_INIT_EVENTS)) app_fatal(SDL_GetError());
+#else
+		if (SDL_Init(SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0) app_fatal(SDL_GetError());
 #endif
+		gbActive = true;
+		ControlMode = ControlTypes::KeyboardAndMouse;
+	} else if (host::IsActive()) {
+		host::InitVideo(); // embedded: the host owns the window (host/host_hooks.hpp)
+		was_window_init = true;
+	} else {
+		init_create_window();
+		was_window_init = true;
+#ifdef DEVILUTIONX_LOBBY
+		net::lobby::ListenForDeepLinkUrls(); // SDL_Init replaced the URL handler
+#endif
+	}
 
-	InitializeScreenReader();
+	if (!CompanionHeadless()) InitializeScreenReader();
 	LanguageInitialize();
 
 	SetApplicationVersions();
@@ -1403,7 +1453,7 @@ void DiabloInit()
 		gbIsSpawn = true;
 
 	bool wasHellfireDiscovered = false;
-	if (!forceDiablo && !forceHellfire)
+	if (!CompanionHeadless() && !forceDiablo && !forceHellfire)
 		wasHellfireDiscovered = (HaveHellfire() && *GetOptions().GameMode.gameMode == StartUpGameMode::Ask);
 	bool enableHellfire = forceHellfire || wasHellfireDiscovered;
 	if (!forceDiablo && *GetOptions().GameMode.gameMode == StartUpGameMode::Hellfire) { // Migrate legacy options
@@ -1422,6 +1472,8 @@ void DiabloInit()
 			messages.emplace_back(_(QuickMessages[i].message));
 		}
 	}
+
+	if (CompanionHeadless()) return;
 
 #ifndef USE_SDL1
 	InitializeVirtualGamepad();
@@ -1458,7 +1510,7 @@ void DiabloInit()
 
 void DiabloSplash()
 {
-	if (!gbShowIntro)
+	if (!gbShowIntro || host::IsActive())
 		return;
 
 	if (*GetOptions().StartUp.splash == StartUpSplash::LogoAndTitleDialog)
@@ -1485,6 +1537,9 @@ void DiabloDeinit()
 {
 	FreeItemGFX();
 
+#ifdef DEVILUTIONX_TRAINER
+	TrainerSocketShutdown();
+#endif
 	LuaShutdown();
 	ShutDownScreenReader();
 
@@ -1710,7 +1765,7 @@ void GameLogic()
 	RedrawViewport();
 	pfile_update(false);
 
-	plrctrls_after_game_logic();
+	if (!CompanionHeadless()) plrctrls_after_game_logic();
 }
 
 void TimeoutCursor(bool bTimeout)
@@ -2266,6 +2321,22 @@ void InitKeymapActions()
 	    N_("Switch between the isometric and the first-person view (WebGPU builds)."),
 	    'G',
 	    fpv::ToggleFirstPerson,
+	    nullptr,
+	    IsGameRunning);
+	options.Keymapper.AddAction(
+	    "CycleCameraMode",
+	    N_("Cycle camera mode"),
+	    N_("Cycle the camera: isometric, first person, third person (WebGPU builds)."),
+	    'T',
+	    fpv::CycleCameraMode,
+	    nullptr,
+	    IsGameRunning);
+	options.Keymapper.AddAction(
+	    "SwapShoulder",
+	    N_("Swap shoulder"),
+	    N_("Move the over-the-shoulder third-person camera to the other side."),
+	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
+	    fpv::SwapShoulder,
 	    nullptr,
 	    IsGameRunning);
 	options.Keymapper.AddAction(
@@ -2848,6 +2919,22 @@ void InitPadmapActions()
 	    nullptr,
 	    IsGameRunning);
 	options.Padmapper.AddAction(
+	    "CycleCameraMode",
+	    N_("Cycle camera mode"),
+	    N_("Cycle the camera: isometric, first person, third person (WebGPU builds)."),
+	    ControllerButton_NONE,
+	    fpv::CycleCameraMode,
+	    nullptr,
+	    IsGameRunning);
+	options.Padmapper.AddAction(
+	    "SwapShoulder",
+	    N_("Swap shoulder"),
+	    N_("Move the over-the-shoulder third-person camera to the other side."),
+	    ControllerButton_NONE,
+	    fpv::SwapShoulder,
+	    nullptr,
+	    IsGameRunning);
+	options.Padmapper.AddAction(
 	    "FirstPersonInteract",
 	    N_("Interact (first person)"),
 	    N_("Use, open, pick up or talk to what the first-person crosshair is on."),
@@ -2931,7 +3018,7 @@ bool StartGame(bool bNewGame, bool bSinglePlayer)
 			UiInitialize();
 		if (ReturnToMainMenu)
 			return true;
-	} while (gbRunGameResult);
+	} while (gbRunGameResult && !CompanionHeadless());
 
 	SNetDestroy();
 	return gbRunGameResult;
@@ -2939,6 +3026,8 @@ bool StartGame(bool bNewGame, bool bSinglePlayer)
 
 void diablo_quit(int exitStatus)
 {
+	if (host::IsActive())
+		host::OnGameQuit(exitStatus); // ends the game thread, never the host's process
 	FreeGameMem();
 	music_stop();
 	DiabloDeinit();
@@ -3067,6 +3156,12 @@ int DiabloMain(int argc, char **argv)
 #ifdef DEVILUTIONX_LOBBY
 	net::lobby::ListenForDeepLinkUrls();
 #endif
+#ifdef DAMNATION_S1_BRIDGE
+	if (const auto error = s1_headless::ValidationError()) {
+		std::fprintf(stderr, "%s\n", error->c_str());
+		return 64;
+	}
+#endif
 	InitKeymapActions();
 	InitPadmapActions();
 
@@ -3093,6 +3188,9 @@ int DiabloMain(int argc, char **argv)
 	ApplySoundPackOptionOnStartup();
 #endif
 	LuaInitialize();
+#ifdef DEVILUTIONX_TRAINER
+	TrainerSocketInit();
+#endif
 	if (!demo::IsRunning()) SaveOptions();
 
 	// Finally load game data
@@ -3117,8 +3215,23 @@ int DiabloMain(int argc, char **argv)
 #endif
 	if (!demo::IsRunning()) SaveOptions();
 
-	DiabloSplash();
-	mainmenu_loop();
+#ifdef DAMNATION_S1_BRIDGE
+	if (HeadlessMode) {
+		if (!s1_headless::PrepareHero()) {
+			DiabloDeinit();
+			return 1;
+		}
+		StartGame(true, false);
+		if (!s1_headless::ConnectionEstablished()) {
+			DiabloDeinit();
+			return 1;
+		}
+	} else
+#endif
+	{
+		DiabloSplash();
+		mainmenu_loop();
+	}
 	DiabloDeinit();
 
 	return 0;
@@ -3767,7 +3880,8 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		RETURN_IF_ERROR(LoadGameLevelStandardLevel(firstflag, lvldir, myPlayer));
 	}
 
-	SyncPortals();
+	// Full loads restore saved missiles/lights first, then rebuild the free endpoint once.
+	SyncPortals(lvldir != ENTRY_LOAD);
 	LoadGameLevelSyncPlayerEntry(lvldir);
 
 	IncProgress();
@@ -3793,7 +3907,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 #endif
 	LoadGameLevelStartMusic(neededTrack);
 
-	// Queue the level's sprite frames for normal-plane generation; no-op unless hybrid lighting is on and a
+	// Queue the level's sprite frames for normal-plane generation (SPEC §5.6); no-op unless hybrid lighting is on and a
 	// presenter can run the hybrid frames that drain the queue.
 	PrewarmHybridSpriteNormals(WebGpuIsReady());
 
@@ -3814,6 +3928,7 @@ bool game_loop(bool bStartup)
 		}
 		TimeoutCursor(false);
 		GameLogic();
+		host::OnGameTick();
 		ClearLastSentPlayerCmd();
 
 		if (!gbRunGame || !gbIsMultiplayer || demo::IsRunning() || demo::IsRecording() || !nthread_has_500ms_passed())

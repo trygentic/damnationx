@@ -1,0 +1,17 @@
+Toxoid
+
+Copyright (c) Troy Joyner Edwards Jr. All rights reserved.
+
+This release of DamnationX includes Toxoid in compiled form. Toxoid is
+proprietary software that belongs exclusively to Troy Joyner Edwards Jr. It is
+not covered by the Sustainable Use License that applies to DamnationX, and its
+source code is not distributed.
+
+No permission is granted to use, copy, modify, decompile, reverse engineer,
+extract, distribute, sublicense, or sell Toxoid, in whole or in part, separately
+from this DamnationX release, without prior written permission from Troy Joyner
+Edwards Jr., except as required by applicable law.
+
+Third-party components that Toxoid includes remain the property of their
+respective copyright holders and are governed by their own licenses. Their
+notices are listed with the other third-party notices in this release.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the hybrid WGSL sources embedded in Source/engine/render/webgpu_shaders.hpp.
+"""Validate the hybrid WGSL sources embedded in Source/engine/render/webgpu_shaders.hpp (SPEC §12.3).
 
 Extracts every ``R"WGSL(...)WGSL"`` string from the header. The first string is the shared
 prelude (``HybridPreludeWgsl``); it is concatenated in front of every other string exactly
@@ -14,7 +14,7 @@ Exit codes:
   1   extraction failed, or any found tool rejected any source
   77  neither naga nor tint is available (ctest maps this to SKIPPED via SKIP_RETURN_CODE 77)
 
-Besides compiling, the script checks two structural rules with a plain text
+Besides compiling, the script checks two structural rules of SPEC §3.4/§9.3 with a plain text
 scan of the entry-point sources: neither stage declares a ``var<storage`` binding, and the
 compute stage binds nothing but ``var<uniform>`` and textures.
 
@@ -69,7 +69,7 @@ def entry_point_of(body: str) -> str | None:
 
 
 def structural_checks(name: str, body: str, stage: str | None) -> list[str]:
-    """Rules that are cheaper to check textually than through a compiler."""
+    """Rules that are cheaper to check textually than through a compiler (SPEC §3.4, §9.3)."""
     problems: list[str] = []
     if re.search(r"var\s*<\s*storage", body):
         problems.append(f"{name}: declares a storage buffer binding (var<storage>), forbidden in both hybrid stages")

@@ -4,6 +4,7 @@
  * Implementation of the in-game menu functions.
  */
 #include "gamemenu.h"
+#include "host/host_hooks.hpp"
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_timer.h>
@@ -126,7 +127,7 @@ void GamemenuNewGame(bool /*bActivate*/)
 
 void GamemenuSoundMusicToggle(const char *const *names, TMenuItem *menuItem, int volume)
 {
-	if (gbSndInited) {
+	if (gbSndInited || host::IsActive()) { // embedded: the host plays the sounds
 		menuItem->addFlags(GMENU_ENABLED | GMENU_SLIDER);
 		menuItem->pszStr = names[0];
 		gmenu_slider_steps(menuItem, VOLUME_STEPS);

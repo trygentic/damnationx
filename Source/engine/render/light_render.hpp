@@ -24,7 +24,7 @@ struct LightRenderNormal {
 	// Heights are world units above the tile plane; mirrored sprites must negate
 	// x after transforming their frame-space normal into this basis.
 	//
-	// Relation to the tile-space basis of the 2.5D hybrid G-buffer (gbuffer.hpp:
+	// Relation to the tile-space basis of the 2.5D hybrid G-buffer (gbuffer.hpp, SPEC §4.1:
 	// tx = tile +x = Direction::SouthEast = screen (+32,+16) px per tile, ty = tile +y =
 	// Direction::SouthWest = screen (-32,+16), tz = up; 1 unit = one tile edge horizontally,
 	// heightPixelsPerWorldUnit (32) screen rows vertically):

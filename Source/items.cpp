@@ -1133,6 +1133,10 @@ std::string GenerateStaffNameMagical(const ItemData &baseItemData, SpellID spell
 void GetStaffPower(const Player &player, Item &item, int maxlvl, bool onlygood)
 {
 	std::optional<const PLStruct *> prefix = GetStaffPrefix(maxlvl, onlygood);
+#ifdef DEVILUTIONX_TRAINER
+	TrainerChosenPrefix = prefix.value_or(nullptr);
+	TrainerChosenSuffix = nullptr;
+#endif
 	if (prefix.has_value()) {
 		item._iMagical = ITEM_QUALITY_MAGIC;
 		SaveItemAffix(player, item, **prefix);
@@ -1226,6 +1230,10 @@ void GetItemPower(const Player &player, Item &item, int minlvl, int maxlvl, Affi
 		    pSufix = &suffix;
 	    });
 
+#ifdef DEVILUTIONX_TRAINER
+	TrainerChosenPrefix = pPrefix;
+	TrainerChosenSuffix = pSufix;
+#endif
 	CopyUtf8(item._iIName, GenerateMagicItemName(item._iName, pPrefix, pSufix, false), ItemNameLength);
 	if (!StringInPanel(item._iIName)) {
 		CopyUtf8(item._iIName, GenerateMagicItemName(AllItemsList[item.IDidx].iSName, pPrefix, pSufix, false), ItemNameLength);
@@ -2370,6 +2378,18 @@ std::string GetTranslatedItemNameMagical(const Item &item, bool hellfireItem, bo
 
 } // namespace
 
+#ifdef DEVILUTIONX_TRAINER
+const PLStruct *TrainerChosenPrefix = nullptr;
+const PLStruct *TrainerChosenSuffix = nullptr;
+
+Item TrainerApplyItemPower(const Player &player, _item_indexes base, ItemPower power)
+{
+	Item item;
+	InitializeItem(item, base);
+	SaveItemPower(player, item, power);
+	return item;
+}
+#endif
 
 bool IsItemAvailable(int i)
 {

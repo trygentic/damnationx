@@ -7,7 +7,14 @@ FetchContent_Declare_ExcludeFromAll(libsmackerdec
 )
 FetchContent_MakeAvailable_ExcludeFromAll(libsmackerdec)
 
-add_library(libsmackerdec STATIC
+option(DEVILUTIONX_STATIC_SMACKER "Link the Smacker decoder statically" ON)
+if(DEVILUTIONX_STATIC_SMACKER)
+  set(_smacker_type STATIC)
+else()
+  set(_smacker_type SHARED)
+endif()
+
+add_library(libsmackerdec ${_smacker_type}
   ${libsmackerdec_SOURCE_DIR}/src/BitReader.cpp
   ${libsmackerdec_SOURCE_DIR}/src/FileStream.cpp
   ${libsmackerdec_SOURCE_DIR}/src/LogError.cpp

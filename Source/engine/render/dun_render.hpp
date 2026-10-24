@@ -147,7 +147,7 @@ DVL_ALWAYS_INLINE const uint8_t *GetDunFrameFoliage(const std::byte *dungeonCelD
 }
 
 /**
- * @brief Sets the G-buffer tile context for the next RenderTile* call.
+ * @brief Sets the G-buffer tile context for the next RenderTile* call (SPEC §3.1, §6.1).
  *
  * No-op unless the hybrid world pass is capturing (gbuffer::CaptureActive()).
  *

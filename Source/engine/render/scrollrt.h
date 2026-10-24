@@ -129,7 +129,7 @@ void scrollrt_draw_game_screen();
 void DrawAndBlit();
 
 /**
- * @brief Full-bright switch of the hybrid world pass.
+ * @brief Full-bright switch of the hybrid world pass (SPEC §5.2).
  *
  * With `hybrid == false` the authoritative light table index is returned unchanged. With `hybrid == true`
  * everything that is not fully dark is drawn through LightTables[0] (the GPU applies the lighting) and a
@@ -155,7 +155,7 @@ void DrawAndBlit();
 }
 
 /**
- * @brief One world sprite draw request for the DrawWorldSprite funnel.
+ * @brief One world sprite draw request for the DrawWorldSprite funnel (SPEC §5.3).
  */
 struct WorldSpriteDraw {
 	/** ClxDraw position (bottom-left of the sprite, i.e. the feet row). */
@@ -184,7 +184,7 @@ struct WorldSpriteDraw {
  *     : shadeIndex != 0 ? (blended ? ClxDrawBlendedTRN : ClxDrawTRN)(LightTables[shadeIndex])
  *                       : (blended ? ClxDrawBlended : ClxDraw).
  * Hybrid sets the G-buffer card / arch context (gbuffer::CurrentCardKind, arch tile context) and then runs the
- * same primitives with shadeIndex = 0: the TRN is kept, the light table is not applied. A request
+ * same primitives with shadeIndex = 0 (SPEC §5.3): the TRN is kept, the light table is not applied. A request
  * with shadeIndex >= LightsMax and no TRN is the exception (no-reveal): it keeps the fully dark table and is
  * tagged CardEmissive (pass-through), arches included. The world pass calls it with gbuffer::Enabled(); exported
  * so scrollrt_test can drive both paths.
@@ -193,7 +193,7 @@ void DrawWorldSprite(const Surface &out, const WorldSpriteDraw &draw, bool hybri
 
 /**
  * @brief Latch input assembled from the live game state: hybridLighting option, presenter readiness,
- * HeadlessMode, gbRunGame, leveltype and the logical palette.
+ * HeadlessMode, gbRunGame, leveltype and the logical palette (SPEC §5.1).
  */
 [[nodiscard]] gbuffer::LatchInput CurrentHybridLatchInput();
 
@@ -210,7 +210,7 @@ void LatchHybridWorldFrame(const gbuffer::LatchInput &in);
 void LatchHybridRepresentFrame(const gbuffer::LatchInput &in);
 
 /**
- * @brief Enqueues the level's sprite frames for normal-plane generation, byte-bounded.
+ * @brief Enqueues the level's sprite frames for normal-plane generation (SPEC §5.6), byte-bounded.
  *
  * Priority order: active players' Stand and Walk, each level monster type's Stand then Walk, the remaining player
  * animations, the remaining monster animations, then the resident object and missile sprite lists. Stops as soon

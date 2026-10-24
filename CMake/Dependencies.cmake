@@ -12,7 +12,7 @@ set(DEVILUTIONX_WEBGPU_LICENSE "BSD-3-Clause" CACHE STRING "SPDX license identif
 set(DEVILUTIONX_DAWN_LINKAGE "static" CACHE STRING "Native Dawn linkage: static or shared")
 set_property(CACHE DEVILUTIONX_DAWN_LINKAGE PROPERTY STRINGS static shared)
 
-# Emscripten WebGPU toolchain pins.
+# Emscripten WebGPU toolchain pins (docs/design/hybrid-2p5d-lighting.md, "Emscripten WebGPU").
 # These are deliberately separate from DEVILUTIONX_EMSCRIPTEN_VERSION (3.1.74, CMakeLists.txt):
 # that pin freezes the Wasm mod-host ABI, whereas the WebGPU presenter needs an Emscripten
 # that can consume Emdawnwebgpu port files (4.0.10+). The port itself is pinned to the
@@ -61,7 +61,7 @@ if(DEVILUTIONX_WEBGPU)
 endif()
 include(functions/emscripten_system_library)
 
-# Opt-in Wasm mod host prerequisites.
+# Restricted ABI prerequisites: opt-in Wasm host prerequisites.
 if(DEVILUTIONX_ENABLE_WASM_MOD_HOST)
   find_program(DEVILUTIONX_RUSTC rustc REQUIRED)
   find_program(DEVILUTIONX_CARGO cargo REQUIRED)

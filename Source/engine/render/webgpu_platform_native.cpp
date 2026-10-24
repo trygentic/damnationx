@@ -70,6 +70,8 @@ void ResolveHdDirectory()
 		Log("WebGPU (Dawn): no HD art folder (an \"hd\" folder with sprites.txt next to DIABDAT.MPQ, in {} or next to the game); classic art", paths::PrefPath());
 	} else if (!*GetOptions().Graphics.hdArt) {
 		Log("WebGPU (Dawn): HD art folder {} found but HD Art is off in the Graphics settings", directory);
+	} else if (!HdArtDirectoryHas2dArt(directory)) {
+		Log("WebGPU (Dawn): HD folder {} holds only 3D packs; classic 2D art", directory);
 	} else {
 		EnableAllHdLaunchFlags();
 		Log("WebGPU (Dawn): HD art folder {} (HD Art setting)", directory);

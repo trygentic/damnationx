@@ -2,11 +2,13 @@
 /**
  * @file fpv/fpv.hpp
  *
- * First-person view (FPV) gameplay: camera, mouselook, WASD movement,
- * crosshair picking, actions and the 2D HUD. The fpv:: functions declared in
- * render3d/fpv_contract.hpp (IsActive, GetCamera, DirectionToYaw,
- * YawToDirection, GetCrosshairTarget) are implemented here; this header adds the
- * hooks the rest of the game calls.
+ * First- and third-person (3D view) gameplay: camera modes, mouselook with
+ * pointer lock, WASD and click-to-move, crosshair picking, actions and the 2D
+ * HUD. The fpv:: functions declared in render3d/fpv_contract.hpp (IsActive,
+ * IsFirstPerson, IsThirdPerson, GetCamera, DirectionToYaw, YawToDirection,
+ * GetCrosshairTarget) are implemented here; the cameras themselves are view
+ * providers (fpv/view_provider.hpp, also the VR hook). This header adds the
+ * hooks the rest of the game calls. See docs/design/first-person-3d.md.
  *
  * Game logic stays classic: FPV only steers the existing cursor globals
  * (pcursmonst, pcursitem, ObjectUnderCursor, PlayerUnderCursor, cursPosition,
@@ -50,8 +52,36 @@ bool SkipIsometricWorld();
 /** Palette index the skipped world area is cleared to (treated as transparent by the 3D presenter). */
 constexpr uint8_t kTransparentWorldIndex = 0;
 
-/** Hotkey G: toggles the "First Person View" option. */
+/** Hotkey G: toggles between the isometric and the first-person camera (from third person: first person). */
 void ToggleFirstPerson();
+
+/** Keymapper "Swap shoulder" (middle mouse): moves the over-the-shoulder camera to the other side. */
+void SwapShoulder();
+
+/** Hotkey T: cycles Graphics > Camera Mode isometric -> first person -> third person -> isometric. */
+void CycleCameraMode();
+
+/**
+ * Mouse wheel with no panel open: zooms the third-person camera (and saves the distance option). Returns true when
+ * consumed; false in the other modes (the wheel keeps its bindings there).
+ */
+bool HandleWheel(int notches);
+
+/**
+ * Mouse button pressed at a UI position. In the browser, after the pointer lock was dropped (Esc) or not granted, a
+ * click on the 3D view takes the mouse back instead of acting: returns true then (the click is consumed).
+ */
+bool HandleMouseDown(Point uiPosition);
+
+/** The browser dropped the pointer lock: the HUD shows "Click to look around". */
+bool IsPointerLockLost();
+
+/**
+ * HUD core hook (modules/hud): returns true while a HUD window, modal or element needs the free cursor. Mouselook then
+ * pauses like for the classic panels; IsMouseLook() is the answer the HUD reads back for "the world owns the pointer".
+ */
+using HudWantsCursorQuery = bool (*)();
+void SetHudWantsCursorQuery(HudWantsCursorQuery query);
 
 /** Per input poll (diablo.cpp ProcessInput, before CheckCursMove): mode changes, mouse mode, WASD movement. */
 void ProcessInput();
@@ -106,5 +136,30 @@ void OnGameEnd();
 
 /** True when FPV moves the player itself (the classic stick / d-pad walking must stay idle). */
 bool OwnsMovement();
+
+/**
+ * VR control (Source/xr, docs/design/vr.md), set once per headset frame. While `active`: the head pose replaces
+ * mouselook pitch, movement comes from the analog stick in the `moveYaw` frame, the crosshair ray is the controller's
+ * aim ray, head bob and the 2D crosshair are off.
+ */
+struct VrControl {
+	bool active = false;
+	/** Radians to add to the body yaw this frame (snap or smooth turn). */
+	float turn = 0.0F;
+	/** World yaw the stick moves in (head or off-hand direction). */
+	float moveYaw = 0.0F;
+	float moveForward = 0.0F; // -1..1
+	float moveStrafe = 0.0F;  // -1..1, positive = right
+	/** The laser points at the UI on the game screen panel: free cursor (no mouselook), clicks go to the UI. */
+	bool uiPointing = false;
+	/** Aim ray in world space (picking, attacks, spells). */
+	bool aimValid = false;
+	float aimOrigin[3] {};
+	float aimDirection[3] {};
+};
+void SetVrControl(const VrControl &control);
+/** True while a panel, menu, store or dialog wants the cursor (mouselook is off then). */
+bool UiOpen();
+const VrControl &GetVrControl();
 
 } // namespace devilution::fpv

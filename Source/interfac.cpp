@@ -33,6 +33,7 @@
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "hwcursor.hpp"
 #include "loadsave.h"
 #include "multi.h"
@@ -513,7 +514,7 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 			NewCursor(CURSOR_HAND);
 
 			if (!HeadlessMode) {
-				assert(ghMainWnd);
+				assert(ghMainWnd || host::IsActive());
 
 				// The loading thread sets `logical_palette`, so we make sure to use
 				// our own palette for drawing the foreground.
@@ -660,7 +661,7 @@ void ShowProgress(interface_mode uMsg)
 #endif
 
 	if (!HeadlessMode) {
-		assert(ghMainWnd);
+		assert(ghMainWnd || host::IsActive());
 
 		interface_msg_pump();
 		ClearScreenBuffer();

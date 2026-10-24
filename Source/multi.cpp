@@ -4,6 +4,11 @@
  * Implementation of functions for keeping multiplaye games in sync.
  */
 #include "multi.h"
+#ifdef DAMNATION_S1_BRIDGE
+#include "s1_headless.hpp"
+#include "s1_bridge.hpp"
+#include "headless_mode.hpp"
+#endif
 
 #include <algorithm>
 #include <cstddef>
@@ -262,6 +267,9 @@ void ParseTurn(uint8_t pnum, uint32_t turn)
 
 void PlayerLeftMsg(Player &player, bool left)
 {
+#ifdef DAMNATION_S1_BRIDGE
+	if (player.plractive && &player != MyPlayer) s1_bridge::PlayerLeft(player.getId());
+#endif
 	if (&player == InspectPlayer)
 		InspectPlayer = MyPlayer;
 
@@ -551,6 +559,13 @@ bool InitMulti(GameData *gameData)
 
 	int playerId;
 
+#ifdef DAMNATION_S1_BRIDGE
+	if (HeadlessMode) {
+		if (!s1_headless::InitializeNetwork(gameData)) return false;
+		RegisterNetEventHandlers();
+		if (!s1_headless::Connect(gameData, &playerId)) return false;
+	} else
+#endif
 	while (true) {
 		if (gbSelectProvider && !UiSelectProvider(gameData)) {
 			return false;
@@ -618,7 +633,9 @@ void InitGameInfo()
 	sgGameInitInfo.fullQuests = (!gbIsMultiplayer || *options.Gameplay.multiplayerFullQuests) ? 1 : 0;
 	sgGameInitInfo.bSmoothMovement = *options.Gameplay.smoothMovement ? 1 : 0;
 	const auto activeMods = GetOptions().Mods.GetActiveModList();
-	sgGameInitInfo.bPermanentCathedralPortal = std::find(activeMods.begin(), activeMods.end(), "permanent_cathedral_portal") != activeMods.end() ? 1 : 0;
+	// Resolve both local opt-outs once on the host. Every client thereafter uses this shared bit.
+	const bool cathedralPortalMod = std::find(activeMods.begin(), activeMods.end(), "permanent_cathedral_portal") != activeMods.end();
+	sgGameInitInfo.bPermanentCathedralPortal = *options.Gameplay.cathedralPortal && cathedralPortalMod ? 1 : 0;
 	sgGameInitInfo.reserved[0] = 0;
 	sgGameInitInfo.reserved[1] = 0;
 }
@@ -882,6 +899,9 @@ bool NetInit(bool bSinglePlayer)
 		if (!sgbPlayerTurnBitTbl[MyPlayerId] || msg_wait_resync())
 			break;
 		NetClose();
+#ifdef DAMNATION_S1_BRIDGE
+		if (HeadlessMode) return false;
+#endif
 		gbSelectProvider = false;
 	}
 	xoshiro128plusplus gameGenerator(sgGameInitInfo.gameSeed);

@@ -14,7 +14,7 @@ struct GameData {
 	 * (edition + version + mod config), unlike `programid` which is now cosmetic branding.
 	 */
 	uint8_t isSpawn;
-	/** Host-selected permanent Cathedral entrance portal (0/1). Uses a formerly reserved byte, so the layout is unchanged. */
+	/** Host-selected free town portal (0/1); per-player destination travels in CMD_WARP. Uses a formerly reserved byte, so the layout is unchanged. */
 	uint8_t bPermanentCathedralPortal;
 	uint8_t reserved[2];
 	/** Branding id (e.g. "DRTL"/"HRTL"/"DXMD") for display only. A mod may change it via its manifest. */

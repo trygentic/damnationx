@@ -1,21 +1,22 @@
 /**
  * @file scrollrt_golden_test.cpp
  *
- * Classic byte-identity goldens for the world traversal and the
+ * Classic byte-identity goldens for the world traversal (SPEC §12.1) and the
  * G-buffer plane invariants of the hybrid world pass.
  *
  * The synthetic 24x24 Cathedral level in `test/fixtures/scrollrt/synthetic_level.bin`
  * (format in the README next to it) is copied into the level globals and drawn
  * through `DrawWorldForTesting` into a 640x352 surface at 6 view positions x
  * zoom on/off x per-pixel lighting on/off with the hybrid mode latched off. The
- * FNV-1a hashes are compared with `goldens.tsv`, recorded after the DrawCell flush fix
- * and before any G-buffer code touched the traversal.
+ * FNV-1a hashes are compared with `goldens.tsv`, recorded on the T5 flush-fix
+ * commit `647c11556` (tag `hybrid/T5-flush-fix`, the parent of `hybrid/T10-baseline`)
+ * before any G-buffer code touched the traversal.
  *
  * Re-record the goldens with:
  *   SCROLLRT_GOLDEN_RECORD=/path/to/goldens.tsv ./scrollrt_golden_test --gtest_filter='ScrollrtGolden.*'
  *
- * `odd_zoom_goldens.tsv` pins the one sanctioned classic change of the zoomed frame (Zoom()'s odd-height tail)
- * against master: see OddHeightZoomDiffersFromMasterOnlyInRowZero and the README.
+ * `odd_zoom_goldens.tsv` pins the one sanctioned classic change of the zoomed frame (Zoom()'s odd-height tail,
+ * design record §1 bug 7 and §15 item 9) against master: see OddHeightZoomDiffersFromMasterOnlyInRowZero and the README.
  */
 #include <algorithm>
 #include <array>
@@ -73,7 +74,7 @@ constexpr int ScreenHeight = 480;
 constexpr int ViewportHeight = ScreenHeight - 128; // 352: the main panel covers the bottom 128 rows
 
 // Fixture piece ids (see test/fixtures/scrollrt/README.md). WallSW / WallSE are named after the half that draws the wall
-// (left / right); a left-half wall is lit as the SE face (WallRight) and a right-half one as the SW face (WallLeft).
+// (left / right); since rev. 5 a left-half wall is lit as the SE face (WallRight) and a right-half one as the SW face (WallLeft).
 enum FixturePiece : uint16_t {
 	PieceDirt = 0,
 	PieceFloor = 1,
@@ -263,7 +264,7 @@ void InstallLevel(const SyntheticLevel &fixture)
 	CalculatePanelAreas();
 }
 
-/** The (firstTile, offset) pair CalcFirstTilePosition derives for `view` (no walking). */
+/** The (firstTile, offset) pair CalcFirstTilePosition derives for `view` (no walking): SPEC §5.7. */
 struct ViewGeometry {
 	Point firstTile;
 	Displacement offset;
@@ -586,7 +587,7 @@ TEST_F(ScrollrtGolden, ClassicTraversalMatchesGoldens)
 	}
 }
 
-// ---- Odd viewport height under zoom: a sanctioned classic frame change (item 9) ----
+// ---- Odd viewport height under zoom: a sanctioned classic frame change (SPEC §1 bug 7, §15 item 9) ----
 
 constexpr const char *OddZoomGoldensPath = "test/fixtures/scrollrt/odd_zoom_goldens.tsv";
 
@@ -606,7 +607,7 @@ uint64_t RowsHash(const Surface &out, int firstRow, int rows)
  * doubles the top source row into row 0, like gbuffer::ZoomInPlace does for plane A.
  *
  * `odd_zoom_goldens.tsv` holds, per case, master's hash of rows 1..350, master's row 0 and whether master kept the
- * guard row above the surface intact (all recorded with the upstream Zoom()), and the new row 0. The
+ * guard row above the surface intact (all recorded on `647c11556`, whose Zoom() is master's), and the new row 0. The
  * test proves rows 1..350 are master's bytes, row 0 is the only row that changed, and nothing is written outside.
  */
 TEST_F(ScrollrtGolden, OddHeightZoomDiffersFromMasterOnlyInRowZero)
@@ -715,7 +716,7 @@ TEST_F(ScrollrtGolden, OddHeightZoomDiffersFromMasterOnlyInRowZero)
 	}
 }
 
-// ---- Hybrid world pass: plane invariants ----
+// ---- Hybrid world pass: plane invariants (SPEC §3.2, §5.3, §5.5, §6.1, §12.1) ----
 
 /** [start, end) of the opaque columns of frame row `row` (0 = bottom) for the fixed-shape tile types. */
 std::pair<int, int> ShapeSpan(TileType tile, int row)
@@ -809,7 +810,7 @@ protected:
 				if (foot.has_value()) {
 					const uint8_t expectedBase = static_cast<uint8_t>((cellBase.y - gbuffer::FootRows(*foot, col)) & 0xFF);
 					ASSERT_EQ(base(x, y), expectedBase) << what << " B at " << x << "," << y << " (row " << row << ", col " << col << ")";
-					// H = 32k + r - foot(c) is what the presenter recovers from B.
+					// SPEC §3.2: h = 32k + r - foot(c) is what the presenter recovers from B.
 					ASSERT_EQ(static_cast<uint8_t>((base(x, y) - y) & 0xFF), static_cast<uint8_t>((32 * course + row - gbuffer::FootRows(*foot, col)) & 0xFF)) << what << " h at " << x << "," << y;
 				}
 				++checked;
@@ -827,7 +828,7 @@ TEST_F(ScrollrtPlanes, UnlitOutsideViewportRowsAndFloorPixelsAreFloor)
 {
 	DrawHybrid({ 11, 11 }, /*zoom=*/false);
 
-	// Rows at and below the viewport are never touched by the world pass.
+	// Rows at and below the viewport are never touched by the world pass (SPEC §12.1).
 	for (int y = ViewportHeight; y < ScreenHeight; ++y)
 		for (int x = 0; x < ScreenWidth; ++x)
 			ASSERT_EQ(aux(x, y), gbuffer::UnlitByte) << "row " << y << " col " << x;
@@ -842,7 +843,7 @@ TEST_F(ScrollrtPlanes, UnlitOutsideViewportRowsAndFloorPixelsAreFloor)
 
 TEST_F(ScrollrtPlanes, FullyDarkCellsAreDrawnFullBrightAsFloor)
 {
-	// A fully dark cell keeps LightsMax for culling, but its tiles are drawn full-bright and
+	// SPEC §5.2 (rev. 4): a fully dark cell keeps LightsMax for culling, but its tiles are drawn full-bright and
 	// tagged Floor like every other tile. The GPU's bilinear ambient is 0 at the cell centre and rises toward lit
 	// neighbours, reproducing the classic per-pixel bleed instead of a hard cell-shaped black edge.
 	DrawHybrid({ 5, 18 }, /*zoom=*/false);
@@ -871,7 +872,7 @@ TEST_F(ScrollrtPlanes, WallColumnsRecoverHeightFromPlaneB)
 {
 	DrawHybrid({ 9, 9 }, /*zoom=*/false);
 
-	// A wall half stands on the cell's centre line. The fixture's "WallSW" piece draws its wall in the left half
+	// A wall half stands on the cell's centre line (rev. 5). The fixture's "WallSW" piece draws its wall in the left half
 	// (LeftTrapezoid foot + square courses): a wall running along y, i.e. the SE face, WallRight with the c / 2 foot table,
 	// whose foot lines join from one wall piece to the next. The RightTriangle half is a floor-shaped micro frame and
 	// therefore Floor (triangle -> Floor). The last wall of each run is checked because a wall drawn later (east / south)
@@ -898,7 +899,8 @@ TEST_F(ScrollrtPlanes, WallColumnsRecoverHeightFromPlaneB)
 	ExpectMicro(back, 0, gbuffer::Kind::WallRight, gbuffer::NormalWallRight, gbuffer::FootKind::SE, "back wall course 0");
 	ExpectMicro(back, 2, gbuffer::Kind::WallRight, gbuffer::NormalWallRight, gbuffer::FootKind::SE, "back wall course 1");
 
-	// The pillar stands on square micros in both halves: it is lit as the two wall lines through its cell's centre (	// lighting it like the floor at the pixel sampled the ground a tile or more behind it and drew it as a dark panel among
+	// The pillar stands on square micros in both halves: it is lit as the two wall lines through its cell's centre (rev. 5;
+	// lighting it like the floor at the pixel sampled the ground a tile or more behind it and drew it as a dark panel among
 	// lit walls), with one camera-facing normal so its two halves show no seam. Never WallTop, never Floor.
 	{
 		const Point pillar { 10, 10 };
@@ -928,7 +930,7 @@ TEST_F(ScrollrtPlanes, BlendedWallPixelsCarryTheirOwnB)
 	DrawHybrid({ 10, 16 }, /*zoom=*/false);
 
 	// Transparent wall with TransList[dTransVal] active: the upper courses use MaskType::Transparent, so every
-	// pixel is a 50 % blend tagged WallBlended and carries the left-half (SE face) wall's B (blended policy).
+	// pixel is a 50 % blend tagged WallBlended and carries the left-half (SE face) wall's B (SPEC §6.1 blended policy).
 	const Point tile { 10, 14 };
 	ASSERT_EQ(dPiece[tile.x][tile.y], PieceWallSWTransparent);
 	ASSERT_TRUE(TransList[dTransVal[tile.x][tile.y]]);
@@ -970,7 +972,7 @@ TEST_F(ScrollrtPlanes, ArchesAreWallFacesAnchoredOnTheirWallLine)
 		// The lintel (the top rows above the hole, full width) is opaque in the fixture sprite. The wall drawn
 		// one row later (south-east / south-west of the doorway) rises 96 px from a base 16 px lower and covers
 		// the lintel's lower rows, so the rows above that wall are checked: every pixel is the arch's wall kind
-		// with B on the wall line through the doorway cell's centre (gbuffer::AnchorArchOnWallLine), so
+		// with B on the wall line through the doorway cell's centre (rev. 5, gbuffer::AnchorArchOnWallLine), so
 		// h = rows above that line, like the wall pieces next to the arch.
 		const gbuffer::FootKind foot = facing == 1 ? gbuffer::FootKind::SW : gbuffer::FootKind::SE;
 		constexpr int RowsCoveredByNeighbourWalls = 3 * TILE_HEIGHT - TILE_HEIGHT / 2;
@@ -998,7 +1000,7 @@ TEST_F(ScrollrtPlanes, ArchesAreWallFacesAnchoredOnTheirWallLine)
 
 TEST_F(ScrollrtPlanes, HybridFrameIsTheFullBrightClassicFrame)
 {
-	// In hybrid mode every tile is drawn through LightTables[0] (identity outside Hell),
+	// SPEC §5.2 (rev. 4): in hybrid mode every tile is drawn through LightTables[0] (identity outside Hell),
 	// fully dark ones included. The colour output must therefore equal the classic frame of the same level with
 	// every cell at light level 0.
 	const ViewGeometry geometry = DrawHybrid({ 11, 11 }, /*zoom=*/false);
@@ -1032,7 +1034,7 @@ TEST_F(ScrollrtPlanes, HybridFrameIsTheFullBrightClassicFrame)
 TEST_F(ScrollrtPlanes, ZoomDoublesPlaneAInPlace)
 {
 	// Under zoom the blitters write the top-left quarter and ZoomInPlace pixel-doubles plane A (plane B keeps
-	// unzoomed rows): every 2x2 block of A is uniform and the wall column is still classified.
+	// unzoomed rows, SPEC §3.2): every 2x2 block of A is uniform and the wall column is still classified.
 	DrawHybrid({ 9, 9 }, /*zoom=*/true);
 	int nonUnlit = 0;
 	for (int y = 0; y + 1 < ViewportHeight; y += 2) {
@@ -1097,7 +1099,7 @@ TEST_F(ScrollrtPlanes, CursorStampsUnlitAndRestoresPlaneA)
 			before[static_cast<size_t>(y) * rect.size.width + x] = aux(rect.position.x + x, rect.position.y + y);
 	ASSERT_NE(std::count(before.begin(), before.end(), gbuffer::UnlitByte), static_cast<std::ptrdiff_t>(before.size())) << "the cursor must land on world pixels";
 
-	// DrawCursor: SaveRect, then the cursor's ClxDraw stamps Unlit on exactly the pixels it writes.
+	// DrawCursor: SaveRect, then the cursor's ClxDraw stamps Unlit on exactly the pixels it writes (SPEC §5.4, §5.5).
 	std::vector<uint8_t> saved(before.size());
 	gbuffer::SaveRect(rect, saved);
 	EXPECT_EQ(saved, before);
@@ -1122,11 +1124,12 @@ TEST_F(ScrollrtPlanes, CursorStampsUnlitAndRestoresPlaneA)
 
 TEST_F(ScrollrtPlanes, WorldPassOverheadTiming)
 {
-	// Budget to validate: world-pass CPU overhead <= +35 % at 640x480 native. Both configurations draw
+	// SPEC §11 budget to validate: world-pass CPU overhead <= +35 % at 640x480 native. Both configurations draw
 	// the 640x352 viewport at view {11,11} into the fixture's 640x480 surface with the planes allocated over it
 	// (classic mode keeps them allocated and untouched); the mode is latched off for the classic sample and on
 	// for the hybrid sample. Classic and hybrid calls alternate so both see the same machine state, and the
-	// medians of the per-call times are compared. This is a wall-clock measurement inside the ctest-registered binary, so by
+	// medians of the per-call times are compared. The verdict against the budget is recorded in
+	// docs/design/evidence/README.md. This is a wall-clock measurement inside the ctest-registered binary, so by
 	// default it only records and prints; the 3x sanity bound is asserted when SCROLLRT_TIMING_ASSERT is set
 	// (the integration evidence run sets it), so a loaded CI runner cannot turn the measurement into a failure.
 	constexpr int Rounds = 61; // odd, so the median is a sample

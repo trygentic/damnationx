@@ -1,7 +1,7 @@
 /**
  * @file hd_sprites_core.hpp
  *
- * Engine-independent parts of the opt-in HD sprite replacement:
+ * Engine-independent parts of the opt-in HD sprite replacement (DamnationX HD runtime contract v1, section 2):
  * the hd/sprites.txt index parser, the 60 FPS frame selection, the GPU texture LRU bookkeeping and the
  * per-pixel occlusion ("last writer") plane that decides which HD texels the classic painter order hides.
  *

@@ -312,7 +312,7 @@ void RenderVirtualGamepad(SDL_Surface *surface);
 /**
  * @brief The destination rectangles the last RenderVirtualGamepad(SDL_Surface *) call drew (screen coordinates).
  *
- * Empty when that call drew nothing. The WebGPU presenter stamps them Unlit in the G-buffer.
+ * Empty when that call drew nothing. The WebGPU presenter stamps them Unlit in the G-buffer (SPEC §5.4).
  */
 std::span<const SDL_Rect> VirtualGamepadRects();
 void FreeVirtualGamepadGFX();

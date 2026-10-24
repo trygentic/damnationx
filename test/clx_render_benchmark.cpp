@@ -62,9 +62,9 @@ void RecordSceneCounters(benchmark::State &state, const ReferenceSceneCounters &
 	state.SetItemsProcessed(state.iterations() * itemsPerIteration);
 }
 
-// ---- Hybrid lighting capture ----
+// ---- Hybrid lighting capture (SPEC §6.2, §12.4) ----
 
-/** Row-span packed plane built from a decoded frame: the shape the normal-plane generator produces, minus the normals. */
+/** Row-span packed plane (§7.1) built from a decoded frame: the shape T4's generator produces, minus the normals. */
 struct BenchmarkPlane {
 	const uint8_t *key = nullptr; // sprite.pixelData()
 	std::vector<uint8_t> data;
@@ -154,7 +154,7 @@ BenchmarkPlane BuildBenchmarkPlane(ClxSprite sprite)
 
 std::vector<BenchmarkPlane> ProviderPlanes;
 
-// Pointer-keyed lookup over the handful of benchmark frames (mirrors the cost class of the generator's warm lookup).
+// Pointer-keyed lookup over the handful of benchmark frames (mirrors the cost class of T4's warm lookup).
 clx_normal_map::Plane ProvideBenchmarkPlane(ClxSprite sprite, bool /*mirrored*/)
 {
 	const uint8_t *key = sprite.pixelData();

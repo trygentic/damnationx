@@ -37,6 +37,7 @@
 #include "engine/render/ui_scale.hpp"
 #include "engine/trn.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "hwcursor.hpp"
 #include "inv.h"
 #include "levels/trigs.h"
@@ -643,8 +644,15 @@ void CheckTown()
 			if (EntranceBoundaryContains(missile.position.tile, cursPosition)) {
 				trigflag = true;
 				InfoString = _("Town Portal");
-				if (missile.IsTrap())
-					AddInfoBoxString(_("Cathedral level 1 entrance"));
+				if (missile.IsTrap()) {
+					InfoString = _("Free town portal");
+					switch (FreeTownPortalTargetLevel(*MyPlayer)) {
+					case 5: AddInfoBoxString(_("Catacombs level 5 entrance")); break;
+					case 9: AddInfoBoxString(_("Caves level 9 entrance")); break;
+					case 13: AddInfoBoxString(_("Hell level 13 entrance")); break;
+					default: AddInfoBoxString(_("Cathedral level 1 entrance")); break;
+					}
+				}
 				else
 					AddInfoBoxString(FormatRuntime(_("from {:s}"), Players[missile._misource]._pName));
 				cursPosition = missile.position.tile;
@@ -997,15 +1005,18 @@ void CheckCursMove()
 	bool flipflag = false;
 	// First person: a ray from the 3D camera through the crosshair (or the Alt cursor) picks the world instead.
 	const bool firstPerson = fpv::IsActive();
+	// Embedded: the host's 3D pick (host/host_hooks.hpp) replaces the screen-space picking.
+	Point hostTile;
+	const bool hostPick = host::PickedTile(hostTile);
 	// The world is picked at full screen resolution; MousePosition is in UI space (ui_scale.hpp).
-	const Point currentTile = firstPerson ? fpv::PickFromScreen(GetMouseScreenPosition()) : GetTileUnderScreenPosition(GetMouseScreenPosition(), flipflag);
+	const Point currentTile = hostPick ? hostTile : firstPerson ? fpv::PickFromScreen(GetMouseScreenPosition()) : GetTileUnderScreenPosition(GetMouseScreenPosition(), flipflag);
 
 	if (CheckMouseHold(currentTile)) return;
 
 	ResetCursorInfo();
 
 	if (CheckPlayerState(currentTile, myPlayer) || CheckPanelsAndFlags(mainPanel)) return;
-	if (firstPerson ? fpv::ApplyPickToCursor() : CheckCursorActions(currentTile, flipflag)) return;
+	if (hostPick ? host::ApplyPickToCursor() : firstPerson ? fpv::ApplyPickToCursor() : CheckCursorActions(currentTile, flipflag)) return;
 
 	// update cursor position
 	cursPosition = currentTile;

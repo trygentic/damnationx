@@ -3410,7 +3410,7 @@ void ProcessTownPortal(Missile &missile)
 		if (player.plractive && player.isOnActiveLevel() && !player._pLvlChanging && player._pmode == PM_STAND && player.position.tile == missile.position.tile) {
 			ClrPlrPath(player);
 			if (&player == MyPlayer) {
-				NetSendCmdParam1(true, CMD_WARP, missile.IsTrap() ? CathedralPortalIndex : missile._misource);
+				NetSendCmdParam1(true, CMD_WARP, missile.IsTrap() ? FreeTownPortalWarp(FreeTownPortalTargetLevel(player)) : missile._misource);
 				player._pmode = PM_NEWLVL;
 			}
 		}

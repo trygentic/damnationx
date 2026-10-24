@@ -1,7 +1,7 @@
 /**
  * @file clx_render_golden_test.cpp
  *
- * Classic byte-identity goldens for the CLX sprite blitter.
+ * Classic byte-identity goldens for the CLX sprite blitter (SPEC §12.1).
  *
  * Every public entry point (ClxDraw / ClxDrawTRN / ClxDrawBlended / ClxDrawBlendedTRN / ClxDrawOutline /
  * ClxDrawOutlineSkipColorZero) is driven over every frame of `data/resistance.clx` and `ui_art/dvl_lrpopup.clx`
@@ -272,10 +272,10 @@ TEST(ClxRenderGolden, ClassicByteIdentity)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Capture / stamp parity: the hybrid path must write the colour exactly like the classic path
+// Capture / stamp parity (SPEC §6.2, §12.1): the hybrid path must write the colour exactly like the classic path
 // and tag exactly the written pixels in the G-buffer planes. The planes are driven directly through
-// gbuffer::CurrentPlanes / CurrentMode (gbuffer::Allocate is not needed) and the card normal plane comes from
-// clx_normal_map::SetNormalPlaneProviderForTesting (the generator is not needed).
+// gbuffer::CurrentPlanes / CurrentMode (T1's Allocate is not needed) and the card normal plane comes from
+// clx_normal_map::SetNormalPlaneProviderForTesting (T4's generator is not needed).
 // ---------------------------------------------------------------------------------------------------------------
 
 constexpr int16_t Transparent = -1;
@@ -470,7 +470,7 @@ std::vector<int16_t> DecodeClxTopDown(ClxSprite sprite)
 	return pixels;
 }
 
-/** Row-span plane for a synthetic sprite: opaque -> PackAux(Card, 3 + f(x, r)), colour 0 -> ShadowByte, gaps -> 0. */
+/** Row-span plane (§7.1) for a synthetic sprite: opaque -> PackAux(Card, 3 + f(x, r)), colour 0 -> ShadowByte, gaps -> 0. */
 struct TestPlane {
 	std::vector<uint8_t> data;
 	std::vector<uint32_t> rowOffset;
@@ -1075,7 +1075,7 @@ TEST(ClxRenderGolden, HybridColourByteIdentity)
 	gbuffer::CurrentTileBaseRow.fill(0);
 }
 
-// A stubbed ClearNormalPlaneCache would be a no-op; the hook is still exercised so a link error would surface here.
+// The T0 stub's ClearNormalPlaneCache is a no-op; the hook is still exercised so a link error would surface here.
 TEST(ClxRenderCapture, ClearClxDrawCacheAlsoClearsNormalPlanes)
 {
 	ClearClxDrawCache();

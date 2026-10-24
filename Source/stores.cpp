@@ -2429,13 +2429,8 @@ void StartStore(TalkID s)
 	ActiveStore = s;
 }
 
-void DrawSText(const Surface &out)
+void RefreshStorePanelRows()
 {
-	if (!IsTextFullSize)
-		DrawSTextBack(out);
-	else
-		DrawQTextBack(out);
-
 	if (HasScrollbar) {
 		switch (ActiveStore) {
 		case TalkID::SmithBuy:
@@ -2463,6 +2458,52 @@ void DrawSText(const Surface &out)
 	}
 
 	CalculateLineHeights();
+
+}
+
+std::vector<StorePanelRow> ExportStorePanelRows()
+{
+	RefreshStorePanelRows();
+	std::vector<StorePanelRow> result;
+	for (int line = 0; line < NumStoreLines; ++line) {
+		const auto &row = TextLine[line];
+		if (!row.hasText())
+			continue;
+		result.push_back({ line, row.y, LineHeight(), row._sval, row.cursId,
+		    static_cast<uint32_t>(row.flags), row.isSelectable() || (HasScrollbar && line == BackButtonLine()),
+		    line == CurrentTextLine, row.text });
+	}
+	return result;
+}
+
+bool ActivateStorePanelRow(int line)
+{
+	if (!IsPlayerInStore() || qtextflag || line < 0 || line >= NumStoreLines)
+		return false;
+	if (!TextLine[line].isSelectable() && !(HasScrollbar && line == BackButtonLine()))
+		return false;
+	CurrentTextLine = line;
+	StoreEnter();
+	return true;
+}
+
+bool StorePanelHasScrollbar()
+{
+	return HasScrollbar;
+}
+
+uint32_t StorePanelGold()
+{
+	return TotalPlayerGold();
+}
+
+void DrawSText(const Surface &out)
+{
+	if (!IsTextFullSize)
+		DrawSTextBack(out);
+	else
+		DrawQTextBack(out);
+	RefreshStorePanelRows();
 	const Point uiPosition = GetGameUIRectangle().position;
 	for (int i = 0; i < NumStoreLines; i++) {
 		if (TextLine[i].isDivider())

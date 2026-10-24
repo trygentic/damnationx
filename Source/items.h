@@ -553,6 +553,13 @@ void DoRepair(Player &player, int cii);
 void DoRecharge(Player &player, int cii);
 bool DoOil(Player &player, int cii);
 [[nodiscard]] StringOrView PrintItemPower(char plidx, const Item &item);
+#ifdef DEVILUTIONX_TRAINER
+/** The affixes chosen by the last GetItemPower / GetStaffPower call (nullptr = none), for the trainer's item creator. */
+extern const PLStruct *TrainerChosenPrefix;
+extern const PLStruct *TrainerChosenSuffix;
+/** A fresh copy of a base item with one power applied the way affixes and unique items apply it. */
+Item TrainerApplyItemPower(const Player &player, _item_indexes base, ItemPower power);
+#endif
 void DrawUniqueInfo(const Surface &out);
 void PrintItemDetails(const Item &item);
 void PrintItemDur(const Item &item);

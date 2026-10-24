@@ -1,9 +1,10 @@
 # clx_render goldens
 
 Classic byte-identity goldens for the CLX sprite blitter (`Source/engine/render/clx_render.cpp`,
-`Source/engine/render/blit_impl.hpp`), consumed by `test/clx_render_golden_test.cpp`.
+`Source/engine/render/blit_impl.hpp`), consumed by `test/clx_render_golden_test.cpp` (SPEC §12.1).
 
-`goldens.tsv` was recorded before any hybrid-lighting change to the sprite blitter and must not change while the classic dispatch is bit-exact.
+`goldens.tsv` was recorded on T0's interface commit (`876986a9e`, before any hybrid-lighting change to
+the sprite blitter) and must not change while the classic dispatch is bit-exact.
 
 ## Format
 

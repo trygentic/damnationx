@@ -246,7 +246,7 @@ DVL_ALWAYS_INLINE void DoRenderBackwards(const Surface &out, Point position, Clx
 }
 
 /**
- * @brief Hybrid-lighting sprite path: the classic blit wrapped in a G-buffer writer.
+ * @brief Hybrid-lighting sprite path (SPEC §6.2): the classic blit wrapped in a G-buffer writer.
  *
  * Off-back-buffer surfaces (e.g. `CreateHalfSizeItemSprites`) take the classic draw. In StampUnlit mode every
  * written pixel is tagged Unlit. In CaptureWorld mode the aux/base bytes follow `gbuffer::CurrentCardKind`:
@@ -481,7 +481,7 @@ void RenderClxOutline(const Surface &out, Point position, ClxSprite sprite, uint
 	UpdateOutlinePixelsCache<SkipColorIndexZero>(sprite);
 	--position.x;
 	position.y -= sprite.height();
-	// UI stamping: the outline ring is Unlit; in capture mode it keeps the kind under it (accepted).
+	// UI stamping (SPEC §5.4): the outline ring is Unlit; in capture mode it keeps the kind under it (accepted).
 	const bool stamp = gbuffer::StampActive() && gbuffer::CurrentPlanes.covers(out);
 	if (position.x >= 0 && position.x + sprite.width() + 2 < out.w()
 	    && position.y >= 0 && position.y + sprite.height() + 2 < out.h()) {

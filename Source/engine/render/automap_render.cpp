@@ -16,7 +16,7 @@ namespace devilution {
 namespace {
 
 /**
- * @brief Tags a pixel of `out` (already bounds-checked against `out`) as Unlit in the G-buffer.
+ * @brief Tags a pixel of `out` (already bounds-checked against `out`) as Unlit in the G-buffer (SPEC §5.4).
  *
  * The automap writes through `Surface::SetPixel`, not through `primitive_render`, so it stamps here per pixel.
  */

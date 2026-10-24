@@ -14,6 +14,7 @@
 #include <SDL_version.h>
 #endif
 
+#include "host/host_hooks.hpp"
 #include "options.h"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
@@ -27,7 +28,7 @@ namespace devilution {
 inline bool IsHardwareCursorEnabled()
 {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-	return *GetOptions().Graphics.hardwareCursor && HardwareCursorSupported();
+	return *GetOptions().Graphics.hardwareCursor && HardwareCursorSupported() && !host::IsActive();
 #else
 	return false;
 #endif

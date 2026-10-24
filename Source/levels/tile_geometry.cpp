@@ -1,7 +1,7 @@
 /**
  * @file tile_geometry.cpp
  *
- * Packed occluder volume for the 2.5D hybrid lighting.
+ * Packed occluder volume for the 2.5D hybrid lighting (SPEC §8).
  *
  * Reads only the dun_tile_data globals (dPiece, dFlags, dTransVal, TransList, dLight, dSpecial, dObject,
  * SOLData, leveltype) and never anything from gendung/drlg, so that tile_geometry_test links without
@@ -34,7 +34,7 @@ constexpr uint8_t FaceSWBit = static_cast<uint8_t>(Face::SW);
 constexpr uint8_t FaceSEBit = static_cast<uint8_t>(Face::SE);
 
 /**
- * @brief Multiply-xorshift hash over `dPiece` and `dSpecial` read as u64 words, plus the piece
+ * @brief Multiply-xorshift hash over `dPiece` and `dSpecial` read as u64 words (SPEC §8.1), plus the piece
  * table build count so that a table rebuilt for another tileset (or another `pSpecialCels`) re-packs the
  * static bits even when `dPiece` and `dSpecial` hash the same.
  */
@@ -136,7 +136,7 @@ bool UpdateOccluderVolume(OccluderVolume &volume, DoorOpenFn doorOpen)
 	volume.staticHash = hash;
 
 	bool changed = false;
-	// Texture layout: texel (x, y) lives at cells[y * MAXDUNX + x], read as `textureLoad(volumeTex, vec2i(x, y))`.
+	// Texture layout: texel (x, y) lives at cells[y * MAXDUNX + x] (§9.2 `textureLoad(volumeTex, vec2i(x, y))`).
 	for (int y = 0; y < MAXDUNY; ++y) {
 		uint32_t *row = &volume.cells[static_cast<size_t>(y) * MAXDUNX];
 		for (int x = 0; x < MAXDUNX; ++x) {

@@ -472,3 +472,18 @@ uwp-project/Assets/gendata
 uwp-project/Assets/ui_art
 !uwp-project/devilutionX_TemporaryKey.pfx
 /.s390x-ccache/
+
+# Third-party and Blizzard-derived 3D art. Distributed separately (Discord),
+# never committed: downloaded packs, free-tier and HD-tier model sources.
+/assets/downloaded/
+/assets/packs/
+# 3D models anywhere under assets/ (the warrior ships in the HD pack, the props in the FREE/HD 3D packs).
+/assets/**/*.glb
+/assets/**/*.gltf
+/assets/**/*.fbx
+*.blend
+*.blend1
+
+# Local chat screenshots and graphics references (including Blizzard imagery).
+# Keep image bytes and their local provenance manifest out of Git.
+/references/graphics/

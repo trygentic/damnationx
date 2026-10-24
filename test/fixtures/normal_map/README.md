@@ -1,6 +1,6 @@
 # normal_map fixtures
 
-Synthetic CLX sprites for `test/clx_normal_map_test.cpp` and `test/clx_normal_map_benchmark.cpp`.
+Synthetic CLX sprites for `test/clx_normal_map_test.cpp` and `test/clx_normal_map_benchmark.cpp` (SPEC §7, §12.2, §12.4).
 
 ## Provenance
 
@@ -15,10 +15,10 @@ descriptions here.
 
 A uniform disc of radius 44 px centred at (64, 64) in palette index 40; everything else transparent.
 
-* Exercises the silhouette dome: rim normals point outward along the radial direction, the centre
+* Exercises the silhouette dome (§7.3 steps 2–3): rim normals point outward along the radial direction, the centre
   is flat (LUT index 3), and the luminance detail term is zero (uniform colour).
 * Row-span packing: Σ chord widths ≈ π·44² = 6082 bytes of 16384 dense (37 %). This is the monster-like packed
-  ratio the wasm cache budget is derived from; `clx_normal_map_benchmark` reports the exact value.
+  ratio the wasm cache budget (§7.2) is derived from; `clx_normal_map_benchmark` reports the exact value.
 
 ## ramp.clx — 64 x 128, 1 frame (368 bytes)
 
@@ -27,7 +27,7 @@ A uniform disc of radius 44 px centred at (64, 64) in palette index 40; everythi
 * Shadow: feet rows 0 and 1, columns [8, 56), palette index 0 (`ShadowByte` in the plane).
 
 With the test's linear-luminance palette the body is a uniform vertical luminance gradient: without de-lighting
-the detail normal tilts toward the feet (negative card y); with de-lighting the gradient is subtracted
+the detail normal tilts toward the feet (negative card y); with de-lighting (§7.3 step 4) the gradient is subtracted
 and the interior is flat. Packed bytes: 32·112 + 2·48 = 3680 of 8192 dense (45 %).
 
 ## Palette

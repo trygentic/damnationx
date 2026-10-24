@@ -3,11 +3,33 @@ name = "launcher"
 version = "0.1.0"
 edition = "2021"
 
+# Remain independently buildable, including the public/browser launcher, when
+# the private host workspace is absent from a distribution.
+[workspace]
+resolver = "2"
+
+[features]
+# Private developer trainer button; never enable for public builds.
+trainer = []
+
 [dependencies]
 eframe = { version = "0.36", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rfd = "0.17"
+directories = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+
+[target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies]
+nix = { version = "0.29", features = ["signal", "process"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4"

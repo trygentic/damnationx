@@ -4,6 +4,9 @@
  * Implementation of functionality for printing the ingame chat messages.
  */
 #include "plrmsg.h"
+#ifdef DAMNATION_S1_BRIDGE
+#include "s1_bridge.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -80,6 +83,9 @@ void EventPlrMsg(std::string_view text, UiFlags style)
 
 void SendPlrMsg(Player &player, std::string_view text)
 {
+#ifdef DAMNATION_S1_BRIDGE
+	s1_bridge::RecordChat(player.getId(), text);
+#endif
 	PlayerMessage &message = GetNextMessage();
 
 	const std::string from = FormatRuntime(_("{:s} (lvl {:d}): "), player._pName, player.getCharacterLevel());
@@ -94,6 +100,9 @@ void SendPlrMsg(Player &player, std::string_view text)
 
 void InitPlrMsg()
 {
+#ifdef DAMNATION_S1_BRIDGE
+	s1_bridge::ResetChat();
+#endif
 	Messages = {};
 }
 

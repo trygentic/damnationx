@@ -11,7 +11,8 @@
  * the node's global matrix. Rigid vertices are stored in their node's local space with weight 1 on that entry, so
  * every primitive goes through the same skinning shader.
  *
- * Parts: every mesh node is one part (bit in a visibility mask); `partNames[i]` is the node name. The body is part 0.
+ * Parts: every mesh node is one part (bit in a visibility mask, up to 128); `partNames[i]` is the node name. The body
+ * is part 0.
  */
 
 #include <cstdint>
@@ -116,8 +117,16 @@ struct GltfModel {
 	[[nodiscard]] int findPart(std::string_view name) const;
 };
 
-/** Parses a .glb held in memory. False (with `error` set) when the file is not a usable skinned model. */
-bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error);
+struct GltfLoadOptions {
+	/**
+	 * Also accept models without a skin (static meshes for render3d/placement.hpp): every mesh node is then rigid, and
+	 * up to 255 mesh nodes are allowed instead of 24.
+	 */
+	bool allowStatic = false;
+};
+
+/** Parses a .glb held in memory. False (with `error` set) when the file is not a usable skinned (or, with allowStatic, static) model. */
+bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error, const GltfLoadOptions &options = {});
 
 /** Local TRS of every node, the pose being built. */
 struct NodePose {

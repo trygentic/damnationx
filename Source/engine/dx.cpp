@@ -46,6 +46,7 @@
 #include "engine/render/webgpu_presenter.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "init.hpp"
 #include "levels/dun_tile.hpp"
 #include "levels/dun_tile_data.hpp"
@@ -395,7 +396,7 @@ bool CanRenderDirectlyToOutputSurface()
 	    && outputSurface->format->BitsPerPixel == 8);
 #endif
 #else // !USE_SDL1
-	if (renderer != nullptr) return false;
+	if (renderer != nullptr || host::IsActive()) return false;
 	SDL_Surface *outputSurface = GetOutputSurface();
 	// Assumes double-buffering is available.
 	return outputSurface->w == static_cast<int>(gnScreenWidth)
@@ -468,6 +469,13 @@ void ShowHdArtNoticeOnce()
 
 void dx_init()
 {
+	if (host::IsActive()) {
+		// Embedded: no window and no presenter, the host composites the frame as its UI layer.
+		Palette = SDLWrap::AllocPalette();
+		palette_init();
+		CreateBackBuffer();
+		return;
+	}
 #ifndef USE_SDL1
 	SDL_RaiseWindow(ghMainWnd);
 	SDL_ShowWindow(ghMainWnd);
@@ -556,7 +564,7 @@ void CreateBackBuffer()
 	// the global `palette` doesn't have any colors set yet.
 #endif
 
-	// The G-buffer planes mirror the back buffer; the presenter's textures follow its size.
+	// The G-buffer planes mirror the back buffer (SPEC §3.1); the presenter's textures follow its size.
 	gbuffer::Allocate(static_cast<const uint8_t *>(PalSurface->pixels), static_cast<uint16_t>(PalSurface->pitch),
 	    static_cast<uint16_t>(gnScreenWidth), static_cast<uint16_t>(gnScreenHeight));
 #if DEVILUTIONX_WEBGPU
@@ -576,7 +584,7 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 
 void Blit(SDL_Surface *src, SDL_Rect *srcRect, SDL_Rect *dstRect)
 {
-	if (HeadlessMode)
+	if (HeadlessMode || host::IsActive())
 		return;
 
 	SDL_Surface *dst = GetOutputSurface();
@@ -672,7 +680,7 @@ std::array<float, 3> GetMissileRayTracingColor(MissileID type)
 	return { 0.95F, 0.86F, 0.70F };
 }
 
-/** Light height above the floor by owner: torches and candles sit high, everything else at chest height. */
+/** Light height above the floor by owner (SPEC §9.7): torches and candles sit high, everything else at chest height. */
 float GetObjectLightHeight(_object_id type)
 {
 	switch (type) {
@@ -705,7 +713,7 @@ bool IsDoorOpenAt(Point tile)
 	return object != nullptr && object->isDoor() && object->_oVar4 == 1;
 }
 
-/** FNV-1a over the 256 logical palette entries; the emissive weights are rebuilt only when it changes. */
+/** FNV-1a over the 256 logical palette entries; the emissive weights are rebuilt only when it changes (SPEC §9.6). */
 uint64_t HashPalette(const SDL_Color *palette)
 {
 	uint64_t hash = 0xcbf29ce484222325ULL;
@@ -773,7 +781,7 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 	static_assert(WebGpuOccluderGridWidth == MAXDUNX);
 	static_assert(WebGpuOccluderGridHeight == MAXDUNY);
 
-	// ~52 KB by value: filled in place and returned by reference. The occluder grid and every
+	// ~52 KB by value (SPEC §9.1): filled in place and returned by reference. The occluder grid and every
 	// scalar are rewritten on each call, so nothing from the previous frame leaks through.
 	static WebGpuLightingData Result;
 	static tile_geometry::OccluderVolume Volume;
@@ -855,10 +863,10 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 		uint32_t stableId;
 		int priority;
 		int relevance;
-		float worldZ; // hybrid only
+		float worldZ; // hybrid only (SPEC §9.7)
 		// Hybrid only: the emitter tile is Visible (or the level is town). The legacy path dropped this filter
 		// (its shader occludes emitters by line of sight; filtering made lights pop at vision boundaries), but the
-		// hybrid pass keeps it as its no-reveal rule for hidden emitters.
+		// hybrid pass keeps it as its no-reveal rule for hidden emitters (docs/design/hybrid-2p5d-lighting.md §2, §9.7).
 		bool emitterVisible;
 	};
 	static std::array<Candidate, MAXLIGHTS + MAXOBJECTS> candidates;
@@ -964,7 +972,7 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 	    && *GetOptions().Graphics.rayTracedLighting
 	    && (result.lightCount != 0 || result.debugOccluders);
 
-	// ---- 2.5D hybrid pass. `enabled` is what the back buffer holds, not the option. ----
+	// ---- 2.5D hybrid pass (SPEC §9.1, §9.7). `enabled` is what the back buffer holds, not the option. ----
 	WebGpuHybridData &hybrid = result.hybrid;
 	hybrid.enabled = gbuffer::BackBufferIsHybrid();
 	if (!hybrid.enabled)
@@ -979,7 +987,7 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 #endif
 	auto debugView = static_cast<uint8_t>(*GetOptions().Graphics.hybridDebugView);
 	if (debugView == static_cast<uint8_t>(GBufferDebugView::Off) && *GetOptions().Graphics.debugLightGeometry)
-		debugView = static_cast<uint8_t>(GBufferDebugView::Volume); // the legacy occluder view maps to Volume
+		debugView = static_cast<uint8_t>(GBufferDebugView::Volume); // the legacy occluder view maps to Volume (SPEC §9.5)
 	hybrid.debugView = debugView;
 	// Exactly Zoom()'s mapping (HdWorldTransform): quarters, first-row remainder, offsetX (left panel and remainder).
 	const HdWorldTransform zoomView = GetViewTransform();
@@ -989,9 +997,9 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 	hybrid.ambientScale = static_cast<float>(*GetOptions().Graphics.hybridAmbient) / 100.0F;
 	hybrid.heightPixelsPerWorldUnit = static_cast<float>(TILE_HEIGHT);
 
-	const size_t hybridBudget = highQuality ? WebGpuMaxHybridLights : WebGpuMaxHybridLights / 2; // 32 / 16
+	const size_t hybridBudget = highQuality ? WebGpuMaxHybridLights : WebGpuMaxHybridLights / 2; // 32 / 16 (SPEC §9.7)
 	// Lights that cannot reach a receiver of the viewport must not take a budget slot. Receivers lie in the viewport rectangle
-	// with their ground up to 255 (zoomed) rows lower, so their world positions lie in the box around that screen
+	// with their ground up to 255 (zoomed) rows lower (SPEC §3.2), so their world positions lie in the box around that screen
 	// area; the shader nudges a receiver by receiverNudge, the margin below covers it with room to spare.
 	const float reachBottom = static_cast<float>(std::min<int>(result.viewportHeight, gnScreenHeight)) + 255.0F * zoomFactor;
 	float reachLoX = 1e9F;
@@ -1048,7 +1056,7 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 	hybrid.ambientCurve = GetClassicAmbientCurve(framePalette);
 	FillHybridPalette(hybrid.palette);
 
-	// Planes: aux/index for the viewport rows, base for the unzoomed rows, rounded up like Zoom()'s source.
+	// Planes: aux/index for the viewport rows, base for the unzoomed rows (SPEC §3.2), rounded up like Zoom()'s source.
 	const int viewportRows = std::min<int>(result.viewportHeight, gnScreenHeight);
 	const std::span<const uint8_t> auxRows = gbuffer::AuxRows(viewportRows);
 	const std::span<const uint8_t> baseRows = gbuffer::BaseRows(viewportRows <= 0 ? 0 : ((viewportRows - 1 - zoomView.offsetY) * 4) / zoomView.quarters + 1);
@@ -1063,7 +1071,7 @@ const WebGpuLightingData &BuildWebGpuLightingData()
 	}
 
 	// Height volume: static bits are rebuilt when dPiece/dSpecial change, dynamic bits every frame; the presenter
-	// uploads the texture only when `generation` moves.
+	// uploads the texture only when `generation` moves (SPEC §8.2).
 	tile_geometry::UpdateOccluderVolume(Volume, IsDoorOpenAt);
 	hybrid.volume = Volume.cells.data();
 	hybrid.volumeGeneration = Volume.generation;
@@ -1075,6 +1083,10 @@ void RenderPresent()
 {
 	if (HeadlessMode)
 		return;
+	if (host::IsActive()) {
+		host::OnPresent();
+		return;
+	}
 	HdGraphicsFrameTick();
 
 	SDL_Surface *surface = GetOutputSurface();
@@ -1095,7 +1107,7 @@ void RenderPresent()
 		const auto presentStart = std::chrono::steady_clock::now();
 		if (ControlMode == ControlTypes::VirtualGamepad) {
 			RenderVirtualGamepad(surface);
-			// The gamepad is drawn into the RGBA frame only: mark its pixels Unlit so the composite passes them through.
+			// The gamepad is drawn into the RGBA frame only: mark its pixels Unlit so the composite passes them through (SPEC §5.4).
 			const Surface backBuffer = GlobalBackBuffer();
 			for (const SDL_Rect &rect : VirtualGamepadRects())
 				gbuffer::StampUnlit(backBuffer, Rectangle { Point { rect.x, rect.y }, Size { rect.w, rect.h } });
@@ -1117,7 +1129,7 @@ void RenderPresent()
 		if (!WebGpuPresent(surface, drawableSize.pixelWidth, drawableSize.pixelHeight, lighting))
 			LogError("WebGPU frame presentation failed");
 		gbuffer::EndFrame();
-		// The CPU side of RenderPresent (stamping, lighting data, uploads and encoding).
+		// SPEC §9.10: the CPU side of RenderPresent (stamping, lighting data, uploads and encoding).
 		Diagnostics.cpuFrameTimeMicroseconds = static_cast<uint64_t>(
 		    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - presentStart).count());
 #ifdef __EMSCRIPTEN__

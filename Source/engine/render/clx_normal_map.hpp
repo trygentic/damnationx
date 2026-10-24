@@ -10,7 +10,7 @@ struct SDL_Color;
 
 namespace devilution::clx_normal_map {
 
-/** Row-span packed aux plane for one frame. Row r (0 = feet row) holds bytes for columns [rowX0[r], rowX0[r] + (rowOffset[r+1] - rowOffset[r]))
+/** Row-span packed aux plane for one frame (rev. 2). Row r (0 = feet row) holds bytes for columns [rowX0[r], rowX0[r] + (rowOffset[r+1] - rowOffset[r]))
  *  covering every opaque pixel of that row: PackAux(Card, idx) | ShadowByte (colour 0) | 0 (transparent inside the span, never read).
  *  data == nullptr means "flat tier": the blitter writes FlatCardByte for every opaque pixel (no shadow distinction) and no plane is stored. */
 struct Plane {
@@ -39,7 +39,7 @@ struct Options {
 	float detailContrastFloor = 0.04F;
 };
 
-/** Packed plane for a Card frame. Key = {pixelData(), pixelDataSize(), width, height, mirrored} (no hashing on lookup).
+/** Packed plane for a Card frame. Key = {pixelData(), pixelDataSize(), width, height, mirrored} (no hashing on lookup, §7.2).
  *  Returns Plane{} (flat) when generation is disabled or the per-frame budget is exhausted (the key is queued). Palette = gbuffer::CurrentPalette(). */
 [[nodiscard]] Plane GetOrBuildNormalPlane(ClxSprite sprite, bool mirrored);
 /** Pure generator (testable): packs the plane for `sprite` into `out` (row-span layout, returns the view). `scratch` is reused across calls. */
@@ -53,7 +53,7 @@ void RegisterAuthoredNormalMap(uint64_t contentHash, uint64_t materialVersion, s
 // Budget / cache
 void SetOptions(const Options &opts);                                     // hybridNormalMaps option → generate
 void SetBudget(uint32_t framesPerGameFrame, uint32_t microsPerGameFrame); // default 8 / 1500
-void SetCacheBudget(size_t bytes);                                        // reserves the arena (one allocation); default 64 MiB native, 24 MiB Emscripten (measured; see DefaultEmscriptenBudget)
+void SetCacheBudget(size_t bytes);                                        // reserves the arena (one allocation); default 64 MiB native, 24 MiB Emscripten (measured, §7.2; see DefaultEmscriptenBudget)
 void EnqueuePrewarm(ClxSpriteList list);                                  // stops accepting once projected bytes reach 70 % of the budget
 void EnqueuePrewarm(ClxSpriteSheet sheet);
 size_t Pump(uint32_t budgetMicros);                             // generates queued planes; returns planes generated
@@ -65,7 +65,7 @@ struct Stats {
 [[nodiscard]] Stats GetStats();
 void ResetFrameStats();
 
-// Test seam (tests can exercise BlitWithGBuffer without the generator): when set, GetOrBuildNormalPlane returns provider(sprite, mirrored) and touches no cache.
+// Test seam (T3 can exercise BlitWithGBuffer without T4): when set, GetOrBuildNormalPlane returns provider(sprite, mirrored) and touches no cache.
 using PlaneProvider = Plane (*)(ClxSprite sprite, bool mirrored);
 void SetNormalPlaneProviderForTesting(PlaneProvider provider); // nullptr restores normal behaviour
 

@@ -196,7 +196,7 @@ struct BlitBlendedWithLightmap {
 	}
 };
 
-// ---- 2.5D hybrid lighting G-buffer writers ----
+// ---- 2.5D hybrid lighting G-buffer writers (SPEC §6.2) ----
 //
 // The blit functor contract carries no coordinates, so the aux writers derive the back-buffer row from
 // `dst` once per run with the exact reciprocal multiply (no div/mod: CLX runs are mostly 1-16 px wide).
@@ -394,7 +394,7 @@ struct GBufferCardContext {
 	int left;                    // absolute back-buffer x of the sprite's left edge (may be negative when clipped)
 	int feetY;                   // absolute back-buffer row of the sprite's feet (bottom) row
 	uint8_t feetByte;            // feetY & 0xFF, written to plane B
-	clx_normal_map::Plane plane; // row-span packed; plane.data != nullptr here
+	clx_normal_map::Plane plane; // row-span packed (§7.1); plane.data != nullptr here
 };
 
 /** Card with a generated normal plane: copies the row-span aux bytes and writes the feet row to plane B. */

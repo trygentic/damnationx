@@ -27,6 +27,7 @@
 #include "engine/render/hd_ui.hpp"
 #include "engine/sound.h"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "hwcursor.hpp"
 #include "storm/storm_svid.h"
 #include "utils/display.h"
@@ -46,11 +47,11 @@ void play_movie(const char *pszMovie, bool userCanClose)
 
 	// Video playback requires the SDL video subsystem, which HeadlessMode
 	// intentionally does not initialize.
-	if (HeadlessMode)
+	if (HeadlessMode || host::IsActive()) // embedded: no movies (no window to play them in)
 		return;
 
 	// SVid blits into the RGBA output while PalSurface keeps the last game frame: an in-game movie must never be presented
-	// through the hybrid composite over that frame's planes.
+	// through the hybrid composite over that frame's planes (SPEC §9.9).
 	gbuffer::InvalidateBackBuffer();
 	HdSpritesInvalidate();
 	HdTilesInvalidate();

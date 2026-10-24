@@ -172,6 +172,18 @@ void DrawSTextHelp();
 void ClearSText(int s, int e);
 void StartStore(TalkID s);
 void DrawSText(const Surface &out);
+
+struct StorePanelRow {
+	int line, y, height, price, icon;
+	uint32_t flags;
+	bool selectable, selected;
+	std::string text;
+};
+
+std::vector<StorePanelRow> ExportStorePanelRows();
+bool ActivateStorePanelRow(int line);
+bool StorePanelHasScrollbar();
+uint32_t StorePanelGold();
 /** Returns the screen rectangle occupied by the current store or NPC dialogue menu. */
 Rectangle GetStoreTextRectangle();
 void StoreESC();

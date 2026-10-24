@@ -55,7 +55,7 @@ bool Dummy_GetHeroInfo(_uiheroinfo *pInfo)
 /**
  * @brief How the hybrid presentation options are driven during a replay.
  *
- * `hybridLighting` / `hybridNormalMaps` are presentation-only: whatever their value and however often
+ * `hybridLighting` / `hybridNormalMaps` are presentation-only (SPEC §10): whatever their value and however often
  * they flip, the canonical simulation state must not change.
  *
  * The replay runs with HeadlessMode set, and under HeadlessMode every hybrid option reader in the engine is gated
@@ -304,8 +304,8 @@ void InstallReplayEventHooks()
 	sol::state &lua = GetLuaState();
 	sol::table *events = GetLuaEvents();
 	ASSERT_NE(events, nullptr);
-	lua.set_function("timedemo_replay_event", &OnReplayGameEvent);
-	const sol::object callback = lua["timedemo_replay_event"];
+	lua.set_function("dxm_t10_replay_event", &OnReplayGameEvent);
+	const sol::object callback = lua["dxm_t10_replay_event"];
 	for (const char *name : { "GameStart", "OnMonsterTakeDamage", "OnPlayerTakeDamage", "OnPlayerGainExperience" }) {
 		const sol::protected_function add = (*events)[name]["add"];
 		ASSERT_TRUE(add.valid()) << name;
@@ -477,7 +477,7 @@ TEST(Timedemo, WarriorLevel1to2)
 }
 
 /**
- * @brief Toggling the hybrid presentation options during the WarriorLevel1to2 replay
+ * @brief SPEC §12.1 / DXM-L01: toggling the hybrid presentation options during the WarriorLevel1to2 replay
  * leaves the canonical simulation state unchanged.
  *
  * Every scenario replays the same demo; the canonical state is hashed at each Lua game event the replay fires

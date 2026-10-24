@@ -1,0 +1,4 @@
+#!/bin/sh
+# Rejects commits that add model or texture files under assets/ (tools/check_no_art.py).
+# Enable once per clone: git config core.hooksPath tools/hooks
+exec python3 "$(git rev-parse --show-toplevel)/tools/check_no_art.py" --staged

@@ -5,6 +5,7 @@
  */
 #include "pack.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <format>
 
@@ -200,6 +201,8 @@ void PackPlayer(PlayerPack &packed, const Player &player)
 	packed.pDamAcFlags = Swap32LE(static_cast<uint32_t>(player.pDamAcFlags));
 	packed.pDiabloKillLevel = Swap32LE(player.pDiabloKillLevel);
 	packed.bIsHellfire = gbIsHellfire ? 1 : 0;
+	const auto freeTownPortalState = EncodeFreeTownPortalState(player.lastFreeTownPortalSection);
+	std::copy(freeTownPortalState.begin(), freeTownPortalState.end(), packed.reserved3);
 }
 
 void PackNetItem(const Item &item, ItemNetPack &packedItem)
@@ -434,6 +437,8 @@ void UnPackPlayer(const PlayerPack &packed, Player &player)
 	CalcPlrInv(player, false);
 	player.wReflections = Swap16LE(packed.wReflections);
 	player.pDiabloKillLevel = Swap32LE(packed.pDiabloKillLevel);
+	const FreeTownPortalSaveState freeTownPortalState { packed.reserved3[0], packed.reserved3[1], packed.reserved3[2], packed.reserved3[3] };
+	player.lastFreeTownPortalSection = DecodeFreeTownPortalState(freeTownPortalState, player.plrlevel, player.plrIsOnSetLevel);
 }
 
 bool UnPackNetItem(const Player &player, const ItemNetPack &packedItem, Item &item)

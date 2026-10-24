@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DamnationX VR for Meta Quest (./gradlew assembleDebug -Pvr, docs/design/vr.md).
+  Replaces src/main/AndroidManifest.xml in the -Pvr build. The OpenXR loader AAR merges in the OpenXR permissions
+  and the <queries> for the runtime broker.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:installLocation="auto">
+
+    <!-- A headset app: head tracking is required, controllers are expected. -->
+    <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" android:version="1" />
+    <uses-feature android:glEsVersion="0x00030001" />
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x401000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application android:label="${appLabel}"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_descriptor"
+        android:dataExtractionRules="@xml/backup_rules"
+        tools:targetApi="s"
+        android:isGame="true"
+        android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+        android:hardwareAccelerated="true">
+
+        <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
+
+        <activity android:name="org.diasurgical.devilutionx.DevilutionXSDLActivity"
+            android:label="${appLabel}"
+            android:launchMode="singleTask"
+            android:resizeableActivity="false"
+            android:excludeFromRecents="false"
+            android:configChanges="density|keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|layoutDirection|locale"
+            android:screenOrientation="landscape"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="com.oculus.intent.category.VR" />
+                <category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />
+            </intent-filter>
+        </activity>
+
+        <!-- 2D panels in the headset: copying or downloading the game data when it is missing. -->
+        <activity android:name="org.diasurgical.devilutionx.DataActivity"
+            android:theme="@style/Theme.MyApplication">
+        </activity>
+        <activity android:name="org.diasurgical.devilutionx.ImportActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.MyApplication">
+        </activity>
+    </application>
+
+</manifest>

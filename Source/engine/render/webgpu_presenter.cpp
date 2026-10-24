@@ -3,8 +3,8 @@
  *
  * WebGPU presenter: the legacy 2D ray-traced composite (incl. the upstream UI rects, town ambient, one-bounce
  * approximation and opt-in 4x Cathedral HD floor preview) plus the 2.5D hybrid
- * lighting passes. Platform-specific code (surface creation, waiting, launcher
- * notifications) lives behind WebGpuPlatform (webgpu_platform.hpp); this file includes no
+ * lighting passes (SPEC §3.4, §9.1, §9.9). Platform-specific code (surface creation, waiting, launcher
+ * notifications) lives behind WebGpuPlatform (webgpu_platform.hpp, SPEC §9.8); this file includes no
  * <emscripten.h>.
  */
 #include "engine/render/webgpu_presenter.hpp"
@@ -44,12 +44,13 @@
 #include "utils/log.hpp"
 #include "utils/png.h"
 #include "utils/sdl_ptrs.h"
+#include "xr/xr.hpp"
 
 namespace devilution {
 namespace {
 
 // The two legacy WGSL strings below are the upstream legacy path (e90b5e6de: UI rects, town ambient, one-bounce,
-// HD floor); the hybrid work does not modify them. The composite is compiled after HdFloorWgsl
+// HD floor); the hybrid work does not modify them (SPEC §9.9). The composite is compiled after HdFloorWgsl
 // (webgpu_shaders.hpp, bindings 16-22), which the hybrid present pass shares.
 constexpr char ShaderSource[] = R"(
 @group(0) @binding(0) var frameTexture: texture_2d<f32>;
@@ -594,7 +595,7 @@ static_assert(sizeof(GpuHybridParams) == 96 + 1024 + 512 + 64); // 1696, uniform
 static_assert(sizeof(GpuPresentParams) == 48 + 1024 + 512); // 1584, uniform buffer
 static_assert(sizeof(GpuHybridParams) % 16 == 0 && sizeof(GpuPresentParams) % 16 == 0);
 
-// HybridParams.counts.w / PresentParams.config.z flag layout (debug view in bits 8-11).
+// HybridParams.counts.w / PresentParams.config.z flag layout (SPEC §9.1; debug view in bits 8-11).
 constexpr uint32_t FlagDebugOccluders = 1U;
 constexpr uint32_t FlagBloom = 2U;
 constexpr uint32_t FlagHighQuality = 4U;
@@ -916,6 +917,7 @@ struct WebGpuPresenter {
 
 	void Shutdown()
 	{
+		xr::Shutdown(); // before the device: the VR bridge holds textures imported into it
 		HdTilesGpuRelease();
 		HdSpritesGpuRelease();
 		render3d::WorldGpuRelease();
@@ -982,7 +984,7 @@ void OnAdapterRequest(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPU
 	presenter.adapterRequestFinished = true;
 }
 
-// Device loss and uncaptured errors are counted in RendererDiagnostics and surfaced to the
+// SPEC §9.10: device loss and uncaptured errors are counted in RendererDiagnostics and surfaced to the
 // launcher as a retryable renderer failure. A loss we caused ourselves (WebGpuShutdown destroying the
 // device) is neither a failure nor allowed to poison a presenter re-initialized afterwards.
 void OnDeviceLost(WGPUDevice const *, WGPUDeviceLostReason reason, WGPUStringView message, void *userdata, void *)
@@ -1117,7 +1119,7 @@ bool CreateHybridMask(WebGpuPresenter &presenter)
 	return true;
 }
 
-/** Every sized texture: frame, legacy mask, aux/base/index planes, hybrid mask, palette, volume and HD floor metadata. */
+/** Every sized texture (SPEC §3.4): frame, legacy mask, aux/base/index planes, hybrid mask, palette, volume and HD floor metadata. */
 bool CreateTextures(WebGpuPresenter &presenter)
 {
 	const auto width = static_cast<uint32_t>(presenter.sourceWidth);
@@ -1654,7 +1656,7 @@ bool CreateFrameResources(WebGpuPresenter &presenter)
 	return CreatePipelineResources(presenter) && CreateTextures(presenter) && CreateBindGroups(presenter);
 }
 
-/** Recreate the mask and both hybrid bind groups when the live mask size differs from ceil(W/s) x ceil(H/s). */
+/** SPEC §9.9 step 2: recreate the mask and both hybrid bind groups when the live mask size differs from ceil(W/s) x ceil(H/s). */
 bool EnsureHybridMask(WebGpuPresenter &presenter, uint32_t maskScale)
 {
 	const uint32_t width = (static_cast<uint32_t>(presenter.sourceWidth) + maskScale - 1) / maskScale;
@@ -1854,7 +1856,7 @@ void FillHybridParams(const WebGpuLightingData &lighting, uint32_t maskScale, Gp
 	    | (hybrid.softShadows ? FlagSoftShadows : 0U)
 	    | (debugView << FlagDebugViewShift);
 
-	// Integers travel only through `counts` and `misc`; the float slots marked 0 stay 0.
+	// Integers travel only through `counts` and `misc` (SPEC §9.1); the float slots marked 0 stay 0.
 	params.screenOriginViewport = { lighting.screenOriginX, lighting.screenOriginY, viewportRows, 0.0F };
 	params.screenToWorld = { lighting.screenToWorldXX, lighting.screenToWorldXY, lighting.screenToWorldYX, lighting.screenToWorldYY };
 	params.counts = { std::min<uint32_t>(hybrid.lightCount, WebGpuMaxHybridLights), WebGpuOccluderGridWidth, WebGpuOccluderGridHeight, flags };
@@ -1878,7 +1880,7 @@ void FillHybridParams(const WebGpuLightingData &lighting, uint32_t maskScale, Gp
 	present.normalLut = hybrid.normalLut;
 }
 
-/** True when the hybrid data describes planes this presenter can upload (preconditions). */
+/** True when the hybrid data describes planes this presenter can upload (SPEC §9.9 step 3 preconditions). */
 bool HybridFrameIsPresentable(const WebGpuPresenter &presenter, const WebGpuHybridData &hybrid)
 {
 	const WebGpuGBufferPlanes &planes = hybrid.planes;
@@ -1894,22 +1896,33 @@ bool EncodeAndSubmit(WebGpuPresenter &presenter, int drawableWidth, int drawable
     WGPURenderPipeline renderPipeline, WGPUBindGroup renderBindGroup, const FloorFrame &floor)
 {
 	RendererDiagnostics &diagnostics = MutableRendererDiagnostics();
+	// VR (xr/xr.hpp): the composite also goes into the headset's screen panel image (transparent world area); on a
+	// standalone headset the window is never shown, so the surface is skipped altogether.
+	const bool toSurface = !xr::OwnsDisplay();
+	const WGPUTextureView xrUiView = xr::WantsUiImage()
+	    ? xr::UiImageView(static_cast<uint32_t>(presenter.sourceWidth), static_cast<uint32_t>(presenter.sourceHeight))
+	    : nullptr;
+	if (!toSurface && xrUiView == nullptr)
+		return false;
 	WGPUSurfaceTexture surfaceTexture = WGPU_SURFACE_TEXTURE_INIT;
-	wgpuSurfaceGetCurrentTexture(presenter.surface, &surfaceTexture);
-	if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_Outdated || surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_Lost) {
-		presenter.drawableWidth = 0;
-		presenter.drawableHeight = 0;
-		presenter.surfaceLost = true;
-		++diagnostics.surfaceLossCount;
-		return false;
+	WGPUTextureView targetView = nullptr;
+	if (toSurface) {
+		wgpuSurfaceGetCurrentTexture(presenter.surface, &surfaceTexture);
+		if (surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_Outdated || surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_Lost) {
+			presenter.drawableWidth = 0;
+			presenter.drawableHeight = 0;
+			presenter.surfaceLost = true;
+			++diagnostics.surfaceLossCount;
+			return false;
+		}
+		if (surfaceTexture.texture == nullptr)
+			return false;
+		if (presenter.surfaceLost) {
+			presenter.surfaceLost = false;
+			++diagnostics.recoveryCount;
+		}
+		targetView = wgpuTextureCreateView(surfaceTexture.texture, nullptr);
 	}
-	if (surfaceTexture.texture == nullptr)
-		return false;
-	if (presenter.surfaceLost) {
-		presenter.surfaceLost = false;
-		++diagnostics.recoveryCount;
-	}
-	WGPUTextureView targetView = wgpuTextureCreateView(surfaceTexture.texture, nullptr);
 
 	WGPUCommandEncoderDescriptor encoderDescriptor = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
 	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(presenter.device, &encoderDescriptor);
@@ -1919,7 +1932,7 @@ bool EncodeAndSubmit(WebGpuPresenter &presenter, int drawableWidth, int drawable
 	    static_cast<float>(drawableHeight) / presenter.sourceHeight);
 	const float width = presenter.sourceWidth * scale;
 	const float height = presenter.sourceHeight * scale;
-	if (World3DFrame) // first-person 3D world into the swapchain; the composite below keeps it where the UI is transparent
+	if (World3DFrame && toSurface) // first-person 3D world into the swapchain; the composite below keeps it where the UI is transparent
 		render3d::WorldGpuEncode(encoder, targetView, (drawableWidth - width) / 2.0F, (drawableHeight - height) / 2.0F, width, height);
 	WGPUComputePassDescriptor computePassDescriptor = WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
 	computePassDescriptor.label = StringView(computeLabel);
@@ -1930,35 +1943,43 @@ bool EncodeAndSubmit(WebGpuPresenter &presenter, int drawableWidth, int drawable
 	wgpuComputePassEncoderEnd(computePass);
 	wgpuComputePassEncoderRelease(computePass);
 
-	WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-	colorAttachment.view = targetView;
-	colorAttachment.loadOp = World3DFrame ? WGPULoadOp_Load : WGPULoadOp_Clear;
-	colorAttachment.storeOp = WGPUStoreOp_Store;
-	colorAttachment.clearValue = { 0.0, 0.0, 0.0, 1.0 };
-	WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
-	passDescriptor.colorAttachmentCount = 1;
-	passDescriptor.colorAttachments = &colorAttachment;
-	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
-	wgpuRenderPassEncoderSetPipeline(pass, renderPipeline);
-	wgpuRenderPassEncoderSetBindGroup(pass, 0, renderBindGroup, 0, nullptr);
+	const auto encodeComposite = [&](WGPUTextureView view, bool load, WGPUColor clear, float viewX, float viewY, float viewWidth, float viewHeight) {
+		WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+		colorAttachment.view = view;
+		colorAttachment.loadOp = load ? WGPULoadOp_Load : WGPULoadOp_Clear;
+		colorAttachment.storeOp = WGPUStoreOp_Store;
+		colorAttachment.clearValue = clear;
+		WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+		passDescriptor.colorAttachmentCount = 1;
+		passDescriptor.colorAttachments = &colorAttachment;
+		WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+		wgpuRenderPassEncoderSetPipeline(pass, renderPipeline);
+		wgpuRenderPassEncoderSetBindGroup(pass, 0, renderBindGroup, 0, nullptr);
 
-	wgpuRenderPassEncoderSetViewport(pass, (drawableWidth - width) / 2.0F, (drawableHeight - height) / 2.0F, width, height, 0.0F, 1.0F);
-	wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
-	if (!World3DFrame) {        // the first-person view has no classic world pass to put HD tiles or sprites on
-		HdTilesGpuEncode(pass);   // opt-in HD level tiles over the composite (hd_tiles_webgpu.cpp)
-		HdSpritesGpuEncode(pass); // opt-in HD sprites over the composite, same viewport (hd_sprites_webgpu.cpp)
-	}
-	HdUiGpuEncode(pass);      // opt-in HD UI over everything, same viewport (hd_ui_webgpu.cpp)
-	wgpuRenderPassEncoderEnd(pass);
-	wgpuRenderPassEncoderRelease(pass);
+		wgpuRenderPassEncoderSetViewport(pass, viewX, viewY, viewWidth, viewHeight, 0.0F, 1.0F);
+		wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+		if (!World3DFrame) {        // the first-person view has no classic world pass to put HD tiles or sprites on
+			HdTilesGpuEncode(pass);   // opt-in HD level tiles over the composite (hd_tiles_webgpu.cpp)
+			HdSpritesGpuEncode(pass); // opt-in HD sprites over the composite, same viewport (hd_sprites_webgpu.cpp)
+		}
+		HdUiGpuEncode(pass);      // opt-in HD UI over everything, same viewport (hd_ui_webgpu.cpp)
+		wgpuRenderPassEncoderEnd(pass);
+		wgpuRenderPassEncoderRelease(pass);
+	};
+	if (toSurface)
+		encodeComposite(targetView, World3DFrame, { 0.0, 0.0, 0.0, 1.0 }, (drawableWidth - width) / 2.0F, (drawableHeight - height) / 2.0F, width, height);
+	if (xrUiView != nullptr) // the headset's screen panel: the world area stays transparent (discarded by the composite)
+		encodeComposite(xrUiView, false, { 0.0, 0.0, 0.0, 0.0 }, 0.0F, 0.0F, static_cast<float>(presenter.sourceWidth), static_cast<float>(presenter.sourceHeight));
 
 	WGPUCommandBuffer commandBuffer = wgpuCommandEncoderFinish(encoder, nullptr);
 	wgpuCommandEncoderRelease(encoder);
 	wgpuQueueSubmit(presenter.queue, 1, &commandBuffer);
 	wgpuCommandBufferRelease(commandBuffer);
-	GetWebGpuPlatform().presentSurface(presenter.surface);
-	wgpuTextureViewRelease(targetView);
-	wgpuTextureRelease(surfaceTexture.texture);
+	if (toSurface) {
+		GetWebGpuPlatform().presentSurface(presenter.surface);
+		wgpuTextureViewRelease(targetView);
+		wgpuTextureRelease(surfaceTexture.texture);
+	}
 	return true;
 }
 
@@ -2030,7 +2051,7 @@ bool PresentLegacy(WebGpuPresenter &presenter, SDL_Surface *surface, int drawabl
 	    presenter.pipeline, presenter.bindGroup, floor);
 }
 
-/** The hybrid present sequence. */
+/** SPEC §9.9: the hybrid present sequence. */
 bool PresentHybrid(WebGpuPresenter &presenter, SDL_Surface *surface, int drawableWidth, int drawableHeight, const WebGpuLightingData &lighting)
 {
 	const WebGpuHybridData &hybrid = lighting.hybrid;
@@ -2098,6 +2119,7 @@ bool WebGpuInitialize(const char *canvasSelector, int sourceWidth, int sourceHei
 	Presenter.surface = platform.createSurface(Presenter.instance, canvasSelector);
 	if (Presenter.surface == nullptr)
 		return false;
+	const bool vr = xr::PreDeviceInit(); // VR runtime + headset first: the device must ask for its sharing features
 
 	WGPURequestAdapterOptions adapterOptions = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
 	adapterOptions.compatibleSurface = Presenter.surface;
@@ -2111,8 +2133,13 @@ bool WebGpuInitialize(const char *canvasSelector, int sourceWidth, int sourceHei
 	if (Presenter.adapter == nullptr)
 		return false;
 
+	std::vector<WGPUFeatureName> requiredFeatures;
+	if (vr)
+		xr::AppendDeviceFeatures(Presenter.adapter, requiredFeatures);
 	WGPUDeviceDescriptor deviceDescriptor = WGPU_DEVICE_DESCRIPTOR_INIT;
 	deviceDescriptor.label = StringView("DevilutionX WebGPU device");
+	deviceDescriptor.requiredFeatureCount = requiredFeatures.size();
+	deviceDescriptor.requiredFeatures = requiredFeatures.empty() ? nullptr : requiredFeatures.data();
 	deviceDescriptor.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
 	deviceDescriptor.deviceLostCallbackInfo.callback = OnDeviceLost;
 	deviceDescriptor.deviceLostCallbackInfo.userdata1 = &Presenter;
@@ -2135,8 +2162,12 @@ bool WebGpuInitialize(const char *canvasSelector, int sourceWidth, int sourceHei
 		return false;
 	}
 	Presenter.surfaceFormat = capabilities.formats[0];
+	// VR shares the eye images with the headset runtime, which wants its own format (RGBA8 natively).
+	const WGPUTextureFormat preferredFormat = vr && xr::PreferredColorFormat() != WGPUTextureFormat_Undefined
+	    ? xr::PreferredColorFormat()
+	    : WGPUTextureFormat_BGRA8Unorm;
 	for (size_t i = 0; i < capabilities.formatCount; ++i) {
-		if (capabilities.formats[i] == WGPUTextureFormat_BGRA8Unorm) {
+		if (capabilities.formats[i] == preferredFormat) {
 			Presenter.surfaceFormat = capabilities.formats[i];
 			break;
 		}
@@ -2147,6 +2178,8 @@ bool WebGpuInitialize(const char *canvasSelector, int sourceWidth, int sourceHei
 		Presenter.Shutdown();
 		return false;
 	}
+	if (vr)
+		xr::Initialize(Presenter.instance, Presenter.adapter, Presenter.device, Presenter.queue, Presenter.surfaceFormat);
 	Log("WebGPU presenter initialized ({}x{})", sourceWidth, sourceHeight);
 	platform.notifyState("ready", "Ready to play.", false, false);
 	return true;
@@ -2242,6 +2275,7 @@ bool WebGpuPresent(SDL_Surface *surface, int drawableWidth, int drawableHeight, 
 	const bool presented = hybridPresentable
 	    ? PresentHybrid(Presenter, surface, drawableWidth, drawableHeight, lighting)
 	    : PresentLegacy(Presenter, surface, drawableWidth, drawableHeight, lighting);
+	xr::RenderFrame(World3DFrame, Presenter.sourceWidth, Presenter.sourceHeight); // the headset's eyes (xr/xr.hpp)
 	if (!presented)
 		return false;
 

@@ -1,13 +1,13 @@
 # modkit
 
-Validates, packs and previews schema-v1 asset packages.
+Validates, packs and previews schema-v1 asset packages per `docs/design/webgpu-wasm-modding.md` §5.1–5.3.
 Python 3 with Pillow and numpy.
 
 ```sh
 python3 tools/modkit/modkit.py validate mods/torchlight            # or mods/torchlight/manifest.ini
 python3 tools/modkit/modkit.py build mods/torchlight --output build/torchlight.mpq
 python3 tools/modkit/modkit.py preview mods/torchlight --output build/torchlight.png --light -0.5,-0.7,0.5
-python3 tools/modkit/test_modkit.py                                 # executable fixture matrix
+python3 tools/modkit/test_modkit.py                                 # executable fixture matrix from §5.2
 ```
 
 Dependencies are resolved from sibling directories of the package, or from `--search-path DIR` (repeatable;
@@ -26,7 +26,7 @@ fallbacks), pivots marked in magenta. `--light X,Y,Z` moves the test light; UI f
 
 ## Wire format
 
-The package schema lists constraints but not byte-level shapes. These are the choices, each localized in `modkit.py`.
+Design §5.2 lists constraints but not byte-level shapes. These are the choices, each localized in `modkit.py`.
 
 | Topic | Choice |
 |---|---|
@@ -41,5 +41,5 @@ The package schema lists constraints but not byte-level shapes. These are the ch
 | Identity | sha256 of the same input string as `VersionedModIdentityInput` (`Source/mods/mod_identity.cpp`), dependency identities in canonical-id order |
 | Budgets | 4096 px per side, 1024 frames/record, 256 MiB archive, 512 MiB decoded |
 
-The repository root is the original sample package (`manifest.ini` + `assets.json`); `assets/samples/partial/`
+The repository root is the DXM-A06 sample package (`manifest.ini` + `assets.json`); `assets/samples/partial/`
 is a partial-override package depending on it (`--search-path .`).

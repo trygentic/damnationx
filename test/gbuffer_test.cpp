@@ -87,7 +87,7 @@ float DegreesBetween(float ax, float ay, float az, float bx, float by, float bz)
 	return std::acos(d) * 180.0F / Pi;
 }
 
-/** Exact argmax over LUT entries 3..31 (the single quantisation rule), computed independently of QuantizeNormal. */
+/** Exact argmax over LUT entries 3..31 (the single rule of SPEC §4.3), computed independently of QuantizeNormal. */
 uint8_t ReferenceArgmax(float x, float y, float z)
 {
 	const std::array<NormalLutEntry, 32> &lut = NormalLut();
@@ -606,7 +606,7 @@ TEST_F(GBufferTest, StampUnlitClipsToSurfaceAndPlanesAndTranslatesSubregions)
 TEST_F(GBufferTest, SurfaceBlitsStampTheUiTheyDrawUnlit)
 {
 	// Surface::BlitFrom / BlitFromSkipColorIndexZero draw the main panel, buttons, belt, info and chat boxes and the
-	// flasks: once the world pass has ended, the pixels they write must pass through the composite.
+	// flasks (SPEC §5.4): once the world pass has ended, the pixels they write must pass through the composite.
 	AllocatePlanes(64, 32);
 	OwnedSurface art(8, 4);
 	for (int y = 0; y < art.h(); ++y) {
@@ -904,7 +904,7 @@ TEST(GBufferNormals, QuantizationErrorBound)
 				worst80 = std::max(worst80, err);
 		}
 	}
-	// asks for <= 16° with 29 entries; a covering-density bound shows that is unreachable over a hemisphere
+	// SPEC §4.3 asks for <= 16° with 29 entries; a covering-density bound shows that is unreachable over a hemisphere
 	// (see the LUT comment in gbuffer.cpp). The swept ring layout measures 18.6° over the whole hemisphere, against
 	// 21.1° for the SPEC's literal {30°, 55°, 75°} rings.
 	EXPECT_LE(worst90, 19.0F);

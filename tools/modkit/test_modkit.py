@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executable fixture matrix for modkit. Run: python3 test_modkit.py"""
+"""Executable fixture matrix for modkit (design §5.2). Run: python3 test_modkit.py"""
 import json
 import os
 import shutil
@@ -291,17 +291,17 @@ class Fixtures(unittest.TestCase):
     def test_repository_sample_pack_validates_builds_and_previews(self):
         repo = Path(__file__).resolve().parents[2]
         pkg, _ = modkit.load(repo, [])
-        self.assertEqual(pkg.id, "damnationx.original.samples")
+        self.assertEqual(pkg.id, "dxm.a06.original.samples")
         self.assertEqual(len(pkg.records), 12)
         partial, order = modkit.load(repo / "assets/samples/partial", [str(repo)])
-        self.assertEqual([p.id for p in order], ["damnationx.original.samples", "damnationx.partial.samples"])
+        self.assertEqual([p.id for p in order], ["dxm.a06.original.samples", "dxm.a06.partial.samples"])
         self.assertEqual(len(partial.records["monster:monster.gloomling"]["frames"]), 4)
-        self.assertEqual(partial.records["item:item.starshard"]["_material"], "damnationx.original.samples")
-        out = self.tmp / "samples.mpq"
+        self.assertEqual(partial.records["item:item.starshard"]["_material"], "dxm.a06.original.samples")
+        out = self.tmp / "a06.mpq"
         self.assertEqual(modkit.main(["build", str(repo / "manifest.ini"), "--output", str(out)]), 0)
         files = read_mpq(out.read_bytes())
         self.assertIn("atlas/rgba-0.png", files)
-        self.assertEqual(modkit.main(["preview", str(repo), "--output", str(self.tmp / "samples.png")]), 0)
+        self.assertEqual(modkit.main(["preview", str(repo), "--output", str(self.tmp / "a06.png")]), 0)
 
 
 def read_mpq(data: bytes) -> dict[str, bytes]:

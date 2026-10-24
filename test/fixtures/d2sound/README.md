@@ -2,7 +2,7 @@
 
 Synthetic files for `test/d2sound_test.cpp` (the Diablo II sound importer).
 
-- `tone.wav`: 0.25 s of a decaying 440 Hz tone with noise (22050 Hz, mono, 16-bit), generated with numpy.
+- `tone.wav`: 0.25 s of a decaying 440 Hz tone with noise (22050 Hz, mono, 16-bit), synthesized using NumPy.
 - `text.txt`: "The quick brown fox jumps over the lazy dog. " repeated 120 times.
 - `tone.flac`: `tone.wav` encoded with `flac --best --no-padding`.
 - `test.mpq`: an MPQ v1 archive (sector size 4096) made with StormLib 9.30 (`SFileCreateArchive` with

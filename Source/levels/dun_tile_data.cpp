@@ -227,7 +227,7 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 
 } // namespace devilution
 
-// Per-piece geometry table for the 2.5D hybrid lighting, declared in levels/tile_geometry.hpp.
+// Per-piece geometry table for the 2.5D hybrid lighting (SPEC §8.2), declared in levels/tile_geometry.hpp.
 // It lives in this translation unit because SetDungeonMicros builds it: libdevilutionx_tile_geometry links
 // libdevilutionx_dun_tile_data, not the other way round, so a definition in tile_geometry.cpp would leave
 // targets that link only libdevilutionx_dun_tile_data with an unresolved symbol.
@@ -238,10 +238,10 @@ namespace {
 constexpr uint8_t FaceSWBit = static_cast<uint8_t>(Face::SW);
 constexpr uint8_t FaceSEBit = static_cast<uint8_t>(Face::SE);
 
-/** Lintel height used when the arch sprite is not available. */
+/** Lintel height used when the arch sprite is not available (SPEC §8.2). */
 constexpr int DefaultLintelPx = 64;
 
-/** Rows of an arch sprite above its lintel (`lintelPx = height() - 32`). */
+/** Rows of an arch sprite above its lintel (SPEC §8.2: `lintelPx = height() - 32`). */
 constexpr int ArchTopBandPx = 32;
 
 std::array<PieceGeometry, MAXTILES> PieceTable {};
@@ -277,7 +277,7 @@ int ArchSpriteHeight(int8_t special)
 }
 
 /**
- * @brief Bottom of the lintel above the tile base for the arch sprite `special`.
+ * @brief Bottom of the lintel above the tile base for the arch sprite `special` (SPEC §8.2).
  */
 uint8_t LintelPx(int8_t special)
 {
@@ -377,9 +377,9 @@ PieceGeometry ClassifyPiece(const std::byte *dungeonCels, const MICROS &micros, 
 	if (result.kind == PieceKind::Pillar && (wallLeft || wallRight))
 		result.kind = PieceKind::Wall;
 
-	// The ground diamond of a floor lies on the tile base (h = 0); only what is drawn above it counts.
+	// The ground diamond of a floor lies on the tile base (h = 0, SPEC §3.2); only what is drawn above it counts.
 	// A floor whose upper micros are empty therefore reports heightPx 0 even when SOL marks it BlockLight: the
-	// march blocks only while the ray is below the cell's height, so such a cell never occludes and
+	// march (SPEC §9.3) blocks only while the ray is below the cell's height, so such a cell never occludes and
 	// vision blocking is left to dLight. A floor that draws something in its upper micros (L1 pieces 25/26,
 	// L2 pieces 266/558) reports that height like any other piece and occludes below it when BlockLight is set.
 	const uint_fast8_t firstBlock = result.kind == PieceKind::Floor ? 2 : 0;

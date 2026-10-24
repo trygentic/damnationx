@@ -1,7 +1,7 @@
 /**
  * @file gbuffer.cpp
  *
- * CPU G-buffer planes for the 2.5D hybrid lighting.
+ * CPU G-buffer planes for the 2.5D hybrid lighting (SPEC §3.1, §4, §5.4, §5.5, §9.6).
  *
  * Two byte planes mirror the 8-bit back buffer byte-for-byte (same pitch): plane A carries
  * `kind:3 | normalIdx:5`, plane B the anchor row of the surface. Every writer addresses them as
@@ -96,7 +96,7 @@ PlaneAllocation AllocatePlane(size_t bytes)
 	return ClipToPlanes(x0, y0, x1, y1);
 }
 
-// ---- Normal LUT ----
+// ---- Normal LUT (§4.2, §4.3) ----
 struct Vec3 {
 	float x, y, z;
 };
@@ -119,7 +119,7 @@ constexpr float DegToRad(float deg)
 	return deg * Pi / 180.0F;
 }
 
-// Card basis in tile space: R = screen right, U' = screen up along the 30°-tilted card, C' = card normal.
+// Card basis in tile space (§4.3): R = screen right, U' = screen up along the 30°-tilted card, C' = card normal.
 constexpr Vec3 CardRight { 0.70710678F, -0.70710678F, 0.0F };
 constexpr Vec3 CardUp { -0.35355339F, -0.35355339F, 0.86602540F };
 constexpr Vec3 CardNormal { 0.61237244F, 0.61237244F, 0.5F };
@@ -128,9 +128,9 @@ constexpr Vec3 CardNormal { 0.61237244F, 0.61237244F, 0.5F };
  * Rings of the tilted-card hemisphere, entries 4..31 (28 entries):
  *   entry(e, a) = normalize(cos e·C' + sin e·(cos a·R + sin a·U')), a = offset + 2πk/count.
  *
- * The original layout used rings {30°:6, 55°:10, 75°:12} with aligned azimuths and claims a worst-case error of ≈15°. Measured
+ * SPEC §4.3 lists rings {30°:6, 55°:10, 75°:12} with aligned azimuths and claims a worst-case error of ≈15°. Measured
  * on a dense sweep of the hemisphere, that layout quantises with up to 21.1° of error (the rim beyond the 75° ring is
- * uncovered and the 55° ring sits in line with the 30° one). No 32-entry LUT can reach the ≤16° the design asked for over
+ * uncovered and the 55° ring sits in line with the 30° one). No 32-entry LUT can reach the ≤16° the SPEC asks for over
  * the whole hemisphere: 29 caps of 16° cover 7.06 sr against the hemisphere's 6.28 sr, a density of 1.12, below what any
  * covering of a sphere by that many equal caps achieves (≈1.2), before the wasted area at the rim. The elevations and
  * the half-step stagger of ring 2 below therefore come from a numeric sweep of the ring layouts that minimises the
@@ -193,7 +193,7 @@ static_assert(LutRings[0].count + LutRings[1].count + LutRings[2].count == 28, "
 	return best;
 }
 
-// ---- Octahedral direction -> candidate table ----
+// ---- Octahedral direction -> candidate table (§4.3) ----
 // A 64x64 octahedral map of the whole sphere. Every texel stores the SET of LUT indices that win the argmax
 // somewhere inside it (as a 32-bit mask), so a lookup evaluates 1..3 dot products instead of 29 and returns the
 // exact argmax rather than the argmax of the texel centre.
@@ -263,7 +263,7 @@ void OctEncode(Vec3 n, float &u, float &v)
 	return Table;
 }
 
-// ---- Palette emissive heuristic ----
+// ---- Palette emissive heuristic (§9.6) ----
 struct PaletteEmissiveOverride {
 	dungeon_type level;
 	uint8_t first;
@@ -273,7 +273,7 @@ struct PaletteEmissiveOverride {
 
 // Aligned with what classic keeps full-bright: the light tables keep indices 0..15 identity only for the Nest and the
 // Crypt (the lava). Hell's 1..31 is the animated blood-wall remap and Caves lava is darkened normally, so neither is
-// listed. This table could move to assets/txtdata/lighting/ later.
+// listed. Moving this to assets/txtdata/lighting/ is a DXM-L04 follow-up.
 constexpr PaletteEmissiveOverride PaletteEmissiveOverrides[] = {
 	{ DTYPE_NEST, 1, 15, 0.4F },
 	{ DTYPE_CRYPT, 1, 15, 0.4F },
@@ -455,7 +455,7 @@ void StampUnlit(const Surface &out, Rectangle rect)
 void ZoomInPlace(int viewportWidth, int viewportOffsetX, int outHeight, int zoomQuarters)
 {
 	// Only plane A is scaled: UI stamping and the cursor write A at output coordinates after the world pass, while
-	// B is only read by the GPU, which samples it at world size under zoom.
+	// B is only read by the GPU, which samples it at world size under zoom (§3.2).
 	if (!BackBufferHybrid || !PlanesAllocated())
 		return;
 	if (viewportWidth <= 0 || outHeight <= 0 || viewportOffsetX < 0

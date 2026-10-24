@@ -26,7 +26,9 @@
 #include "fpv/fpv.hpp"
 #include "fpv/fpv_viewmodel_inputs.hpp"
 #include "game_mode.hpp"
+#include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "player.h"
 #include "utils/display.h"
 #include "utils/ui_fwd.h"
@@ -34,6 +36,7 @@
 
 #if DEVILUTIONX_WEBGPU
 #include "engine/render/webgpu_presenter.hpp"
+#include "render3d/placement_runtime.hpp"
 #include "render3d/world_level.hpp"
 #include "render3d/world_shaders.hpp"
 #include "render3d/world_sprites.hpp"
@@ -190,7 +193,33 @@ struct WorldGpu {
 	Vec3 cameraUp;
 	float fovYRadians = 1.0F;
 	float aspect = 1.0F;
+	GpuWorldFrame uniforms {};
+
+	// Stereo (WorldGpuRenderViews): eye depth, overlay pipelines and their uniforms.
+	WGPUTexture eyeDepth = nullptr;
+	WGPUTextureView eyeDepthView = nullptr;
+	uint32_t eyeWidth = 0;
+	uint32_t eyeHeight = 0;
+	WGPUBindGroupLayout overlayGroupLayout = nullptr;
+	WGPURenderPipeline panelPipeline = nullptr;
+	WGPURenderPipeline laserPipeline = nullptr;
+	WGPURenderPipeline vignettePipeline = nullptr;
+	WGPUBuffer overlayBuffer = nullptr;
+	WGPUSampler overlaySampler = nullptr;
+	WGPUTexture overlayBlank = nullptr;
+	WGPUTextureView overlayBlankView = nullptr;
+	WGPUBindGroup overlayBindGroup = nullptr;
+	WGPUTextureView overlayBoundImage = nullptr;
+	bool overlayFailed = false;
 };
+
+struct alignas(16) GpuOverlay {
+	float panelMvp[16];
+	float laserMvp[16];
+	float laserColor[4];
+	float params[4]; // vignette, panel opacity, laser length, unused
+};
+static_assert(sizeof(GpuOverlay) == 160);
 
 WorldGpu Gpu;
 LevelGeometry Level;
@@ -230,11 +259,30 @@ void ReleaseBindGroups()
 {
 	Release(Gpu.meshBindGroup, wgpuBindGroupRelease);
 	Release(Gpu.blitBindGroup, wgpuBindGroupRelease);
+	Release(Gpu.overlayBindGroup, wgpuBindGroupRelease);
+	Gpu.overlayBoundImage = nullptr;
+}
+
+void ReleaseStereo()
+{
+	Release(Gpu.overlayBindGroup, wgpuBindGroupRelease);
+	Gpu.overlayBoundImage = nullptr;
+	Release(Gpu.panelPipeline, wgpuRenderPipelineRelease);
+	Release(Gpu.laserPipeline, wgpuRenderPipelineRelease);
+	Release(Gpu.vignettePipeline, wgpuRenderPipelineRelease);
+	Release(Gpu.overlayGroupLayout, wgpuBindGroupLayoutRelease);
+	Release(Gpu.overlaySampler, wgpuSamplerRelease);
+	ReleaseBuffer(Gpu.overlayBuffer);
+	ReleaseTexture(Gpu.overlayBlank, Gpu.overlayBlankView);
+	ReleaseTexture(Gpu.eyeDepth, Gpu.eyeDepthView);
+	Gpu.eyeWidth = Gpu.eyeHeight = 0;
+	Gpu.overlayFailed = false;
 }
 
 void ReleaseAll()
 {
 	ReleaseBindGroups();
+	ReleaseStereo();
 	Release(Gpu.meshPipeline, wgpuRenderPipelineRelease);
 	Release(Gpu.glowPipeline, wgpuRenderPipelineRelease);
 	Release(Gpu.meshGroupLayout, wgpuBindGroupLayoutRelease);
@@ -636,6 +684,43 @@ void FillContext(SkinnedDrawContext &context, WGPURenderPassEncoder pass)
 	context.occluderGridSize = sizeof(Level.occluders);
 }
 
+/** The level, billboards, skinned actors and glows with the current Gpu.view / projection / frame uniforms. */
+void DrawWorld(WGPURenderPassEncoder pass)
+{
+	wgpuRenderPassEncoderSetPipeline(pass, Gpu.meshPipeline);
+	wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.meshBindGroup, 0, nullptr);
+	if (Gpu.levelIndexCount != 0) {
+		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.levelVertices, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.levelIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.levelIndexCount, 1, 0, 0, 0);
+	}
+	{
+		// Placed static meshes (opaque, own pipeline); the billboards below need the level pipeline again.
+		SkinnedDrawContext context;
+		FillContext(context, pass);
+		StaticMeshEncode(context);
+		wgpuRenderPassEncoderSetPipeline(pass, Gpu.meshPipeline);
+		wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.meshBindGroup, 0, nullptr);
+	}
+	if (Gpu.spriteIndexCount != 0) {
+		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.spriteVertices, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.spriteIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.spriteIndexCount, 1, 0, 0, 0);
+	}
+	if (SkinnedDraw != nullptr) {
+		SkinnedDrawContext context;
+		FillContext(context, pass);
+		SkinnedDraw(context);
+	}
+	if (Gpu.glowIndexCount != 0) {
+		wgpuRenderPassEncoderSetPipeline(pass, Gpu.glowPipeline);
+		wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.meshBindGroup, 0, nullptr);
+		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.glowVertices, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.glowIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.glowIndexCount, 1, 0, 0, 0);
+	}
+}
+
 bool EnvFloat(const char *name, float &out)
 {
 	const char *value = std::getenv(name);
@@ -687,6 +772,134 @@ bool SkipPlayerForSkinned(int playerId)
 	return SkinnedWantsPlayer != nullptr && SkinnedWantsPlayer(playerId);
 }
 
+bool CreateStereoResources()
+{
+	if (Gpu.overlayFailed)
+		return false;
+	if (Gpu.panelPipeline != nullptr)
+		return true;
+	Gpu.overlayFailed = true; // until everything below succeeded
+	WGPUShaderModule shader = CreateShader("DamnationX stereo overlay shader", kWorldOverlayWgsl);
+	if (shader == nullptr)
+		return false;
+	std::array<WGPUBindGroupLayoutEntry, 3> entries {};
+	for (WGPUBindGroupLayoutEntry &entry : entries)
+		entry = WGPU_BIND_GROUP_LAYOUT_ENTRY_INIT;
+	entries[0].binding = 0;
+	entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+	entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+	entries[1].binding = 1;
+	entries[1].visibility = WGPUShaderStage_Fragment;
+	entries[1].texture.sampleType = WGPUTextureSampleType_Float;
+	entries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+	entries[2].binding = 2;
+	entries[2].visibility = WGPUShaderStage_Fragment;
+	entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
+	WGPUBindGroupLayoutDescriptor groupLayoutDescriptor = WGPU_BIND_GROUP_LAYOUT_DESCRIPTOR_INIT;
+	groupLayoutDescriptor.label = View("DamnationX stereo overlay layout");
+	groupLayoutDescriptor.entryCount = entries.size();
+	groupLayoutDescriptor.entries = entries.data();
+	Gpu.overlayGroupLayout = wgpuDeviceCreateBindGroupLayout(Gpu.device, &groupLayoutDescriptor);
+	WGPUPipelineLayoutDescriptor layoutDescriptor = WGPU_PIPELINE_LAYOUT_DESCRIPTOR_INIT;
+	layoutDescriptor.bindGroupLayoutCount = 1;
+	layoutDescriptor.bindGroupLayouts = &Gpu.overlayGroupLayout;
+	WGPUPipelineLayout pipelineLayout = wgpuDeviceCreatePipelineLayout(Gpu.device, &layoutDescriptor);
+
+	// Premultiplied alpha over the world, drawn on top of everything (depth Always, no write).
+	WGPUBlendState blend = WGPU_BLEND_STATE_INIT;
+	blend.color = { WGPUBlendOperation_Add, WGPUBlendFactor_One, WGPUBlendFactor_OneMinusSrcAlpha };
+	blend.alpha = { WGPUBlendOperation_Add, WGPUBlendFactor_One, WGPUBlendFactor_OneMinusSrcAlpha };
+	WGPUColorTargetState target = WGPU_COLOR_TARGET_STATE_INIT;
+	target.format = Gpu.colorFormat;
+	target.blend = &blend;
+	WGPUDepthStencilState depth = WGPU_DEPTH_STENCIL_STATE_INIT;
+	depth.format = kWorldDepthFormat;
+	depth.depthWriteEnabled = WGPUOptionalBool_False;
+	depth.depthCompare = WGPUCompareFunction_Always;
+	const auto create = [&](const char *label, const char *vertexEntry, const char *fragmentEntry) {
+		WGPUFragmentState fragment = WGPU_FRAGMENT_STATE_INIT;
+		fragment.module = shader;
+		fragment.entryPoint = View(fragmentEntry);
+		fragment.targetCount = 1;
+		fragment.targets = &target;
+		WGPURenderPipelineDescriptor descriptor = WGPU_RENDER_PIPELINE_DESCRIPTOR_INIT;
+		descriptor.label = View(label);
+		descriptor.layout = pipelineLayout;
+		descriptor.vertex.module = shader;
+		descriptor.vertex.entryPoint = View(vertexEntry);
+		descriptor.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+		descriptor.primitive.cullMode = WGPUCullMode_None;
+		descriptor.depthStencil = &depth;
+		descriptor.fragment = &fragment;
+		return wgpuDeviceCreateRenderPipeline(Gpu.device, &descriptor);
+	};
+	Gpu.panelPipeline = create("DamnationX stereo panel pipeline", "panelVertex", "panelFragment");
+	Gpu.laserPipeline = create("DamnationX stereo laser pipeline", "laserVertex", "laserFragment");
+	Gpu.vignettePipeline = create("DamnationX stereo vignette pipeline", "vignetteVertex", "vignetteFragment");
+	wgpuPipelineLayoutRelease(pipelineLayout);
+	wgpuShaderModuleRelease(shader);
+	if (Gpu.panelPipeline == nullptr || Gpu.laserPipeline == nullptr || Gpu.vignettePipeline == nullptr)
+		return false;
+
+	Gpu.overlayBuffer = CreateBuffer("DamnationX stereo overlay uniforms", WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst, sizeof(GpuOverlay));
+	WGPUSamplerDescriptor sampler = WGPU_SAMPLER_DESCRIPTOR_INIT;
+	sampler.label = View("DamnationX stereo panel sampler");
+	sampler.magFilter = WGPUFilterMode_Linear;
+	sampler.minFilter = WGPUFilterMode_Linear;
+	Gpu.overlaySampler = wgpuDeviceCreateSampler(Gpu.device, &sampler);
+	if (Gpu.overlayBuffer == nullptr || Gpu.overlaySampler == nullptr
+	    || !CreateTexture("DamnationX stereo blank panel", WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst, WGPUTextureFormat_RGBA8Unorm, 1, 1,
+	        Gpu.overlayBlank, Gpu.overlayBlankView))
+		return false;
+	const uint8_t clear[4] = { 0, 0, 0, 0 };
+	WriteTexture(Gpu.overlayBlank, 0, 0, 1, 1, clear);
+	Gpu.overlayFailed = false;
+	return true;
+}
+
+bool EnsureOverlayBindGroup(WGPUTextureView panelImage)
+{
+	WGPUTextureView image = panelImage != nullptr ? panelImage : Gpu.overlayBlankView;
+	if (Gpu.overlayBindGroup != nullptr && Gpu.overlayBoundImage == image)
+		return true;
+	Release(Gpu.overlayBindGroup, wgpuBindGroupRelease);
+	std::array<WGPUBindGroupEntry, 3> entries {};
+	for (WGPUBindGroupEntry &entry : entries)
+		entry = WGPU_BIND_GROUP_ENTRY_INIT;
+	entries[0].binding = 0;
+	entries[0].buffer = Gpu.overlayBuffer;
+	entries[0].size = sizeof(GpuOverlay);
+	entries[1].binding = 1;
+	entries[1].textureView = image;
+	entries[2].binding = 2;
+	entries[2].sampler = Gpu.overlaySampler;
+	WGPUBindGroupDescriptor descriptor = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+	descriptor.label = View("DamnationX stereo overlay bind group");
+	descriptor.layout = Gpu.overlayGroupLayout;
+	descriptor.entryCount = entries.size();
+	descriptor.entries = entries.data();
+	Gpu.overlayBindGroup = wgpuDeviceCreateBindGroup(Gpu.device, &descriptor);
+	Gpu.overlayBoundImage = image;
+	return Gpu.overlayBindGroup != nullptr;
+}
+
+bool EnsureEyeDepth(uint32_t width, uint32_t height)
+{
+	if (Gpu.eyeDepthView != nullptr && Gpu.eyeWidth == width && Gpu.eyeHeight == height)
+		return true;
+	ReleaseTexture(Gpu.eyeDepth, Gpu.eyeDepthView);
+	if (!CreateTexture("DamnationX stereo depth", WGPUTextureUsage_RenderAttachment, kWorldDepthFormat, width, height, Gpu.eyeDepth, Gpu.eyeDepthView))
+		return false;
+	Gpu.eyeWidth = width;
+	Gpu.eyeHeight = height;
+	return true;
+}
+
+void CopyMatrix(float (&out)[16], const Mat4 &matrix)
+{
+	std::memcpy(out, matrix.m.data(), sizeof(out));
+}
+
 } // namespace
 
 bool WorldGpuPrepare(const WorldGpuFrame &frame)
@@ -713,18 +926,34 @@ bool WorldGpuPrepare(const WorldGpuFrame &frame)
 		return false;
 	Gpu.viewportRowsFraction = static_cast<float>(rows) / static_cast<float>(std::max(1, frame.sourceHeight));
 
-	// Camera.
-	const fpv::CameraState camera = ApplyTestOverrides(fpv::GetCamera());
-	Gpu.cameraPosition = { camera.x, camera.y, camera.z };
-	const Vec3 forward = YawPitchForward(camera.yaw, camera.pitch);
-	Gpu.view = LookAt(Gpu.cameraPosition, Gpu.cameraPosition + forward, { 0.0F, 1.0F, 0.0F });
+	// Camera: the flat fpv camera, or the active view provider's centre view (render3d/view_provider.hpp).
+	fpv::CameraState camera = ApplyTestOverrides(fpv::GetCamera());
 	const float aspect = static_cast<float>(width) / static_cast<float>(height);
-	Gpu.projection = Perspective(camera.fovYDeg * 3.14159265F / 180.0F, aspect, 0.03F, 160.0F);
+	Vec3 forward = YawPitchForward(camera.yaw, camera.pitch);
+	ViewProvider *const provider = GetViewProvider();
+	if (provider != nullptr && provider->BeginFrame(camera)) {
+		const RenderView center = provider->CenterView(aspect);
+		camera.x = center.position.x;
+		camera.y = center.position.y;
+		camera.z = center.position.z;
+		camera.yaw = center.yaw;
+		forward = center.forward;
+		Gpu.cameraPosition = center.position;
+		Gpu.view = center.view;
+		Gpu.projection = center.projection;
+		Gpu.cameraRight = center.right;
+		Gpu.cameraUp = center.up;
+		Gpu.fovYRadians = center.fovYRadians;
+	} else {
+		Gpu.cameraPosition = { camera.x, camera.y, camera.z };
+		Gpu.view = LookAt(Gpu.cameraPosition, Gpu.cameraPosition + forward, { 0.0F, 1.0F, 0.0F });
+		Gpu.projection = Perspective(camera.fovYDeg * 3.14159265F / 180.0F, aspect, 0.03F, 160.0F);
+		Gpu.cameraRight = Normalize(Cross(forward, { 0.0F, 1.0F, 0.0F }));
+		Gpu.cameraUp = Cross(Gpu.cameraRight, forward);
+		Gpu.fovYRadians = camera.fovYDeg * 3.14159265F / 180.0F;
+	}
 	Gpu.viewProjection = Gpu.projection * Gpu.view;
 	Gpu.cameraForward = forward;
-	Gpu.cameraRight = Normalize(Cross(forward, { 0.0F, 1.0F, 0.0F }));
-	Gpu.cameraUp = Cross(Gpu.cameraRight, forward);
-	Gpu.fovYRadians = camera.fovYDeg * 3.14159265F / 180.0F;
 	Gpu.aspect = aspect;
 
 	// Lights (tile space -> world: y is the height).
@@ -762,16 +991,21 @@ bool WorldGpuPrepare(const WorldGpuFrame &frame)
 	uniforms.cameraForward[3] = fpv::kEyeHeight;
 	// Town: fully lit like the classic (night ambient plus moonlight, lifted in worldShade); dungeons: a faint ambient so
 	// the edge of the light radius fades to near black like the original light tables.
-	Gpu.ambient = Level.isTown ? 0.85F : 0.03F;
+	// The level type's placement file may override these ([environment], render3d/placement.hpp).
+	const PlacementEnvironment &environment = CurrentPlacementEnvironment();
+	Gpu.ambient = environment.ambient.value_or(Level.isTown ? 0.85F : 0.03F);
+	EnvFloat("DVL_W3D_AMBIENT", Gpu.ambient); // developer knob: light a dungeon for inspection
 	uniforms.params[0] = Gpu.ambient;
-	uniforms.params[1] = Level.isTown ? 1.15F : 1.35F;
+	uniforms.params[1] = environment.exposure.value_or(Level.isTown ? 1.15F : 1.35F);
 	uniforms.params[2] = Level.isTown ? 1.0F : 0.0F;
 	uniforms.params[3] = Level.wallHeight;
-	const Vec3 moon = Normalize({ -0.45F, 0.8F, -0.35F });
+	Vec3 moon = Normalize({ -0.45F, 0.8F, -0.35F });
+	if (environment.moonDirection)
+		moon = { environment.moonDirection->x, environment.moonDirection->y, environment.moonDirection->z };
 	uniforms.sky[0] = moon.x;
 	uniforms.sky[1] = moon.y;
 	uniforms.sky[2] = moon.z;
-	uniforms.sky[3] = Level.isTown ? 0.6F : 0.0F;
+	uniforms.sky[3] = environment.moonStrength.value_or(Level.isTown ? 0.6F : 0.0F);
 	uniforms.counts[0] = static_cast<uint32_t>(Gpu.lights.size());
 	uniforms.counts[1] = kGridSize;
 	uniforms.counts[2] = 1U | (std::getenv("DVL_W3D_NO_SHADOWS") != nullptr ? 2U : 0U); // soft shadows
@@ -784,6 +1018,7 @@ bool WorldGpuPrepare(const WorldGpuFrame &frame)
 		};
 	}
 	wgpuQueueWriteBuffer(Gpu.queue, Gpu.frameBuffer, 0, &uniforms, sizeof(uniforms));
+	Gpu.uniforms = uniforms;
 
 	BuildBillboards(CameraView { Gpu.cameraPosition, camera.yaw }, Level, SkipPlayerForSkinned, Billboards);
 	UploadBillboards();
@@ -813,30 +1048,7 @@ void WorldGpuEncode(WGPUCommandEncoder encoder, WGPUTextureView target, float x,
 	passDescriptor.colorAttachments = &color;
 	passDescriptor.depthStencilAttachment = &depth;
 	WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
-	wgpuRenderPassEncoderSetPipeline(pass, Gpu.meshPipeline);
-	wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.meshBindGroup, 0, nullptr);
-	if (Gpu.levelIndexCount != 0) {
-		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.levelVertices, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.levelIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.levelIndexCount, 1, 0, 0, 0);
-	}
-	if (Gpu.spriteIndexCount != 0) {
-		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.spriteVertices, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.spriteIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.spriteIndexCount, 1, 0, 0, 0);
-	}
-	if (SkinnedDraw != nullptr) {
-		SkinnedDrawContext context;
-		FillContext(context, pass);
-		SkinnedDraw(context);
-	}
-	if (Gpu.glowIndexCount != 0) {
-		wgpuRenderPassEncoderSetPipeline(pass, Gpu.glowPipeline);
-		wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.meshBindGroup, 0, nullptr);
-		wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Gpu.glowVertices, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderSetIndexBuffer(pass, Gpu.glowIndices, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
-		wgpuRenderPassEncoderDrawIndexed(pass, Gpu.glowIndexCount, 1, 0, 0, 0);
-	}
+	DrawWorld(pass);
 	wgpuRenderPassEncoderEnd(pass);
 	wgpuRenderPassEncoderRelease(pass);
 
@@ -891,8 +1103,29 @@ float FloorHeightAt(float x, float z)
 	return FloorHeightOf(Level, x, z);
 }
 
+bool CameraBlockedAt(float x, float y, float z)
+{
+	const int tx = static_cast<int>(std::floor(x));
+	const int ty = static_cast<int>(std::floor(z));
+	if (tx < 0 || ty < 0 || tx >= kGridSize || ty >= kGridSize)
+		return true;
+	if (Level.generation == 0)
+		return IsTileSolid({ tx, ty });
+	if (y < FloorHeightOf(Level, x, z))
+		return true;
+	if (!Level.isTown && y > Level.wallHeight)
+		return true;
+	const uint32_t cell = Level.occluders[static_cast<size_t>(ty) * kGridSize + tx];
+	const float top = static_cast<float>(cell & 0xFFFF) / 1000.0F;
+	if (top <= 0.0F)
+		return false;
+	const float bottom = static_cast<float>(cell >> 16) / 1000.0F;
+	return y >= bottom && y <= top;
+}
+
 void WorldGpuRelease()
 {
+	StaticMeshRelease();
 	ReleaseAll();
 	Level = LevelGeometry {};
 	InvalidateLevel();
@@ -911,10 +1144,121 @@ void SetSkinnedActorRenderer(SkinnedDrawFn draw, SkinnedWantsPlayerFn wantsPlaye
 	SkinnedWantsPlayer = wantsPlayer;
 }
 
+bool WorldGpuRenderViews(const StereoViews &views)
+{
+	if (views.device == nullptr || views.count <= 0 || views.views == nullptr || views.targets == nullptr || views.width == 0 || views.height == 0)
+		return false;
+	if (Gpu.device != views.device || Gpu.colorFormat != views.colorFormat) {
+		ReleaseAll();
+		Gpu.device = views.device;
+		Gpu.queue = views.queue;
+		Gpu.colorFormat = views.colorFormat;
+	}
+	const bool drawWorld = views.drawWorld && Gpu.ready;
+	if (!CreateStereoResources() || !EnsureEyeDepth(views.width, views.height) || !EnsureOverlayBindGroup(views.overlay.panelImage))
+		return false;
+
+	// The flat view's matrices are restored afterwards (the skinned renderer reads Gpu.view / projection via FillContext).
+	const Mat4 flatView = Gpu.view;
+	const Mat4 flatProjection = Gpu.projection;
+	const Mat4 flatViewProjection = Gpu.viewProjection;
+	const Vec3 flatPosition = Gpu.cameraPosition;
+	const Vec3 flatForward = Gpu.cameraForward;
+	for (int eye = 0; eye < views.count; ++eye) {
+		const RenderView &view = views.views[eye];
+		if (views.targets[eye] == nullptr)
+			continue;
+		Gpu.view = view.view;
+		Gpu.projection = view.projection;
+		Gpu.viewProjection = view.projection * view.view;
+		Gpu.cameraPosition = view.position;
+		Gpu.cameraForward = view.forward;
+
+		GpuWorldFrame uniforms = Gpu.uniforms;
+		CopyMatrix(uniforms.viewProjection, Gpu.viewProjection);
+		uniforms.cameraPosition[0] = view.position.x;
+		uniforms.cameraPosition[1] = view.position.y;
+		uniforms.cameraPosition[2] = view.position.z;
+		uniforms.cameraForward[0] = view.forward.x;
+		uniforms.cameraForward[1] = view.forward.y;
+		uniforms.cameraForward[2] = view.forward.z;
+		if (drawWorld)
+			wgpuQueueWriteBuffer(Gpu.queue, Gpu.frameBuffer, 0, &uniforms, sizeof(uniforms));
+
+		GpuOverlay overlay {};
+		CopyMatrix(overlay.panelMvp, Gpu.viewProjection * views.overlay.panelModel);
+		CopyMatrix(overlay.laserMvp, Gpu.viewProjection * views.overlay.laserModel);
+		overlay.laserColor[0] = views.overlay.laserColor.x;
+		overlay.laserColor[1] = views.overlay.laserColor.y;
+		overlay.laserColor[2] = views.overlay.laserColor.z;
+		overlay.laserColor[3] = views.overlay.laserColor.w;
+		overlay.params[0] = views.overlay.vignette;
+		overlay.params[1] = views.overlay.panelOpacity;
+		wgpuQueueWriteBuffer(Gpu.queue, Gpu.overlayBuffer, 0, &overlay, sizeof(overlay));
+
+		WGPUCommandEncoderDescriptor encoderDescriptor = WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
+		encoderDescriptor.label = View("DamnationX stereo eye");
+		WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(Gpu.device, &encoderDescriptor);
+		WGPURenderPassColorAttachment color = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+		color.view = views.targets[eye];
+		color.loadOp = WGPULoadOp_Clear;
+		color.storeOp = WGPUStoreOp_Store;
+		color.clearValue = { 0.0, 0.0, 0.0, 1.0 };
+		WGPURenderPassDepthStencilAttachment depth = WGPU_RENDER_PASS_DEPTH_STENCIL_ATTACHMENT_INIT;
+		depth.view = Gpu.eyeDepthView;
+		depth.depthLoadOp = WGPULoadOp_Clear;
+		depth.depthStoreOp = WGPUStoreOp_Discard;
+		depth.depthClearValue = 1.0F;
+		WGPURenderPassDescriptor passDescriptor = WGPU_RENDER_PASS_DESCRIPTOR_INIT;
+		passDescriptor.label = View("DamnationX stereo eye pass");
+		passDescriptor.colorAttachmentCount = 1;
+		passDescriptor.colorAttachments = &color;
+		passDescriptor.depthStencilAttachment = &depth;
+		WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+		if (drawWorld)
+			DrawWorld(pass);
+		wgpuRenderPassEncoderSetBindGroup(pass, 0, Gpu.overlayBindGroup, 0, nullptr);
+		if (views.overlay.vignette > 0.01F) {
+			wgpuRenderPassEncoderSetPipeline(pass, Gpu.vignettePipeline);
+			wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
+		}
+		if (views.overlay.panelImage != nullptr && views.overlay.panelOpacity > 0.0F) {
+			wgpuRenderPassEncoderSetPipeline(pass, Gpu.panelPipeline);
+			wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
+		}
+		if (views.overlay.laserVisible) {
+			wgpuRenderPassEncoderSetPipeline(pass, Gpu.laserPipeline);
+			wgpuRenderPassEncoderDraw(pass, 12, 1, 0, 0);
+		}
+		wgpuRenderPassEncoderEnd(pass);
+		wgpuRenderPassEncoderRelease(pass);
+		WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
+		wgpuCommandEncoderRelease(encoder);
+		wgpuQueueSubmit(Gpu.queue, 1, &commands);
+		wgpuCommandBufferRelease(commands);
+	}
+	Gpu.view = flatView;
+	Gpu.projection = flatProjection;
+	Gpu.viewProjection = flatViewProjection;
+	Gpu.cameraPosition = flatPosition;
+	Gpu.cameraForward = flatForward;
+	if (drawWorld)
+		wgpuQueueWriteBuffer(Gpu.queue, Gpu.frameBuffer, 0, &Gpu.uniforms, sizeof(Gpu.uniforms));
+	return true;
+}
+
+// SetViewProvider / GetViewProvider live in fpv/view_provider.cpp (one registry for every build and the tests).
+
 #else
 float FloorHeightAt(float, float)
 {
 	return 0.0F;
+}
+
+bool CameraBlockedAt(float x, float /*y*/, float z)
+{
+	const Point tile { static_cast<int>(std::floor(x)), static_cast<int>(std::floor(z)) };
+	return !InDungeonBounds(tile) || IsTileSolid(tile);
 }
 #endif // DEVILUTIONX_WEBGPU
 

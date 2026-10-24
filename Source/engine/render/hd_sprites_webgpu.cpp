@@ -17,7 +17,7 @@
  * shows through its blended walls. Every instance also draws a soft drop shadow (HdSpriteShadow) before all sprites,
  * standing in for the shadow baked into the classic art.
  *
- * Hybrid frames (2.5D lighting) are full-bright and lit on the GPU from the
+ * Hybrid frames (2.5D lighting, docs/design/hybrid-2p5d-lighting.md) are full-bright and lit on the GPU from the
  * G-buffer. The skipped classic blit wrote no card there, so the HD texels are lit by a second pipeline that evaluates
  * the hybrid light pass itself: each texel is a point on the camera-facing card the classic sprite would have been
  * (anchored at the classic frame's bottom row, height = rows above it), run through the same `accumulate()` as K_CARD
@@ -404,7 +404,6 @@ struct ClipSlot {
 	bool ifRoom = false;
 	/** The texture is owned by the 3D warrior renderer (an imposter, render3d::SkinnedPrepareFrame), never loaded or evicted. */
 	bool external = false;
-	uint64_t externalGeneration = 0;
 };
 
 struct HdSpritesGpu {
@@ -1036,13 +1035,10 @@ void InstallImposters(const render3d::SkinnedImposterOutput *outputs, int count)
 		ClipSlot &slot = Gpu.clips[output.clip];
 		if (!slot.external && slot.state != ClipState::Unrequested)
 			continue; // a clip of the pack: never replaced
-		// Emscripten may reuse the old view's numeric handle after a resize.
-		// Its cached bind groups still refer to the destroyed texture.
-		if (slot.view != output.view || slot.externalGeneration != output.generation) {
+		if (slot.view != output.view) {
 			slot.external = true;
 			ReleaseClipTexture(slot);
 			slot.view = output.view;
-			slot.externalGeneration = output.generation;
 		}
 		slot.external = true;
 		slot.state = ClipState::Resident;
@@ -1471,27 +1467,28 @@ void HdSpritesGpuRelease()
 
 #include "engine/render/hd_sprites.hpp"
 #include "engine/render/hd_sprites_internal.hpp"
+#include "host/host_hooks.hpp"
 
 namespace devilution {
 
-bool HdSpritesGpuAvailable() { return false; }
-bool HdSpritesGpuRequestClip(int) { return false; }
-hd_sprites::ClipStatus HdSpritesGpuClipStatus(int) { return hd_sprites::ClipStatus::Unavailable; }
+// Without WebGPU only an embedding host (Hd2D render mode, host/host_hd.cpp) draws HD sprites: it loads the clip
+// textures itself, so every clip counts as resident.
+bool HdSpritesGpuAvailable() { return host::HdSpritesAvailable(); }
+bool HdSpritesGpuRequestClip(int) { return host::HdSpritesAvailable(); }
+hd_sprites::ClipStatus HdSpritesGpuClipStatus(int) { return host::HdSpritesAvailable() ? hd_sprites::ClipStatus::Resident : hd_sprites::ClipStatus::Unavailable; }
 void HdSpritesGpuRequestClipUrgent(int) { }
 void HdSpritesGpuSetPinnedClips(std::span<const int>) { }
 void HdSpritesGpuPrefetchClips(std::span<const int>) { }
 void HdSpritesGpuPrefetchClipsIfRoom(std::span<const int>) { }
 size_t HdSpritesGpuClipBytes(int) { return 0; }
-size_t HdSpritesGpuTextureBudget() { return 0; }
-bool HdSpritesGpuFetchIndex(std::string &, bool &failed)
+size_t HdSpritesGpuTextureBudget() { return host::HdTextureBudget(); }
+bool HdSpritesGpuFetchIndex(std::string &text, bool &failed)
 {
-	failed = true;
-	return false;
+	return host::HdFetchText("hd/sprites.txt", text, failed);
 }
-bool HdSpritesGpuFetchText(const char *, std::string &, bool &failed)
+bool HdSpritesGpuFetchText(const char *url, std::string &text, bool &failed)
 {
-	failed = true;
-	return false;
+	return host::HdFetchText(url, text, failed);
 }
 
 } // namespace devilution

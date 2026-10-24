@@ -31,12 +31,12 @@ void BuildPieceGeometryTable(const std::byte *dungeonCels, std::span<const MICRO
 // Packed per-cell u32 for the GPU (112x112, uploaded as an r32uint texture; the legacy occluder buffer is a separate 0/1 array)
 namespace volume {
 constexpr uint32_t HeightMask = 0xFFu; // bits 0-7   heightPx (0..255)
-constexpr uint32_t FaceSW = 1u << 8, FaceSE = 1u << 9; // PieceGeometry::faces: the DDA occludes only behind these face planes
+constexpr uint32_t FaceSW = 1u << 8, FaceSE = 1u << 9; // PieceGeometry::faces: the DDA occludes only behind these face planes (§9.3)
 constexpr uint32_t BlockLight = 1u << 10; // authoritative TileProperties::BlockLight (never derived from height)
 constexpr uint32_t Solid = 1u << 11;
 constexpr uint32_t Visible = 1u << 12;  // DungeonFlag::Visible this frame
 constexpr uint32_t Explored = 1u << 13; // DungeonFlag::Explored
-constexpr uint32_t Arch = 1u << 14;     // explored arch cells occlude by lintel only, independent of BlockLight
+constexpr uint32_t Arch = 1u << 14;     // explored arch cells occlude by lintel only (§9.3), independent of BlockLight
 constexpr uint32_t DoorOpen = 1u << 15; // informational (debug view); occlusion follows BlockLight of the current dPiece
 constexpr uint32_t Blended = 1u << 16;  // TransList[dTransVal] this frame
 constexpr uint32_t DLightShift = 17;    // bits 17-20 authoritative dLight 0..15 (ambient + gate)

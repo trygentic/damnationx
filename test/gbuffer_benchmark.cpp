@@ -137,7 +137,7 @@ std::vector<uint32_t> RandomOffsets(uint32_t pitch, uint32_t height)
 	return offsets;
 }
 
-// The per-run row recovery the blitters pay: reciprocal multiply + shift ...
+// The per-run row recovery the blitters pay: reciprocal multiply + shift (rev. 2) ...
 void BM_RowOf_Recip40(benchmark::State &state)
 {
 	const uint32_t pitch = static_cast<uint32_t>(state.range(0));

@@ -9,9 +9,19 @@ This repository holds the source code and the release builds. Download the build
 
 ## Latest beta
 
-Beta 7 updates macOS, Windows, Linux, Android and the browser to use the lobby at `https://lobby.damnationx.net`. Native builds include the lobby provider and a certificate store for HTTPS and secure WebSockets. The HD pack remains a separate download; an existing compatible pack continues to work.
+Beta 8 adds a desktop launcher and the native 3D Resurrect Update, built on the custom Toxoid game engine. The original game simulation still handles combat, quests and saves. The native runtime supports 3D, Classic and HD 2D modes. Toxoid is proprietary and ships only compiled into the native game; its source is not included here.
 
-The animated 3D Warrior from beta 6 remains available with an HD pack containing `hd/3d/warrior`. Rogues and Sorcerers keep their existing art.
+The launcher selects your game executable and Diablo data, installs local HD packs, and converts art and sounds from your own Diablo II: Resurrected installation. Imported game assets stay on your computer. See the [release notes](https://github.com/trygentic/damnationx/releases/tag/v1.6.0-beta.8) for the files available in this beta and their requirements.
+
+The browser build at [damnationx.net](https://damnationx.net) uses the separate C++ WASM/WebGPU renderer. Native 3D engine features are not available in that build. Windows, Linux and Android downloads from beta 7 remain available on their release page.
+
+## Desktop launcher
+
+Extract the launcher package into a writable directory and keep its resources beside the executable. Select the native game executable, then the folder containing your own `DIABDAT.MPQ`. Install your local HD pack under Asset library. D2R conversion requires an owned installation; the launcher shows any Python or helper requirements before importing.
+
+The native runtime starts with ray tracing disabled. You can enable it on supported GPUs, choose a hero model per character, or switch to Classic or HD 2D. The new pause menu supports mouse, keyboard and controller. Singleplayer pauses while it is open; multiplayer stays live.
+
+The platform instructions below describe the legacy C++ builds. The standalone launcher can start a legacy executable as well as the native 3D runtime. Building the public source does not build the proprietary native engine.
 
 ## You need the Diablo game data
 

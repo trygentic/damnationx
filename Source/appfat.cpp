@@ -20,10 +20,12 @@
 
 #include "diablo.h"
 #include "dvlnet/leaveinfo.hpp"
+#include "host/host_hooks.hpp"
 #include "multi.h"
 #include "storm/storm_net.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
+#include "utils/log.hpp"
 #include "utils/sdl_thread.h"
 #include "utils/str_cat.hpp"
 #include "utils/ui_fwd.h"
@@ -62,6 +64,10 @@ void FreeDlg()
 void DisplayFatalErrorAndExit(std::string_view title, std::string_view body)
 {
 	FreeDlg();
+	if (!host::ShowFatalDialogs()) {
+		LogError("{}: {}", title, body); // HostInit reports the failure
+		diablo_quit(1);
+	}
 	UiErrorOkDialog(title, body);
 	diablo_quit(1);
 }

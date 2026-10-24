@@ -66,7 +66,7 @@ inline char32_t ConsumeFirstUtf8CodePoint(std::string_view *input)
 	// values represent code point length - 1.
 	// `-1` is so that this method never returns 0, even for invalid values
 	// (which could lead to infinite loops in some code).
-	// Generated with:
+	// Generation command:
 	// ruby -e 'p "0000000000000000000000001111223".reverse.to_i(4).to_s(16)'
 	return ((0x3a55000000000000ULL >> (2 * (static_cast<unsigned char>(*src) >> 3))) & 0x3) + 1;
 }

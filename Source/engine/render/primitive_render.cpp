@@ -16,7 +16,7 @@ namespace devilution {
 namespace {
 
 /**
- * @brief Tags the pixels a primitive just wrote as Unlit in the G-buffer.
+ * @brief Tags the pixels a primitive just wrote as Unlit in the G-buffer (SPEC §5.4).
  *
  * `rect` is in `out` coordinates and may be unclipped; StampUnlit clips it. Classic mode costs one predictable branch.
  */

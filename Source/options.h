@@ -29,6 +29,7 @@
 #include "controls/controller_buttons.h"
 #include "engine/size.hpp"
 #include "engine/sound_defs.hpp"
+#include "fpv/camera_mode.hpp"
 #include "mods/mod_identity.h"
 #include "pack.h"
 #include "quick_messages.hpp"
@@ -43,6 +44,13 @@ namespace devilution {
 #ifndef DEFAULT_HEIGHT
 #define DEFAULT_HEIGHT 480
 #endif
+
+/** Render mode of the game when embedded in a host (Source/host/host_api.hpp HostRenderMode, same values). */
+enum class HostRenderModeOption : uint8_t {
+	World3D = 0,
+	Classic = 1,
+	Hd2D = 2,
+};
 
 enum class StartUpGameMode : uint8_t {
 	/** @brief If hellfire is present, asks the user what game they want to start. */
@@ -79,7 +87,7 @@ enum class LightingQuality : uint8_t {
 	High,
 };
 
-/** @brief Debug views of the 2.5D hybrid G-buffer / lighting (presentation-only). */
+/** @brief Debug views of the 2.5D hybrid G-buffer / lighting (presentation-only, SPEC §9.5). */
 enum class GBufferDebugView : uint8_t {
 	Off,
 	Kind,
@@ -701,12 +709,27 @@ struct GraphicsOptions : OptionCategoryBase {
 #endif
 	/** @brief Show FPS, even without the -f command line flag. */
 	OptionEntryBoolean showFPS;
-	/** @brief First-person view over the WebGPU 3D world (WebGPU builds only, toggled in game with G). */
+	/** @brief Isometric, first-person or third-person view (the 3D modes need WebGPU; T cycles, G toggles first person). */
+	OptionEntryEnum<CameraMode> cameraMode;
+	/** @brief Embedded only (Source/host/): how the host draws the game: 3D world, classic frame or HD 2D. */
+	OptionEntryEnum<HostRenderModeOption> hostRenderMode;
+	/**
+	 * @brief Legacy "First Person View" switch (hidden). Read once at load: a saved 1 becomes cameraMode FirstPerson.
+	 * Use fpv::IsActive() / IsFirstPerson() / IsThirdPerson() instead.
+	 */
 	OptionEntryBoolean firstPersonView;
-	/** @brief Horizontal field of view in degrees for the first-person view. */
+	/** @brief Horizontal field of view in degrees for the first- and third-person views. */
 	OptionEntryInt<int> fpvFieldOfView;
 	/** @brief Show the 3D weapon viewmodel in the first-person view (the 2D slash overlay replaces it when off). */
 	OptionEntryBoolean fpvWeapon;
+	/** @brief The first-person camera bobs while walking. */
+	OptionEntryBoolean fpvHeadBob;
+	/** @brief Show the player's own legs and shadow when looking down in first person (needs the 3D warrior). */
+	OptionEntryBoolean fpvFullBody;
+	/** @brief Over-the-shoulder or orbit chase camera in third person. */
+	OptionEntryEnum<ThirdPersonStyle> thirdPersonStyle;
+	/** @brief Third-person camera distance in tenths of a tile (the mouse wheel changes it in game). */
+	OptionEntryInt<int> thirdPersonDistance;
 	/** @brief Draw the red outline around the monster under the cursor (off by default: it does not follow HD sprites). */
 };
 
@@ -724,6 +747,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean smoothMovement;
 	/** @brief A permanent portal next to the town fountain leads to the Cathedral (dungeon level 1). */
 	OptionEntryBoolean cathedralPortal;
+	/** @brief WASD / stick movement in the first- and third-person views: smooth (default) or tile by tile. */
+	OptionEntryEnum<ViewMovement> viewMovement;
 	/** @brief Mouse look speed in the first-person view (5 = default). */
 	OptionEntryInt<int> fpvMouseSensitivity;
 	/** @brief Invert vertical mouse look in the first-person view. */
@@ -1030,6 +1055,56 @@ private:
 	std::optional<std::forward_list<ModEntry>> modEntries;
 };
 
+enum class VrTurnMode : uint8_t {
+	Snap,
+	Smooth,
+};
+
+enum class VrComfortVignette : uint8_t {
+	Off,
+	Low,
+	Medium,
+	High,
+};
+
+enum class VrMoveDirection : uint8_t {
+	Head,
+	Controller,
+};
+
+enum class VrHand : uint8_t {
+	Right,
+	Left,
+};
+
+/** Virtual reality (Source/xr, docs/design/vr.md). Only shown in builds with DEVILUTIONX_XR. */
+struct VrOptions : OptionCategoryBase {
+	VrOptions();
+	std::vector<OptionEntryBase *> GetEntries() override;
+
+	/** @brief Start a VR session when a headset runtime is available (desktop builds; the Quest app always does). */
+	OptionEntryBoolean enabled;
+	OptionEntryEnum<VrTurnMode> turnMode;
+	/** @brief Degrees per snap turn. */
+	OptionEntryInt<int> snapTurnAngle;
+	/** @brief Degrees per second at full stick deflection. */
+	OptionEntryInt<int> smoothTurnSpeed;
+	OptionEntryEnum<VrComfortVignette> vignette;
+	/** @brief Percent: 100 = the warrior is 1.85 m tall; larger makes the world feel bigger. */
+	OptionEntryInt<int> worldScale;
+	/** @brief Percent of the runtime's recommended eye resolution. */
+	OptionEntryInt<int> renderScale;
+	/** @brief Seated play: the eye height is the character's, not the player's real height. */
+	OptionEntryBoolean seated;
+	OptionEntryEnum<VrMoveDirection> moveDirection;
+	OptionEntryEnum<VrHand> dominantHand;
+	/** @brief Distance of the game screen panel in centimetres. */
+	OptionEntryInt<int> panelDistance;
+};
+
+/** True in builds with VR support (DEVILUTIONX_XR): the VR category is listed then. */
+bool VrOptionsVisible();
+
 struct Options {
 	GameModeOptions GameMode;
 	StartUpOptions StartUp;
@@ -1045,10 +1120,11 @@ struct Options {
 	KeymapperOptions Keymapper;
 	PadmapperOptions Padmapper;
 	ModOptions Mods;
+	VrOptions Vr;
 
 	[[nodiscard]] std::vector<OptionCategoryBase *> GetCategories()
 	{
-		return {
+		std::vector<OptionCategoryBase *> categories {
 			&Language,
 			&Mods,
 			&GameMode,
@@ -1064,6 +1140,9 @@ struct Options {
 			&Keymapper,
 			&Padmapper,
 		};
+		if (VrOptionsVisible())
+			categories.insert(categories.begin() + 5, &Vr); // after Graphics
+		return categories;
 	}
 };
 

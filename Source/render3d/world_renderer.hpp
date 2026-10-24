@@ -2,7 +2,7 @@
 /**
  * @file render3d/world_renderer.hpp
  *
- * Public API of the WebGPU first-person 3D world renderer.
+ * Public API of the WebGPU first-person 3D world renderer (docs/design/first-person-3d.md).
  *
  * Frame flow with FPV on (WebGPU presenter only):
  *
@@ -25,9 +25,11 @@
  * Developer test knobs (environment, read every frame by WorldGpuPrepare): DVL_W3D_YAW=<deg> fixed yaw,
  * DVL_W3D_SPIN=<deg/s> rotate the view, DVL_W3D_PITCH=<deg>, DVL_W3D_POS=<x>,<z> camera position,
  * DVL_W3D_STOP_DEMO=<s> push one Escape key press after that many seconds (ends a --demo playback, the game then
- * continues live). Read at level build: DVL_W3D_DUMP_ATLAS=<prefix> writes the level atlas as
+ * continues live so the trainer socket can warp). Read at level build: DVL_W3D_DUMP_ATLAS=<prefix> writes the level atlas as
  * <prefix>_<leveltype>.ppm, DVL_W3D_DUMP_TOWN=<file.csv> the town cell classification inputs, DVL_W3D_NO_MIPS=1 skips the
- * atlas mips. Per frame: DVL_W3D_NO_SHADOWS=1 turns the shadow rays off.
+ * atlas mips. Per frame: DVL_W3D_NO_SHADOWS=1 turns the shadow rays off, DVL_W3D_AMBIENT=<0..1> overrides the ambient light
+ * (dungeons are 0.03; 0.6 lights a level for inspecting it from a DVL_W3D_POS camera). With DVL_W3D_POS set the local player's 3D model is drawn as well (the camera
+ * is away from it); DVL_W3D_CHARACTER=warrior|rogue draws every hero with that model (render3d/skinned_renderer.hpp).
  */
 
 #include <cstdint>
@@ -35,6 +37,7 @@
 #include "config.h"
 #include "render3d/fpv_contract.hpp"
 #include "render3d/math3d.hpp"
+#include "render3d/view_provider.hpp"
 
 #if DEVILUTIONX_WEBGPU
 #include <webgpu/webgpu.h>
@@ -67,6 +70,13 @@ bool WorldPassActive();
  * up or down. The FPV camera adds it to the eye height. 0 when no level mesh is built.
  */
 float FloorHeightAt(float x, float z);
+
+/**
+ * Occupancy of the 3D level for the third-person camera's collision (world units): true inside a wall / house / pillar
+ * column of the occluder grid, below the floor, above the dungeon ceiling or outside the map. Without a level mesh it
+ * falls back to the game's solid tiles (full height).
+ */
+bool CameraBlockedAt(float x, float y, float z);
 
 /**
  * UI coverage mask (call right after clearing the world rows of `out` to kUiTransparentIndex): the gbuffer's aux plane
@@ -180,6 +190,53 @@ using ViewModelDrawFn = void (*)(const ViewModelDrawContext &context);
 
 /** Registers the viewmodel renderer; nullptr unregisters (no extra pass is encoded then). */
 void SetViewModelRenderer(ViewModelDrawFn draw);
+
+/**
+ * Draws the static glTF meshes placed in the level (render3d/placement_runtime.hpp, docs/design/static-mesh-placement.md)
+ * into the open 3D pass, after the level geometry (render3d/static_mesh_renderer.cpp). No-op without placements.
+ */
+void StaticMeshEncode(const SkinnedDrawContext &context);
+/** Releases the static mesh GPU resources (WorldGpuRelease). */
+void StaticMeshRelease();
+
+/**
+ * Stereo rendering for a view provider with EyeCount() > 0 (render3d/view_provider.hpp, docs/design/vr.md).
+ *
+ * Call after WorldGpuPrepare() returned true in the same frame. Each eye is encoded and submitted on its own (the
+ * shared frame uniforms are rewritten between the submits, which the queue orders), straight into `targets[eye]`
+ * (format = WorldGpuFrame::colorFormat, usage RenderAttachment, `width` x `height`). After the world, each eye gets the
+ * overlays: the 2D game screen as a panel, the controller laser and the comfort vignette. No viewmodel in stereo.
+ */
+struct StereoOverlay {
+	/** The 2D game screen with a transparent world area (alpha 0), or nullptr for no panel. Filterable float texture. */
+	WGPUTextureView panelImage = nullptr;
+	/** Unit quad (x, y in [-0.5, 0.5], facing +z) to world. */
+	Mat4 panelModel = Mat4::Identity();
+	float panelOpacity = 1.0F;
+	/** Laser space (-z = pointing direction, length in world units already scaled into the matrix) to world. */
+	bool laserVisible = false;
+	Mat4 laserModel = Mat4::Identity();
+	Vec4 laserColor { 1.0F, 0.25F, 0.15F, 0.8F };
+	/** 0 = off, 1 = strongest tunnel vignette (comfort option while moving or turning). */
+	float vignette = 0.0F;
+};
+
+struct StereoViews {
+	WGPUDevice device = nullptr;
+	WGPUQueue queue = nullptr;
+	WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined; // must match WorldGpuFrame::colorFormat
+	/** Draw the world (false in menus or while a level loads: only the overlays on black). */
+	bool drawWorld = true;
+	int count = 0;
+	const RenderView *views = nullptr;
+	const WGPUTextureView *targets = nullptr;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	StereoOverlay overlay;
+};
+
+/** Renders `views.count` views (see above). The world is drawn only when drawWorld and WorldGpuPrepare() succeeded. */
+bool WorldGpuRenderViews(const StereoViews &views);
 
 #endif // DEVILUTIONX_WEBGPU
 

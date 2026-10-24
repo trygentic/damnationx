@@ -1352,7 +1352,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bugfixes
 
-- Some cave levels were generated with an incorrect layout
+- Some cave levels had an incorrect generated layout
 - Firebolt mana cost is now correct
 - Allow players to join Nightmare/Hell games without first creating a game
 - Correctly load the full white color

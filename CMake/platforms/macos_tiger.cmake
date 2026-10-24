@@ -8,7 +8,7 @@ set(USE_SDL1 ON)
 # ZeroTier is yet to be tested.
 set(DISABLE_ZERO_TIER ON)
 
-# https://trac.macports.org/ticket/71511
+# the MacPorts libunwind compatibility report (71511)
 set(DEVILUTIONX_SYSTEM_GOOGLETEST OFF)
 set(DEVILUTIONX_STATIC_GOOGLETEST OFF)
 set(DEVILUTIONX_SYSTEM_BENCHMARK OFF)

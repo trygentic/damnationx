@@ -1,57 +1,57 @@
 include(GoogleTest)
 
-# Quality targets are deliberately named so native differential and
+# DXM-Q01 quality targets are deliberately named so native differential and
 # renderer checks can be invoked independently of the public test aggregate.
-set(QUALITY_NATIVE_DIFFERENTIAL_TARGET quality_native_differential)
-set(QUALITY_CANONICAL_TICK_STATE_TARGET quality_canonical_tick_state)
-set(QUALITY_PERSISTENCE_INVARIANCE_TARGET quality_persistence_invariance)
-set(QUALITY_RENDERER_GOLDEN_TARGET quality_renderer_goldens)
-set(QUALITY_OWNED_DATA_TARGET quality_owned_data)
+set(DXM_Q01_NATIVE_DIFFERENTIAL_TARGET dxm_q01_native_differential)
+set(DXM_Q01_CANONICAL_TICK_STATE_TARGET dxm_q01_canonical_tick_state)
+set(DXM_Q01_PERSISTENCE_INVARIANCE_TARGET dxm_q01_persistence_invariance)
+set(DXM_Q01_RENDERER_GOLDEN_TARGET dxm_q01_renderer_goldens)
+set(DXM_Q01_OWNED_DATA_TARGET dxm_q01_owned_data)
 
-add_custom_target(${QUALITY_NATIVE_DIFFERENTIAL_TARGET}
-  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L "^quality-native$"
+add_custom_target(${DXM_Q01_NATIVE_DIFFERENTIAL_TARGET}
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -L "^dxm-q01-native$"
   USES_TERMINAL)
-add_custom_target(${QUALITY_CANONICAL_TICK_STATE_TARGET}
-  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^quality_canonical_tick_state$"
+add_custom_target(${DXM_Q01_CANONICAL_TICK_STATE_TARGET}
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^dxm_q01_canonical_tick_state$"
   USES_TERMINAL)
-add_custom_target(${QUALITY_PERSISTENCE_INVARIANCE_TARGET}
-  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^quality_persistence_invariance$"
+add_custom_target(${DXM_Q01_PERSISTENCE_INVARIANCE_TARGET}
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^dxm_q01_persistence_invariance$"
   USES_TERMINAL)
-add_custom_target(${QUALITY_RENDERER_GOLDEN_TARGET}
-  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^renderer_test\\.|^palette_blending_test\\.|^quality_renderer_goldens$|^quality_.*_classic_goldens$|^DunRenderGoldenTest\\.|^ClxRenderGolden\\.|^ScrollrtGolden\\."
+add_custom_target(${DXM_Q01_RENDERER_GOLDEN_TARGET}
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -R "^renderer_test\\.|^palette_blending_test\\.|^dxm_q01_renderer_goldens$|^dxm_q01_.*_classic_goldens$|^DunRenderGoldenTest\\.|^ClxRenderGolden\\.|^ScrollrtGolden\\."
   USES_TERMINAL
   VERBATIM)
 if(DEVILUTIONX_Q01_ENABLE_OWNED_DATA_TESTS)
-  add_custom_target(${QUALITY_OWNED_DATA_TARGET})
+  add_custom_target(${DXM_Q01_OWNED_DATA_TARGET})
 endif()
 
-add_test(NAME quality_native_differential
+add_test(NAME dxm_q01_native_differential
   COMMAND $<TARGET_FILE:timedemo_test> --gtest_filter=CanonicalTickState.*:WasmtimeWasmi.*)
-set_tests_properties(quality_native_differential PROPERTIES LABELS "quality;native")
-add_test(NAME quality_canonical_tick_state
+set_tests_properties(dxm_q01_native_differential PROPERTIES LABELS "dxm-q01;native")
+add_test(NAME dxm_q01_canonical_tick_state
   COMMAND $<TARGET_FILE:timedemo_test> --gtest_filter=CanonicalTickState.*)
-set_tests_properties(quality_canonical_tick_state PROPERTIES LABELS "quality;native")
-add_test(NAME quality_persistence_invariance
+set_tests_properties(dxm_q01_canonical_tick_state PROPERTIES LABELS "dxm-q01;native")
+add_test(NAME dxm_q01_persistence_invariance
   COMMAND $<TARGET_FILE:timedemo_test> --gtest_filter=PersistenceInvariance.*)
-set_tests_properties(quality_persistence_invariance PROPERTIES LABELS "quality;native")
-set_tests_properties(quality_native_differential quality_canonical_tick_state quality_persistence_invariance
+set_tests_properties(dxm_q01_persistence_invariance PROPERTIES LABELS "dxm-q01;native")
+set_tests_properties(dxm_q01_native_differential dxm_q01_canonical_tick_state dxm_q01_persistence_invariance
   PROPERTIES RESOURCE_LOCK timedemo_save_archive)
-add_test(NAME quality_renderer_goldens
+add_test(NAME dxm_q01_renderer_goldens
   COMMAND $<TARGET_FILE:palette_blending_test> --gtest_filter=ClassicGoldens.*:EnhancedGoldens.*)
-set_tests_properties(quality_renderer_goldens PROPERTIES LABELS "quality;renderer")
-# The classic byte-identity goldens of the 2.5D hybrid lighting: mode off must equal master.
-add_test(NAME quality_dun_render_classic_goldens
+set_tests_properties(dxm_q01_renderer_goldens PROPERTIES LABELS "dxm-q01;renderer")
+# The classic byte-identity goldens of the 2.5D hybrid lighting (SPEC §12.1, §14.1): mode off must equal master.
+add_test(NAME dxm_q01_dun_render_classic_goldens
   COMMAND $<TARGET_FILE:dun_render_golden_test> --gtest_filter=DunRenderGoldenTest.*)
-add_test(NAME quality_clx_render_classic_goldens
+add_test(NAME dxm_q01_clx_render_classic_goldens
   COMMAND $<TARGET_FILE:clx_render_golden_test> --gtest_filter=ClxRenderGolden.*)
-add_test(NAME quality_scrollrt_classic_goldens
+add_test(NAME dxm_q01_scrollrt_classic_goldens
   COMMAND $<TARGET_FILE:scrollrt_golden_test> --gtest_filter=ScrollrtGolden.*)
-set_tests_properties(quality_dun_render_classic_goldens quality_clx_render_classic_goldens quality_scrollrt_classic_goldens
-  PROPERTIES LABELS "quality;renderer")
+set_tests_properties(dxm_q01_dun_render_classic_goldens dxm_q01_clx_render_classic_goldens dxm_q01_scrollrt_classic_goldens
+  PROPERTIES LABELS "dxm-q01;renderer")
 if(DEVILUTIONX_Q01_ENABLE_OWNED_DATA_TESTS)
-  add_test(NAME quality_owned_data
+  add_test(NAME dxm_q01_owned_data
     COMMAND $<TARGET_FILE:timedemo_test> --gtest_filter=OwnedData.*)
-  set_tests_properties(quality_owned_data PROPERTIES LABELS "quality;owned-data")
+  set_tests_properties(dxm_q01_owned_data PROPERTIES LABELS "dxm-q01;owned-data")
 endif()
 
 include(functions/copy_files)
@@ -110,6 +110,9 @@ set(tests
 if(DEVILUTIONX_D2_SOUND_IMPORT)
   list(APPEND tests d2sound_test)
 endif()
+if(DAMNATIONX_HOST_LIB)
+  list(APPEND tests host_api_test)
+endif()
 set(standalone_tests
   codec_test
   crawl_test
@@ -123,6 +126,7 @@ set(standalone_tests
   parse_int_test
   path_test
   freeform_movement_test
+  fpv_camera_test
   fpv_math_test
   vision_test
   random_test
@@ -144,6 +148,7 @@ set(standalone_tests
   hd_objects_test
   hd_view_transform_test
   gltf_model_test
+  placement_test
   ui_scale_test
   dun_render_golden_test
   clx_render_golden_test
@@ -196,6 +201,11 @@ foreach(target ${benchmarks})
   target_link_libraries(${target} PRIVATE benchmark::benchmark benchmark::benchmark_main)
   target_include_directories(${target} PRIVATE "${PROJECT_SOURCE_DIR}/Source")
 endforeach()
+
+if(DAMNATIONX_HOST_LIB)
+  # The host library reads the game's own assets from the copy in the build folder (CMake/Assets.cmake).
+  target_compile_definitions(host_api_test PRIVATE "HOST_API_TEST_ASSETS_DIR=\"${DEVILUTIONX_ASSETS_OUTPUT_DIRECTORY}/\"")
+endif()
 
 add_library(app_fatal_for_testing OBJECT test/app_fatal_for_testing.cpp)
 target_sources(app_fatal_for_testing INTERFACE $<TARGET_OBJECTS:app_fatal_for_testing>)
@@ -256,6 +266,7 @@ target_link_dependencies(palette_blending_benchmark
 target_link_dependencies(parse_int_test PRIVATE libdevilutionx_parse_int)
 target_link_dependencies(path_test PRIVATE libdevilutionx_pathfinding libdevilutionx_direction app_fatal_for_testing)
 target_link_dependencies(freeform_movement_test PRIVATE libdevilutionx_freeform_movement)
+target_link_dependencies(fpv_camera_test PRIVATE libdevilutionx_fpv_math)
 target_link_dependencies(fpv_math_test PRIVATE libdevilutionx_fpv_math)
 target_link_dependencies(vision_test PRIVATE libdevilutionx_vision)
 target_link_dependencies(path_benchmark PRIVATE libdevilutionx_pathfinding app_fatal_for_testing)
@@ -325,7 +336,7 @@ target_link_dependencies(utf8_test PRIVATE libdevilutionx_utf8)
 
 target_include_directories(writehero_test PRIVATE 3rdParty/PicoSHA2)
 
-# ---- 2.5D hybrid lighting ----
+# ---- 2.5D hybrid lighting (SPEC §12) ----
 # Standalone tests copy their own fixtures: devilutionx_copied_fixtures only hangs off test_main.
 function(add_hybrid_test_fixtures test_target fixture_dir)
   copy_files(
@@ -372,6 +383,7 @@ target_link_dependencies(hd_items_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(hd_objects_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(hd_view_transform_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(gltf_model_test PRIVATE libdevilutionx_gltf_model)
+target_link_dependencies(placement_test PRIVATE libdevilutionx_placement)
 target_compile_definitions(gltf_model_test PRIVATE "WARRIOR_GLB_PATH=\"${PROJECT_SOURCE_DIR}/assets/3d/warrior/warrior.glb\"")
 add_hybrid_test_fixtures(hybrid_reference_test hybrid README.md volume_synthetic.bin planes_synthetic.bin)
 
@@ -409,7 +421,7 @@ target_link_dependencies(clx_render_golden_test
 )
 add_hybrid_test_fixtures(clx_render_golden_test clx_render README.md goldens.tsv)
 
-# WGSL validation: naga and/or tint when installed; exit 77 = skipped.
+# WGSL validation (SPEC §12.3): naga and/or tint when installed; exit 77 = skipped.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
   add_test(NAME wgsl_validate

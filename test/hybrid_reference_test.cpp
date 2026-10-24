@@ -13,7 +13,7 @@
 
 #include "engine/render/hybrid_reference.hpp"
 
-// Executable goldens for Source/engine/render/webgpu_shaders.hpp via its C++ transliteration.
+// Executable goldens for Source/engine/render/webgpu_shaders.hpp via its C++ transliteration (SPEC §9.11, §12.2).
 // Fixtures: test/fixtures/hybrid/{volume_synthetic.bin,planes_synthetic.bin}, layout documented in test/fixtures/hybrid/README.md.
 
 namespace devilution {
@@ -22,7 +22,7 @@ namespace {
 using namespace hybrid_reference;
 constexpr float CellPickOffsetForTests = 0.35F; // CELL_PICK_OFFSET
 
-// ---- volume bits ----
+// ---- SPEC §8.1 volume bits ----
 constexpr uint32_t VBlock = 1U << 10;
 constexpr uint32_t VVisible = 1U << 12;
 constexpr uint32_t VExplored = 1U << 13;
@@ -31,7 +31,7 @@ constexpr uint32_t VDoorOpen = 1U << 15;
 constexpr uint32_t DLightShift = 17;
 constexpr uint32_t LintelShift = 21;
 
-// ---- gbuffer kinds, aux byte = kind << 5 | normal ----
+// ---- gbuffer kinds (SPEC §3.1), aux byte = kind << 5 | normal ----
 constexpr uint32_t KUnlit = 0, KFloor = 1, KWallL = 2, KWallR = 3, KCard = 4, KCardEmissive = 5, KWallBlended = 6, KWallTop = 7;
 constexpr uint32_t Aux(uint32_t kind, uint32_t normal) { return (kind << 5) | normal; }
 
@@ -148,7 +148,7 @@ Light MakeLight(float x, float y, float z, float radius = 4.0F, float intensity 
 
 Point FloorPoint(Vec2 v) { return { static_cast<int>(std::floor(v.x)), static_cast<int>(std::floor(v.y)) }; }
 
-// Receiver of a foot-table SW-face wall pixel: tile-local column c (0..31), hRows above the foot line.
+// Receiver of a foot-table SW-face wall pixel: tile-local column c (0..31), hRows above the foot line (SPEC §3.2, §3.3).
 struct WallReceiver {
 	Vec2 ground;
 	Point skipA, own;
@@ -298,7 +298,7 @@ TEST(HybridReference, WallOfHeightTwoBlocksLowLightAndPassesHighLight)
 
 TEST(HybridReference, WallBehindBlocksEverySwColumn)
 {
-	// Wall of height 2 at (5,5), light z 0.5 in (5,4) -> visibility 0 for every column c in [0,32) and heights 0..40 rows;
+	// SPEC §3.3: wall of height 2 at (5,5), light z 0.5 in (5,4) -> visibility 0 for every column c in [0,32) and heights 0..40 rows;
 	// the same light in (5,6) -> 1 for all of them (no per-column stripes).
 	const Params p = SceneParams();
 	const Volume v = TheVolume().span();
@@ -477,7 +477,7 @@ TEST(HybridReference, WallOwnCellRecoversTheOwnCellForEveryBaseRowColumn)
 		EXPECT_NEAR(ground.x + ground.y - 17.0F, 1.9375F, 1e-5F) << "u + v == 1.9375 on the base row";
 		EXPECT_EQ(WallOwnCell(ground), (Point { 10, 7 })) << "x=" << x;
 	}
-	// The plain floor lands in the SW neighbour for the leftmost columns and the SE neighbour for the rightmost ones.
+	// The plain floor lands in the SW neighbour for the leftmost columns and the SE neighbour for the rightmost ones (SPEC §3.3).
 	EXPECT_EQ(FloorPoint(ScreenToWorld({ 64.0F, 47.0F }, p)), (Point { 10, 8 }));
 	EXPECT_EQ(FloorPoint(ScreenToWorld({ 127.0F, 47.0F }, p)), (Point { 11, 7 }));
 	// The spec's worked example: c = 0 -> own-cell coordinates (0.47, 1.47).
@@ -703,7 +703,7 @@ TEST(HybridReference, WallBlendedIsLitLikeTheFaceItContinues)
 	const Planes &planes = ThePlanes().planes;
 	const Volume v = TheVolume().span();
 	// Blended wall (10,9), SW column c = 17 (x = 17, foot 7): rows 72 - h. Mask (8, 32) -> outPixel (17, 65) -> h = 7.
-	// A see-through pixel is lit exactly like the opaque face it continues (classic shades both with the same
+	// Rev. 5: a see-through pixel is lit exactly like the opaque face it continues (classic shades both with the same
 	// bled-up lightmap). Lighting it from the floor under the pixel left every blended piece a different value from its
 	// opaque neighbours along the wall.
 	const Point mask { 8, 32 };
@@ -768,7 +768,7 @@ TEST(HybridReference, ArchPixelsCarryWallLeftWithTileBase)
 	p.lightCount = 1;
 	const MaskTexel t = LightTexel(mask, planes, v, lights, TestLutSpan(), p);
 	const Rgb expected = AccumulateMasked({ ground.x, ground.y + p.receiverNudge, 18.0F / 32.0F }, { 0.0F, 1.0F, 0.0F }, ground, own, skipA, p.wrapSurface, true, AllLights, v, lights, p);
-	EXPECT_TRUE(RgbNear({ t.r, t.g, t.b }, expected)) << "arches take the foot-table wall rule (accepted for v1)";
+	EXPECT_TRUE(RgbNear({ t.r, t.g, t.b }, expected)) << "arches take the foot-table wall rule (SPEC §3.3, accepted for v1)";
 }
 
 TEST(HybridReference, CardStraddlingDarkCellIsNotBlack)
@@ -896,7 +896,7 @@ TEST(HybridReference, RunLightPassCoversTheFullMask)
 	EXPECT_GT(passThrough, 64 * 8);
 }
 
-// ================================================ wall lines and half-cell occluders ================================================
+// ================================================ wall lines and half-cell occluders (rev. 5) ================================================
 
 constexpr uint32_t VFaceSW = 1U << 8;
 constexpr uint32_t VFaceSE = 1U << 9;
@@ -980,7 +980,7 @@ struct WallAlongYScene {
 
 TEST(HybridReference, WallPiecesJoinIntoOneContinuousFace)
 {
-	// The "cubes of light" regression: with the wall lines of neighbouring pieces joining into one line, every
+	// The "cubes of light" regression (rev. 5): with the wall lines of neighbouring pieces joining into one line, every
 	// texel of the face is lit from a ground point on x = 10.5, and the lighting is continuous across the 32-px piece
 	// boundaries, with ambient, direct light and visibility all smooth along the wall.
 	WallAlongYScene scene;

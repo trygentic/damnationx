@@ -27,6 +27,7 @@
 #include "controls/game_controls.h"
 #include "controls/touch/gamepad.h"
 #include "cursor.h"
+#include "host/host_hooks.hpp"
 #include "cursor_defs.hpp"
 #include "doom.h"
 #include "fpv/fpv.hpp"
@@ -2254,6 +2255,8 @@ void plrctrls_after_check_curs_move()
 	if (ControlMode == ControlTypes::KeyboardAndMouse || IsPointAndClick()) {
 		return;
 	}
+	if (host::PickedTarget())
+		return; // embedded World3D: the host's 3D pick is the target, whatever device was used last
 	if (fpv::IsActive())
 		return; // first person: the crosshair picks the target
 

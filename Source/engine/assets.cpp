@@ -143,6 +143,11 @@ bool ContainsLogicAssets(const std::string &rootPath, const std::string &relativ
 
 } // namespace
 
+bool HdArtDirectoryHas2dArt(const std::string &directory)
+{
+	return FileExists(directory + "sprites.txt") || FileExists(directory + "ui.txt");
+}
+
 void SetHdAssetDirectory(std::string_view directory)
 {
 	HdAssetDirectory = directory;
@@ -518,12 +523,16 @@ std::vector<std::string> GetMPQSearchPaths()
 	return paths;
 }
 
-/** `<parent>hd/` (or `HD/`, for case-sensitive file systems) when it holds an HD art index. */
+/**
+ * `<parent>hd/` (or `HD/`, for case-sensitive file systems) when it holds an HD art index, or only a 3D pack (the FREE
+ * 3D pack installs into `hd/3d/free/` without the HD art).
+ */
 std::string HdArtDirectoryIn(const std::string &parent)
 {
 	for (const char *name : { "hd", "HD" }) {
 		std::string directory = StrCat(parent, name, DIRECTORY_SEPARATOR_STR);
-		if (FileExists(directory + "sprites.txt") || FileExists(directory + "ui.txt"))
+		if (HdArtDirectoryHas2dArt(directory) || FileExists(StrCat(directory, "3d", DIRECTORY_SEPARATOR_STR, "free", DIRECTORY_SEPARATOR_STR, "manifest.json"))
+		    || FileExists(StrCat(directory, "3d", DIRECTORY_SEPARATOR_STR, "hd", DIRECTORY_SEPARATOR_STR, "manifest.json")))
 			return directory;
 	}
 	return {};

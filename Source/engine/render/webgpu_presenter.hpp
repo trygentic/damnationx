@@ -32,7 +32,7 @@ struct WebGpuRayTracedLight {
 	float blue = 1.0F;
 };
 
-/** Light for the 2.5D hybrid pass: tile-space position incl. height. */
+/** Light for the 2.5D hybrid pass (SPEC §9.1): tile-space position incl. height. */
 struct WebGpuHybridLight {
 	float worldX = 0.0F;
 	float worldY = 0.0F;
@@ -44,13 +44,13 @@ struct WebGpuHybridLight {
 	float blue = 1.0F;
 };
 
-/** CPU G-buffer planes uploaded per hybrid frame. */
+/** CPU G-buffer planes uploaded per hybrid frame (SPEC §3.1, §9.1). */
 struct WebGpuGBufferPlanes {
 	const uint8_t *aux = nullptr, *base = nullptr, *index = nullptr; // aux/index rows [0, rows); base rows [0, world rows); index = PalSurface->pixels
 	uint32_t pitch = 0, rows = 0;
 };
 
-/** CPU → GPU contract for the 2.5D hybrid ray-marched lighting. */
+/** CPU → GPU contract for the 2.5D hybrid ray-marched lighting (SPEC §9.1). */
 struct WebGpuHybridData {
 	bool enabled = false;        // = gbuffer::BackBufferIsHybrid(): planes valid, frame is full-bright
 	bool softShadows = false;    // lightingQuality == High
@@ -61,7 +61,7 @@ struct WebGpuHybridData {
 	uint32_t zoomOffsetX = 0;    // HdWorldTransform::offsetX as int32 bits (side panel and remainder)
 	uint32_t frameCounter = 0;
 	float ambientScale = 0.6F;              // hybridAmbient / 100
-	float heightPixelsPerWorldUnit = 32.0F; // tunable
+	float heightPixelsPerWorldUnit = 32.0F; // tunable (§3.3)
 	float wrapCard = 0.6F, wrapSurface = 0.35F, receiverNudge = 0.05F, softTapOffset = 0.22F;
 	float emissiveScale = 2.0F, exposure = 1.0F;
 	uint32_t lightCount = 0;
@@ -70,7 +70,7 @@ struct WebGpuHybridData {
 	std::array<float, 256> paletteEmissive {};
 	std::array<float, 16> ambientCurve {};              // classic darkening per dLight level (gbuffer::BuildClassicAmbientCurve)
 	std::array<std::array<uint8_t, 4>, 256> palette {}; // the SDL palette BltFast expands with (rgba8)
-	const uint32_t *volume = nullptr;                   // tile_geometry::OccluderVolume::cells (112*112), packed layout
+	const uint32_t *volume = nullptr;                   // tile_geometry::OccluderVolume::cells (112*112), packed layout §8.1
 	uint32_t volumeGeneration = 0;                      // upload the volume texture only when it changes
 	WebGpuGBufferPlanes planes {};
 };

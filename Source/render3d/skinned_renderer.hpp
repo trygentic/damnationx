@@ -2,11 +2,16 @@
 /**
  * @file render3d/skinned_renderer.hpp
  *
- * GPU skinned rendering of the 3D warrior (assets/3d/warrior/warrior.glb).
+ * GPU skinned rendering of the 3D characters (docs/design/first-person-3d.md goal 5, docs/3d-asset-packs.md).
  *
- * The model (render3d/gltf_model.hpp) is part of the HD art pack, not the game: it is loaded on first use from
- * "hd/3d/warrior/warrior.glb" (warrior_1024.glb in the browser and on Android), and without it the HD sprites are
- * drawn. Each draw samples the clip
+ * One model per class, part of the HD art pack, not the game: "hd/3d/warrior/warrior.glb" and "hd/3d/rogue/rogue.glb"
+ * (the *_1024.glb variants in the browser and on Android), loaded the first time a hero of that class is drawn. Without
+ * a class's model its HD sprites are drawn. Equipment follows the hero's items by mesh name (`<Item>_RIGHT`,
+ * `_TWOHANDED`, `_Town_Stowed`, `_Sheath_Empty`, `<Shield>_LEFT`, the bow parts and quiver; the family default such as
+ * Sword_RIGHT when an item has no mesh of its own) and clips by `<action>_<family>` (e.g. town_walk_mace), falling back
+ * to `<action>`. The first-person viewmodel uses "hd/3d/warrior/warrior_viewmodel.glb" (the older warrior with a rigid
+ * sword and shield), else warrior.glb when that is such a model. Developer knob: DVL_W3D_CHARACTER=warrior|rogue draws
+ * every hero with that model. Each draw samples the clip
  * matching the player's mode on the CPU (TRS keys, lerp / slerp, hierarchy, inverse bind) into a joint palette, and a
  * WGSL vertex shader skins the mesh with it (4 weights). The fragment shader is a small PBR: base colour texture (body
  * and hair) or the manifest's flat equipment colours, Lambert diffuse plus GGX specular with the material's metallic /
@@ -47,10 +52,10 @@ constexpr int kImposterCellSize = 640;
 constexpr int kImposterPivotX = 320;
 constexpr int kImposterPivotY = 424;
 
-/** True when the 3D warrior option is on and `player` can be drawn with the model (a warrior). Cheap. */
+/** True when the 3D character option is on and `player`'s class has a model that has not failed. Cheap. */
 [[nodiscard]] bool SkinnedPlayerWanted(const Player &player);
 
-/** Loads the model on the first call (CPU side: parse, image decode); false if it failed (logged once). */
+/** Loads the warrior model on the first call (CPU side: parse, image decode); false if it failed (logged once). */
 bool SkinnedModelLoaded();
 
 /**
@@ -77,7 +82,6 @@ bool SkinnedRequestImposter(const Player &player, int clip);
 struct SkinnedImposterOutput {
 	int clip = -1;
 	WGPUTextureView view = nullptr;
-	uint64_t generation = 0; // WebGPU handles may be recycled after a resize.
 };
 
 /**

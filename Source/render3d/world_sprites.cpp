@@ -21,8 +21,10 @@
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
+#include "fpv/view_provider.hpp"
 #include "player.h"
 #include "render3d/fpv_contract.hpp"
+#include "render3d/placement_runtime.hpp"
 #include "render3d/world_renderer.hpp"
 #include "towners.h"
 #include "utils/clx_decode.hpp"
@@ -375,7 +377,8 @@ void AddPlayers(const CameraView &camera, const Basis &basis, bool (*skipPlayer)
 {
 	for (size_t i = 0; i < Players.size(); ++i) {
 		const Player &player = Players[i];
-		if (!player.plractive || !player.isOnActiveLevel() || &player == MyPlayer || !player.AnimInfo.sprites)
+		// The local player only in third person (the camera is inside it in first person).
+		if (!player.plractive || !player.isOnActiveLevel() || !player.AnimInfo.sprites || (&player == MyPlayer && !fpv::GetViewOutput().drawLocalPlayer))
 			continue;
 		if (skipPlayer != nullptr && skipPlayer(static_cast<int>(i)))
 			continue;
@@ -432,7 +435,7 @@ void AddObjects(const CameraView &camera, const Basis &basis, const LevelGeometr
 		const Object &object = Objects[id];
 		if (object.isDoor() || !object._oAnimData || object._oAnimFrame == 0 || object._oAnimFrame > object._oAnimData->numSprites())
 			continue;
-		if (!InDungeonBounds(object.position))
+		if (!InDungeonBounds(object.position) || PlacementHidesObject(id))
 			continue;
 		Vec3 feet { static_cast<float>(object.position.x) + 0.5F, 0.0F, static_cast<float>(object.position.y) + 0.5F };
 		if (!InRange(feet, camera))
@@ -514,7 +517,7 @@ void AddMissiles(const CameraView &camera, const Basis &basis, BillboardFrame &f
 		Vec3 at = feet;
 		// The local player's projectiles leave from the off-hand / crosshair area in front of the camera and blend into
 		// their simulated path over the first two tiles.
-		if (moving && missile._micaster == TARGET_MONSTERS && missile._misource == static_cast<int>(MyPlayerId)) {
+		if (moving && missile._micaster == TARGET_MONSTERS && missile._misource == static_cast<int>(MyPlayerId) && fpv::IsFirstPerson()) {
 			const float dx = feet.x - camera.position.x;
 			const float dz = feet.z - camera.position.z;
 			const float t = std::clamp(std::sqrt(dx * dx + dz * dz) / 2.0F, 0.0F, 1.0F);

@@ -128,5 +128,8 @@ std::expected<void, std::string> pfile_convert_levels();
 void pfile_remove_temp_files();
 std::unique_ptr<std::byte[]> pfile_read(const char *pszName, size_t *pdwLen);
 void pfile_update(bool forceSave);
+std::string pfile_get_save_path();
+bool pfile_write_game_snapshot(const std::string &path);
+void pfile_set_save_path_override(const std::string *path);
 
 } // namespace devilution

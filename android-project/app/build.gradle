@@ -1,9 +1,11 @@
 def buildAsLibrary = project.hasProperty('BUILD_AS_LIBRARY')
 def buildAsApplication = !buildAsLibrary
-def webgpuBuild = project.hasProperty('webgpu')
+// -Pvr builds the Meta Quest app (docs/design/vr.md): the WebGPU build plus OpenXR, arm64 only, its own identity.
+def vrBuild = project.hasProperty('vr')
+def webgpuBuild = project.hasProperty('webgpu') || vrBuild
 // -Pwebgpu builds DamnationX (SDL3 + Dawn, HD art) under its own identity so it installs beside stock DevilutionX.
-def appIdBase = webgpuBuild ? 'net.damnationx' : 'org.diasurgical.devilutionx'
-def appLabel = webgpuBuild ? 'DamnationX' : '@string/app_name'
+def appIdBase = vrBuild ? 'net.damnationx.vr' : (webgpuBuild ? 'net.damnationx' : 'org.diasurgical.devilutionx')
+def appLabel = vrBuild ? 'DamnationX VR' : (webgpuBuild ? 'DamnationX' : '@string/app_name')
 // Release signing: pass -PreleaseStoreFile=... -PreleaseStorePassword=... -PreleaseKeyAlias=... -PreleaseKeyPassword=...
 // (or put them in ~/.gradle/gradle.properties, or set DX_RELEASE_STORE_FILE etc.). Without them assembleRelease is unsigned.
 def releaseSigning = { String name, String env -> project.findProperty(name) ?: System.env[env] }
@@ -19,11 +21,13 @@ android {
 	compileSdk 35
 	defaultConfig {
 		buildConfigField 'boolean', 'WEBGPU', webgpuBuild ? 'true' : 'false'
+		buildConfigField 'boolean', 'VR', vrBuild ? 'true' : 'false'
 		if (buildAsApplication) {
 			applicationId appIdBase
 		}
-		minSdkVersion webgpuBuild ? 24 : 21
-		targetSdkVersion 35
+		// Quest: minSdk 29 (Vulkan 1.1 entry points in libvulkan) and targetSdk 32, as Meta's manifest guide asks.
+		minSdkVersion vrBuild ? 29 : (webgpuBuild ? 24 : 21)
+		targetSdkVersion vrBuild ? 32 : 35
 		versionCode 29
 		versionName project.file('../../VERSION').text.trim()
 		manifestPlaceholders = [
@@ -40,6 +44,9 @@ android {
                 }
 				if (webgpuBuild) {
 					arguments "-DUSE_SDL3=ON", "-DDEVILUTIONX_WEBGPU=ON", "-DDEVILUTIONX_SYSTEM_SDL3=OFF", "-DDEVILUTIONX_STATIC_SDL3=OFF"
+					if (vrBuild) {
+						arguments "-DDEVILUTIONX_XR=ON"
+					}
 					// The one-time Dawn build is memory-hungry: -PdawnJobs=N (default 6).
 					arguments "-DDEVILUTIONX_DAWN_JOBS=" + (project.findProperty('dawnJobs') ?: '6')
 					// -PdawnBuildRoot=DIR shares the fetched/built Dawn between checkouts (install-<rev>-Android-<abi>-static).
@@ -47,7 +54,9 @@ android {
 						arguments "-DDEVILUTIONX_DAWN_BUILD_ROOT=" + project.property('dawnBuildRoot')
 					}
 				}
-				if (webgpuBuild) {
+				if (vrBuild) {
+					abiFilters 'arm64-v8a' // Quest 2 / 3 / Pro
+				} else if (webgpuBuild) {
 					abiFilters 'arm64-v8a', 'x86_64'
 				} else {
 					abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
@@ -69,7 +78,7 @@ android {
 		debug {
 			applicationIdSuffix ".dev"
 			manifestPlaceholders = [
-				appLabel: webgpuBuild ? 'DamnationX (Dev)' : '@string/app_name',
+				appLabel: vrBuild ? 'DamnationX VR (Dev)' : (webgpuBuild ? 'DamnationX (Dev)' : '@string/app_name'),
 				appShortcuts: webgpuBuild ? '@xml/shortcuts_damnationx_dev' : '@xml/shortcuts',
 			]
 		}
@@ -88,8 +97,13 @@ android {
 			'src/webgpu/java'
 		]
 	}
+	if (vrBuild) {
+		// Immersive Quest activity, head tracking, supported devices (the OpenXR loader AAR adds its own permissions).
+		sourceSets.main.manifest.srcFile 'src/vr/AndroidManifest.xml'
+	}
 	buildFeatures {
 		buildConfig true
+		prefab vrBuild // OpenXR loader headers + library for CMake (find_package(OpenXR CONFIG))
 	}
 	applicationVariants.all { variant ->
 		tasks["merge${variant.name.capitalize()}Assets"]
@@ -125,4 +139,7 @@ android {
 dependencies {
 	implementation fileTree(include: ['*.jar'], dir: 'libs')
 	implementation 'com.android.support.constraint:constraint-layout:2.0.4'
+	if (vrBuild) {
+		implementation 'org.khronos.openxr:openxr_loader_for_android:1.1.65'
+	}
 }

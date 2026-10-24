@@ -78,7 +78,7 @@ struct PlayerPack {
 	uint32_t pDiabloKillLevel;
 	uint32_t pDifficulty;
 	uint32_t pDamAcFlags;  // `ItemSpecialEffectHf` is 1 byte but this is 4 bytes.
-	uint8_t reserved3[20]; // For future use
+	uint8_t reserved3[20]; // First four bytes: tagged free-town-portal state; legacy readers ignore all twenty.
 };
 
 union ItemNetPack {

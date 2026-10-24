@@ -1,7 +1,7 @@
 /**
  * @file webgpu_platform_emscripten.cpp
  *
- * Browser implementation of WebGpuPlatform: surface from the canvas selector,
+ * Browser implementation of WebGpuPlatform (SPEC §9.8): surface from the canvas selector,
  * emscripten_sleep wait loop, no-op present, launcher state notifications, the #output error
  * line and URL query flags.
  *

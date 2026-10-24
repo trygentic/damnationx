@@ -31,7 +31,7 @@ constexpr uint8_t NormalMask = 0x1F;
 [[nodiscard]] constexpr Kind AuxKind(uint8_t a) { return static_cast<Kind>(a >> KindShift); }
 [[nodiscard]] constexpr uint8_t AuxNormal(uint8_t a) { return a & NormalMask; }
 
-// Fixed LUT slots; 4..31 tile the tilted card hemisphere.
+// Fixed LUT slots; 4..31 tile the tilted card hemisphere (§4.3).
 constexpr uint8_t NormalUp = 0, NormalWallLeft = 1, NormalWallRight = 2, NormalCardFlat = 3;
 constexpr uint8_t UnlitByte = PackAux(Kind::Unlit, 0);
 constexpr uint8_t ShadowByte = PackAux(Kind::Floor, NormalUp);
@@ -46,7 +46,7 @@ struct Planes {
 	uint8_t *base = nullptr;          // plane B, pitch*height bytes
 	const uint8_t *outBase = nullptr; // PalSurface->pixels
 	uint16_t pitch = 0, width = 0, height = 0;
-	uint64_t pitchRecip40 = 0; // ((1 << 40) + pitch - 1) / pitch: exact row = (off * pitchRecip40) >> 40 for off < pitch*height (replaces per-run div/mod)
+	uint64_t pitchRecip40 = 0; // ((1 << 40) + pitch - 1) / pitch: exact row = (off * pitchRecip40) >> 40 for off < pitch*height (rev. 2, replaces per-run div/mod)
 	[[nodiscard]] DVL_ALWAYS_INLINE uint8_t *auxAt(const uint8_t *dst) const { return aux + (dst - outBase); }
 	[[nodiscard]] DVL_ALWAYS_INLINE uint8_t *baseAt(const uint8_t *dst) const { return base + (dst - outBase); }
 	[[nodiscard]] DVL_ALWAYS_INLINE uint32_t rowOf(ptrdiff_t off) const { return static_cast<uint32_t>((static_cast<uint64_t>(off) * pitchRecip40) >> 40); }
@@ -92,7 +92,7 @@ void LatchForFrame(const LatchInput &in);        // Enabled() = optionEnabled &&
 [[nodiscard]] bool BackBufferIsHybrid();
 /** BackBufferIsHybrid = false. Called whenever the back buffer stops holding the world pass while a game runs (ClearScreenBuffer
  *  before a loading screen, play_movie before an in-game movie): those presents must take the legacy path, never the composite
- *  over the previous frame's planes. */
+ *  over the previous frame's planes (SPEC §9.9). */
 void InvalidateBackBuffer();
 
 void BeginWorldPass(int viewportRows); // BackBufferIsHybrid = Enabled(); if Enabled(): memset(A rows [0,viewportRows), Unlit) (ALL viewport rows, also under zoom); CurrentMode = CaptureWorld
@@ -106,7 +106,7 @@ void BuildBaseRow(std::array<uint8_t, 32> &out, int anchorRow, FootKind foot);  
 /** The same wall lines across a whole 64-px cell (c in [0, 64)): SE = c / 2 (plane x = cell + 0.5), SW = (63 - c) / 2 (plane y = cell + 0.5). */
 [[nodiscard]] constexpr int ArchFootRows(FootKind foot, int c) { return foot == FootKind::SW ? (63 - c) / 2 : foot == FootKind::SE ? c / 2 : 0; }
 /**
- * @brief Re-anchors an arch on its wall line.
+ * @brief Re-anchors an arch on its wall line (SPEC §3.3, rev. 5).
  *
  * The arch sprite is blitted with a constant aux byte and the tile base as B (foot None), which put its ground point on the
  * cell's base row, a tile off the wall line it stands on. Call it right after the arch blit: every pixel inside `rect` (in
@@ -120,7 +120,7 @@ void StampUnlit(const Surface &out, Rectangle rect); // clipped to out and to th
 DVL_ALWAYS_INLINE void StampUnlitRun(const uint8_t *dst, unsigned n) { std::memset(CurrentPlanes.auxAt(dst), UnlitByte, n); }
 
 // ---- Zoom / cursor ----
-void ZoomInPlace(int viewportWidth, int viewportOffsetX, int outHeight, int zoomQuarters = 8); // scales plane A up exactly like Zoom() (scrollrt.cpp, HdUpscaleInPlace); plane B is NOT scaled
+void ZoomInPlace(int viewportWidth, int viewportOffsetX, int outHeight, int zoomQuarters = 8); // scales plane A up exactly like Zoom() (scrollrt.cpp, HdUpscaleInPlace); plane B is NOT scaled (§3.2)
 void SaveRect(Rectangle rect, std::span<uint8_t> auxOut);                // DrawCursor; plane A only (StampUnlit never writes B); no-op unless BackBufferIsHybrid()
 void RestoreRect(Rectangle rect, std::span<const uint8_t> aux);          // UndrawCursor; same gate
 
@@ -132,11 +132,11 @@ void RestoreRect(Rectangle rect, std::span<const uint8_t> aux);          // Undr
 struct NormalLutEntry {
 	float x, y, z, pad;
 };
-[[nodiscard]] const std::array<NormalLutEntry, 32> &NormalLut();              // tile-space unit vectors
-[[nodiscard]] uint8_t QuantizeNormal(float x, float y, float z);              // argmax dot over entries 3..31 (entry 3 = C' included)
-void CardToTile(float cx, float cy, float cz, float &tx, float &ty, float &tz);
+[[nodiscard]] const std::array<NormalLutEntry, 32> &NormalLut();              // tile-space unit vectors (§4)
+[[nodiscard]] uint8_t QuantizeNormal(float x, float y, float z);              // argmax dot over entries 3..31 (entry 3 = C' included; §4.3)
+void CardToTile(float cx, float cy, float cz, float &tx, float &ty, float &tz); // §4.4
 
-// ---- Palette emissive heuristic ----
+// ---- Palette emissive heuristic (§9.6) ----
 void BuildPaletteEmissive(std::span<const SDL_Color, 256> logicalPalette, dungeon_type level, std::span<float, 256> out);
 
 /**

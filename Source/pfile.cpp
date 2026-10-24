@@ -84,8 +84,13 @@ std::string_view GetSaveExtension()
 	return modExtension.empty() ? std::string_view("sv") : modExtension;
 }
 
+/** Embedded hosts: while set, the hero's save archive is this file instead (pfile_set_save_path_override). */
+std::optional<std::string> SavePathOverride;
+
 std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 {
+	if (SavePathOverride && savePrefix.empty() && saveNum == gSaveNumber)
+		return *SavePathOverride;
 	const std::string_view ext = GetSaveExtension();
 	return StrCat(paths::PrefPath(), savePrefix,
 	    gbIsSpawn
@@ -847,6 +852,35 @@ void pfile_update(bool forceSave)
 	prevTick = tick;
 	pfile_write_hero();
 	sfile_write_stash();
+}
+
+/** Embedded hosts (Source/host/): the hero's save archive. */
+std::string pfile_get_save_path()
+{
+	return GetSavePath(gSaveNumber);
+}
+
+/** Embedded hosts: reads and writes of the hero's save archive go to `path` until called with nullptr. */
+void pfile_set_save_path_override(const std::string *path)
+{
+	if (path != nullptr)
+		SavePathOverride = *path;
+	else
+		SavePathOverride.reset();
+}
+
+/** Embedded hosts: writes the whole game (hero, current and visited levels) into a separate archive at `path`. */
+bool pfile_write_game_snapshot(const std::string &path)
+{
+#ifdef UNPACKED_SAVES
+	(void)path;
+	return false;
+#else
+	CopyFileOverwrite(GetSavePath(gSaveNumber).c_str(), path.c_str());
+	SaveWriter saveWriter(path.c_str());
+	pfile_write_hero(saveWriter, true);
+	return true;
+#endif
 }
 
 } // namespace devilution

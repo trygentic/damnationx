@@ -36,6 +36,7 @@
 #include "levels/gendung.h"
 #include "levels/tile_geometry.hpp"
 #include "levels/trigs.h"
+#include "render3d/placement_runtime.hpp"
 #include "objects.h"
 #include "render3d/fpv_contract.hpp"
 #include "utils/log.hpp"
@@ -764,6 +765,15 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 			const uint16_t piece = dPiece[x][y];
 			uint32_t &occluder = geometry.occluders[static_cast<size_t>(y) * kGridSize + x];
 			occluder = 0;
+			if (PlacementHidesTile(x, y)) {
+				// A placed mesh replaces this cell above the ground (render3d/placement_runtime.hpp); the floor stays.
+				if (!solid(x, y) && stairsAt[static_cast<size_t>(y) * kGridSize + x] == 0)
+					AddHorizontal(mesh, static_cast<float>(x), static_cast<float>(y), static_cast<float>(x) + 1.0F, static_cast<float>(y) + 1.0F, 0.0F, true,
+					    FloorSlot(piece), 1.0F);
+				else if (!solid(x, y))
+					AddStairs(geometry, mesh, x, y, stairsAt[static_cast<size_t>(y) * kGridSize + x] > 0, solid, FloorSlot(piece));
+				continue;
+			}
 			if (solid(x, y)) {
 				occluder = PackOccluder(0.0F, wallHeight);
 				if (pillar(x, y)) {
@@ -804,7 +814,7 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 			for (const Side &side : sides) {
 				const int nx = x + side.dx;
 				const int ny = y + side.dy;
-				if (!solid(nx, ny) || pillar(nx, ny))
+				if (!solid(nx, ny) || pillar(nx, ny) || PlacementHidesTile(nx, ny))
 					continue;
 				int slot = -1;
 				if (nx >= 0 && ny >= 0 && nx < kGridSize && ny < kGridSize)
@@ -832,7 +842,12 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 					if (nx >= 0 && ny >= 0 && nx < kGridSize && ny < kGridSize && solid(nx, ny))
 						slot = WallSlotEither(dPiece[nx][ny], wallSide);
 				}
-				AddBox(mesh, { fx, LintelBottom, fz }, { fx + 1.0F, wallHeight, fz + 1.0F }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
+				// An arch rule with hide = self replaces the lintel's look; its shadow band stays (render3d/placement_runtime.hpp).
+				// A door rule (show = closed, hide = self) also replaces the lintel while the door is closed: the door mesh has
+				// its own frame.
+				const bool doorReplaced = doorInfo.present && !doorInfo.open && PlacementHidesObject(doorObject[static_cast<size_t>(y) * kGridSize + x]);
+				if (!PlacementHidesLintel(x, y) && !doorReplaced)
+					AddBox(mesh, { fx, LintelBottom, fz }, { fx + 1.0F, wallHeight, fz + 1.0F }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
 				occluder = PackOccluder(LintelBottom, wallHeight);
 
 				if (doorInfo.present) {
@@ -849,7 +864,9 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 					const float panelTop = LintelBottom;
 					if (!doorInfo.open) {
 						occluder = PackOccluder(0.0F, wallHeight);
-						if (alongY)
+						if (PlacementHidesObject(objectIndex)) {
+							// A door rule (show = closed, hide = self) draws this closed door instead.
+						} else if (alongY)
 							AddBox(mesh, { fx + 0.44F, 0.0F, fz }, { fx + 0.56F, panelTop, fz + 1.0F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
 						else
 							AddBox(mesh, { fx, 0.0F, fz + 0.44F }, { fx + 1.0F, panelTop, fz + 0.56F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
@@ -1328,7 +1345,7 @@ void BuildTown(LevelGeometry &geometry, MeshBuilder &mesh)
 			}
 			AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, 0.0F, true, FloorSlot(piece), 1.0F);
 			// Cards for trees, the well, signs and fences; dense facade pieces left outside a house stay flat.
-			if (pieceHeight[index(x, y)] >= 56) {
+			if (pieceHeight[index(x, y)] >= 56 && !PlacementHidesTile(x, y)) {
 				const PieceStats &stats = CachedPieceStats(piece);
 				if (tile_geometry::GetPieceGeometry(piece).faces == 0 || stats.density < 0.6F)
 					AddCrossedCard(mesh, x, y, piece, 1.0F);
@@ -1336,8 +1353,16 @@ void BuildTown(LevelGeometry &geometry, MeshBuilder &mesh)
 		}
 	}
 	for (size_t i = 0; i < groups.size(); ++i) {
-		if (isHouse[i] != 0)
+		if (isHouse[i] == 0)
+			continue;
+		// A placed mesh that hides any cell of a house replaces the whole block; its ground is drawn instead.
+		const bool replaced = std::any_of(groups[i].cells.begin(), groups[i].cells.end(), [](const auto &cell) { return PlacementHidesTile(cell.first, cell.second); });
+		if (!replaced) {
 			BuildHouse(geometry, mesh, groups[i], groupOf, static_cast<int>(i), static_cast<int>(i) == cathedral);
+			continue;
+		}
+		for (const auto &[x, y] : groups[i].cells)
+			AddHorizontal(mesh, static_cast<float>(x), static_cast<float>(y), static_cast<float>(x) + 1.0F, static_cast<float>(y) + 1.0F, 0.0F, true, FloorSlot(dPiece[x][y]), 1.0F);
 	}
 }
 
@@ -1568,6 +1593,8 @@ bool UpdateLevelGeometry(LevelGeometry &geometry)
 {
 	if (pDungeonCels == nullptr || MicroTileLen == 0)
 		return false;
+	if (PollLevelPlacements())
+		ForceRebuild = true;
 	uint64_t hash = ComputeStateHash();
 	// Colour cycling (caves, crypt, nest) rotates palette entries 1..31 every frame; it must not rebuild the level.
 	if (leveltype == DTYPE_CAVES || leveltype == DTYPE_HELL || leveltype == DTYPE_NEST || leveltype == DTYPE_CRYPT) {
@@ -1604,10 +1631,12 @@ bool UpdateLevelGeometry(LevelGeometry &geometry)
 	MeshBuilder mesh;
 	mesh.vertices.reserve(200000);
 	mesh.indices.reserve(300000);
+	ResolveLevelPlacements();
 	if (geometry.isTown)
 		BuildTown(geometry, mesh);
 	else
 		BuildDungeon(geometry, mesh);
+	ApplyPlacementOccluders(geometry.occluders);
 	ResolveAtlas(geometry, mesh);
 	++geometry.generation;
 	if (const char *dump = std::getenv("DVL_W3D_DUMP_ATLAS"); dump != nullptr && dump[0] != '\0')

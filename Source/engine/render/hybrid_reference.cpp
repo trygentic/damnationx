@@ -1,20 +1,20 @@
 /**
  * @file hybrid_reference.cpp
  *
- * C++ transliteration of the hybrid WGSL passes, used by hybrid_reference_test as the
+ * C++ transliteration of the hybrid WGSL passes (SPEC §9.11), used by hybrid_reference_test as the
  * executable golden for Source/engine/render/webgpu_shaders.hpp.
  *
  * LINE-PARALLEL STRUCTURE (review by diffing against webgpu_shaders.hpp):
  *
  *   WGSL (webgpu_shaders.hpp)          C++ (this file)              notes
- *   ---- prelude ----
+ *   ---- prelude (§9.2) ----
  *   K_* / V_* / MAX_WALL_ROWS          KUnlit.. / VBlock.. / MaxWallRows
  *   isWallKind / hasHeight             IsWallKind / HasHeight
  *   heightRows                         HeightRows                   u32 wrap-around, & 255
  *   baseTexelAt                        BaseTexelAt                  textureLoad robust access == TexelOrZero
  *   passThrough                        PassThrough
  *   (textureLoad auxTex / indexTex)    AuxTexelAt / IndexTexelAt    robust: out of range -> 0
- *   ---- compute pass ----
+ *   ---- compute pass (§9.3) ----
  *   screenToWorld                      ScreenToWorld
  *   cellRaw                            CellRaw                      out of grid -> V_BLOCK | 255
  *   cellForMarch                       CellForMarch                 unexplored -> BlockLight bit + infinite height
@@ -35,7 +35,7 @@
  *   debugVolumeColor                   DebugVolumeColor
  *   receiverOf / shadeReceiver         ReceiverOf / ShadeReceiver
  *   hybridLightMain                    LightTexel (one texel) + RunLightPass (the dispatch)
- *   ---- present pass ----
+ *   ---- present pass (§9.4, §9.5) ----
  *   srgbToLinear / linearToSrgb        SrgbToLinear / LinearToSrgb  per component if/else
  *   paletteEmissiveAt                  PaletteEmissiveAt            vec4 local copy + component index
  *   sampleLighting                     SampleLighting               textureLoad(hybridMask) robust == MaskRgbAt
@@ -59,7 +59,7 @@ namespace devilution::hybrid_reference {
 
 namespace {
 
-// ---- prelude constants ----
+// ---- prelude constants (§9.2) ----
 constexpr uint32_t KUnlit = 0;
 constexpr uint32_t KFloor = 1;
 constexpr uint32_t KWallL = 2;
@@ -74,7 +74,7 @@ constexpr uint32_t VBlock = 1024;
 constexpr uint32_t VExplored = 8192;
 constexpr uint32_t VArch = 16384;
 constexpr uint32_t VDoorOpen = 32768;
-constexpr uint32_t MaxWallRows = 224; // plane-B wrap guard
+constexpr uint32_t MaxWallRows = 224; // plane-B wrap guard (§3.2)
 constexpr float CellPickOffset = 0.35F; // CELL_PICK_OFFSET in the WGSL
 
 // ---- vector helpers standing in for the WGSL built-ins ----
@@ -131,11 +131,11 @@ Vec3 LutNormal(Lut lut, uint32_t idx)
 
 } // namespace
 
-// ============================================================ prelude ============================================================
+// ============================================================ prelude (§9.2) ============================================================
 
 bool IsWallKind(uint32_t kind) { return kind == KWallL || kind == KWallR || kind == KWallBlended; }
 bool HasHeight(uint32_t kind) { return IsWallKind(kind) || kind == KCard || kind == KWallTop; }
-// Rows above the anchor for a plane texel. B holds unzoomed rows and is never scaled up.
+// Rows above the anchor for a plane texel. B holds unzoomed rows and is never scaled up (§3.2).
 uint32_t ZoomQuarters(uint32_t zoom) { return std::max(zoom & 255U, 4U); }
 uint32_t ZoomRow(uint32_t y, uint32_t zoom) { return ((y + (zoom >> 8)) * 4U) / ZoomQuarters(zoom); }
 uint32_t HeightRows(uint32_t kind, uint32_t b, uint32_t y, uint32_t zoom)
@@ -157,7 +157,7 @@ uint32_t AuxTexelAt(const Planes &planes, Point px) { return TexelOrZero(planes.
 uint32_t IndexTexelAt(const Planes &planes, Point px) { return TexelOrZero(planes.index, planes, px); }
 bool PassThrough(uint32_t kind) { return kind == KUnlit || kind == KCardEmissive; }
 
-// ========================================================= compute pass ==========================================================
+// ========================================================= compute pass (§9.3) ==========================================================
 
 Vec2 ScreenToWorld(Vec2 screen, const Params &p)
 {
@@ -238,7 +238,7 @@ Point WallGateCell(Vec2 ground, Vec2 n, Volume v, const Params &p)
 	if ((CellRaw(own, v, p) & VExplored) != 0) return own;
 	return FloorToPoint(Add(ground, Scale(n, CellPickOffset + 0.5F)));
 }
-// Own cell of a foot-less wall receiver (WallTop): u + v == 1.9375 on the base row.
+// Own cell of a foot-less wall receiver (WallTop): u + v == 1.9375 on the base row (§3.3).
 Point WallOwnCell(Vec2 ground)
 {
 	Point c = FloorToPoint(ground);
@@ -290,7 +290,7 @@ bool BlockedInCell(Vec3 p, Vec3 d, Point cell, uint32_t v, float tIn, float tOut
 // Visibility of light l from receiver p (tile space; z in world height units). 3D DDA over the 2D grid:
 // an explored cell blocks when BlockLight is set and the ray's z is below the cell's height inside it, behind its face planes
 // (BlockedInCell); an explored Arch cell blocks when the ray is below its height AND rises above its lintel (independent of
-// BlockLight); unexplored cells block by BlockLight with infinite height and no faces. Receiver and light cells are skipped (any(): sharing one coordinate is not enough).
+// BlockLight, §8.2); unexplored cells block by BlockLight with infinite height and no faces. Receiver and light cells are skipped (any(): sharing one coordinate is not enough).
 float Visibility3D(Vec3 p, Vec3 l, Point skipA, Point skipB, Volume v, const Params &params)
 {
 	const Vec3 d = Sub(l, p);
@@ -344,7 +344,7 @@ float SoftVisibility3D(Vec3 p, Vec3 l, Point skipA, Point skipB, Volume v, const
 	    + Visibility3D(p, { l.x - t.x, l.y - t.y, l.z }, skipA, skipB, v, params);
 	return vis / 3.0F;
 }
-// Per-workgroup light culling: the real world footprint of this 8x8 block's shaded receivers (the workgroup atomics of
+// Per-workgroup light culling (§9.3): the real world footprint of this 8x8 block's shaded receivers (the workgroup atomics of
 // the WGSL) and the lights touching it as a bitmask built once per workgroup, so every branch on it is workgroup-uniform.
 uint32_t OrderedKey(float f)
 {
@@ -460,7 +460,7 @@ Rgb Accumulate(Vec3 p, Vec3 n, Vec2 ground, Point own, Point skipA, float wrap, 
 {
 	return AccumulateMasked(p, n, ground, own, skipA, wrap, gated, FootprintLightMask(fp, lights, params), v, lights, params);
 }
-Rgb DebugVolumeColor(Point cell, Volume v, const Params &p) // Volume view, computed in the compute pass
+Rgb DebugVolumeColor(Point cell, Volume v, const Params &p) // Volume view (§9.5), computed in the compute pass
 {
 	const uint32_t raw = CellRaw(cell, v, p);
 	if ((raw & VExplored) == 0) return { 1.0F, 0.0F, 1.0F }; // magenta = leak detector
@@ -489,7 +489,7 @@ Receiver ReceiverOf(Point maskTexel, const Planes &planes, Volume v, const Param
 	const uint32_t nIdx = a & 31U;
 	const uint32_t b = BaseTexelAt(planes, outPixel, p);
 	uint32_t h = HeightRows(kind, b, static_cast<uint32_t>(outPixel.y), zoom);
-	if (IsWallKind(kind) && h > MaxWallRows) { // plane-B wrap guard
+	if (IsWallKind(kind) && h > MaxWallRows) { // plane-B wrap guard (§3.2)
 		kind = KFloor;
 		h = 0;
 	}
@@ -518,14 +518,14 @@ MaskTexel ShadeReceiver(const Receiver &r, uint32_t lightMask, Volume v, std::sp
 	// centre but is quantised to rows, and 0.35 tiles keeps the skip and own picks on the wall's own cell for every column.
 	const Vec2 cellNudge { n.x * CellPickOffset, n.y * CellPickOffset };
 	Rgb lit;
-	if (IsWallKind(kind)) { // foot-table walls, see-through walls and arches: WallBlended is lit like the face it continues
+	if (IsWallKind(kind)) { // foot-table walls, see-through walls and arches (§3.3): WallBlended is lit like the face it continues
 		const Point skipA = FloorToPoint(Add(ground, cellNudge));
 		const Point own = WallGateCell(ground, { n.x, n.y }, v, p);
 		lit = AccumulateMasked({ ground.x + nudge.x, ground.y + nudge.y, z }, n, ground, own, skipA, p.wrapSurface, true, lightMask, v, lights, p);
 	} else if (kind == KWallTop) {
 		const Point own = WallOwnCell(ground);
 		lit = AccumulateMasked({ ground.x, ground.y, z }, n, ground, own, own, p.wrapSurface, true, lightMask, v, lights, p);
-	} else if (kind == KCard) { // no gate, no clamp: CPU culling already enforces no-reveal
+	} else if (kind == KCard) { // no gate, no clamp: CPU culling already enforces no-reveal (§3.3)
 		const Point c = FloorToPoint(ground);
 		lit = AccumulateMasked({ ground.x, ground.y, z }, n, ground, c, c, p.wrapCard, false, lightMask, v, lights, p);
 	} else { // KFloor
@@ -561,7 +561,7 @@ void RunLightPass(Mask &mask, const Planes &planes, Volume v, std::span<const Li
 	}
 }
 
-// ====================================================== present pass =======================================================
+// ====================================================== present pass (§9.4, §9.5) =======================================================
 
 namespace {
 // Per-component sRGB <-> linear with if/else (mirrors srgbToLinear1 / linearToSrgb1).
@@ -628,7 +628,7 @@ Rgb FrameColor(Point px, Rgb frameSrgb, Palette palette, uint32_t idx, const Par
 	if (px.y >= static_cast<int>(p.viewportHeight) || p.frameHasUnlit) return frameSrgb;
 	return palette[idx & 255U];
 }
-Rgb DebugColor(uint32_t view, Point px, uint32_t aux, uint32_t idx, Rgb frame, const Planes &planes, const Mask &mask, Emissive e, Lut lut, const Params &p)
+Rgb DebugColor(uint32_t view, Point px, uint32_t aux, uint32_t idx, Rgb frame, const Planes &planes, const Mask &mask, Emissive e, Lut lut, const Params &p) // §9.5
 {
 	const uint32_t kind = aux >> 5U;
 	const uint32_t nIdx = aux & 31U;

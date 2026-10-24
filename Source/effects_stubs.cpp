@@ -49,6 +49,7 @@ void sound_init() { }
 void ui_sound_init() { }
 void effects_play_sound(SfxID id) { }
 int GetSFXLength(SfxID nSFX) { return 0; }
+const TSFX *GetSfxEntry(SfxID id) { return nullptr; }
 
 std::expected<HeroSpeech, std::string> ParseHeroSpeech(std::string_view value)
 {

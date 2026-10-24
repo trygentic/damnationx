@@ -4,6 +4,7 @@
  * Implementation of functions setting up the audio pipeline.
  */
 #include "engine/sound.h"
+#include "host/host_hooks.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -66,25 +67,9 @@ std::string GetMp3Path(const char *path)
 
 std::expected<void, std::string> LoadAudioFile(const char *path, bool stream, SoundSample &result)
 {
-	bool isMp3 = true;
-	std::string foundPath = GetMp3Path(path);
+	std::string foundPath = GetSoundAssetPath(path);
+	const bool isMp3 = foundPath == GetMp3Path(path);
 	AssetRef ref = FindAsset(foundPath.c_str());
-#ifndef UNPACKED_MPQS
-	if (ref.ok() && !ref.isOverridden) {
-		// A mod's file (such as an imported sound pack's `.wav`) wins over an `.mp3` in the archives.
-		AssetRef wavRef = FindAsset(path);
-		if (wavRef.ok() && wavRef.isOverridden) {
-			ref = std::move(wavRef);
-			foundPath = path;
-			isMp3 = false;
-		}
-	}
-#endif
-	if (!ref.ok()) {
-		ref = FindAsset(path);
-		foundPath = path;
-		isMp3 = false;
-	}
 	if (!ref.ok()) {
 		return std::unexpected(StrCat("Audio file not found\n", path, "\n", SDL_GetError(), "\n" __FILE__ ":", __LINE__));
 	}
@@ -268,6 +253,9 @@ void snd_init()
 	GetOptions().Audio.musicVolume.SetValue(CapVolume(*GetOptions().Audio.musicVolume));
 	gbMusicOn = *GetOptions().Audio.musicVolume > VOLUME_MIN;
 
+	if (host::IsActive())
+		return; // embedded: no audio device, sounds are queued for the host (host/host_hooks.hpp)
+
 	// Initialize the SDL_audiolib library. Set the output sample rate to
 	// 22kHz, the audio format to 16-bit signed, use 2 output channels
 	// (stereo), and a 2KiB output buffer.
@@ -318,6 +306,27 @@ void snd_deinit()
 	gbSndInited = false;
 }
 
+const char *GetMusicTrackPath(_music_id track)
+{
+	if (track >= NUM_MUSIC)
+		return nullptr;
+	return HaveFullMusic() ? MusicTracks[track] : SpawnMusicTracks[track];
+}
+
+std::string GetSoundAssetPath(const char *path)
+{
+	std::string mp3Path = GetMp3Path(path);
+	AssetRef mp3 = FindAsset(mp3Path.c_str());
+	if (!mp3.ok())
+		return path;
+#ifndef UNPACKED_MPQS
+	AssetRef wav = FindAsset(path);
+	if (!mp3.isOverridden && wav.ok() && wav.isOverridden)
+		return path;
+#endif
+	return mp3Path;
+}
+
 _music_id GetLevelMusic(dungeon_type dungeonType)
 {
 	switch (dungeonType) {
@@ -342,6 +351,8 @@ _music_id GetLevelMusic(dungeon_type dungeonType)
 
 void music_stop()
 {
+	if (host::IsActive() && sgnMusicTrack != NUM_MUSIC)
+		host::StopMusic();
 	music.Release();
 	sgnMusicTrack = NUM_MUSIC;
 }
@@ -354,6 +365,11 @@ void music_start(_music_id nTrack)
 	music_stop();
 	if (!gbMusicOn)
 		return;
+	if (host::IsActive()) {
+		host::QueueMusic(nTrack);
+		sgnMusicTrack = nTrack;
+		return;
+	}
 	if (HaveFullMusic())
 		trackPath = MusicTracks[nTrack];
 	else
@@ -423,12 +439,21 @@ int SoundGetOrSetAudioCuesVolume(int volume)
 
 void music_mute()
 {
+	if (host::IsActive() && sgnMusicTrack != NUM_MUSIC) {
+		host::StopMusic();
+		return;
+	}
 	if (music.IsLoaded())
 		music.Mute();
 }
 
 void music_unmute()
 {
+	if (host::IsActive() && sgnMusicTrack != NUM_MUSIC) {
+		host::StopMusic();
+		host::QueueMusic(sgnMusicTrack);
+		return;
+	}
 	if (music.IsLoaded())
 		music.Unmute();
 }

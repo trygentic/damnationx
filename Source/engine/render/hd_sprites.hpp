@@ -2,7 +2,7 @@
  * @file hd_sprites.hpp
  *
  * Opt-in HD (4x, 60 FPS) replacement sprites for the Warrior and the Tristram towners in the WebGPU browser build
- * (`?hdSprites=1`).
+ * (`?hdSprites=1`, DamnationX HD runtime contract v1 section 2).
  *
  * The world pass (scrollrt.cpp) asks HdSpritesDrawPlayer / HdSpritesDrawTowner whether an entity is drawn in HD.
  * When it is, the classic body blit is skipped and an instance {clip, frame, pivot, light} is recorded together with

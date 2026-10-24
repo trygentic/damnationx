@@ -8,6 +8,7 @@
 #include <cstddef>
 
 #include "engine/point.hpp"
+#include "free_town_portal.hpp"
 #include "levels/gendung.h"
 
 namespace devilution {
@@ -17,8 +18,18 @@ struct Player;
 
 #define MAXPORTAL 4
 
+/** One native missile/warp endpoint beside Cain; shared by every renderer and client. */
+constexpr WorldTilePosition TownCathedralPortalPosition { 67, 67 };
+
 /** Dedicated CMD_WARP index; never occupies a player portal slot. */
-constexpr size_t CathedralPortalIndex = MAXPORTAL;
+constexpr size_t CathedralPortalIndex = FreeTownPortalIndex;
+static_assert(MAXPORTAL == FreeTownPortalIndex);
+bool IsFreeTownPortalEnabled();
+/** Single-player option change; multiplayer keeps the host-selected shared value. */
+bool SetFreeTownPortalEnabled(bool enabled);
+uint8_t FreeTownPortalTargetLevel(const Player &player);
+/** Replace only the dedicated native missile after option changes or full save loads. */
+void RefreshFreeTownPortal();
 bool IsCathedralPortalEnabled();
 /** True only on either endpoint of the permanent connection. */
 bool IsCathedralPortalOnActiveLevel();
@@ -37,7 +48,7 @@ extern Portal Portals[MAXPORTAL];
 void InitPortals();
 void SetPortalStats(int i, bool o, Point position, int lvl, dungeon_type lvltype, bool isSetLevel);
 void AddPortalMissile(const Player &player, Point position, bool sync);
-void SyncPortals();
+void SyncPortals(bool includeFreeTownPortal = true);
 void AddPortalInTown(const Player &player);
 void ActivatePortal(const Player &player, Point position, int lvl, dungeon_type lvltype, bool sp);
 void DeactivatePortal(const Player &player);

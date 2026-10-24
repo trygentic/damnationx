@@ -64,6 +64,11 @@ CameraBasis MakeBasis(float yaw, float pitch)
 	return basis;
 }
 
+Direction StepDirectionFor(float dirX, float dirZ)
+{
+	return YawToDirection(std::atan2(dirX, dirZ));
+}
+
 Ray ScreenRay(const CameraState &camera, float px, float py, int width, int height)
 {
 	const CameraBasis basis = MakeBasis(camera.yaw, camera.pitch);

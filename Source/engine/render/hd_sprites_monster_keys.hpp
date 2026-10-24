@@ -1,7 +1,7 @@
 /**
  * @file hd_sprites_monster_keys.hpp
  *
- * Engine-independent naming of the HD monster clips (`monster/` keys):
+ * Engine-independent naming of the HD monster clips (DamnationX HD runtime contract v1, section 2, `monster/` keys):
  *
  *     monster/<gfx>/<anim>/<dir>           base look of a monster graphics set
  *     monster/<gfx>+<variant>/<anim>/<dir> TRN-recoloured look

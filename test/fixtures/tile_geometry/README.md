@@ -40,7 +40,7 @@ floor `TransparentSquare` frames stored as a triangle followed by a 16-row folia
 | 15 | TallPillar | Solid+BlockLight+BlockMissile | mt[0..15] Square | Pillar, faces SE+SW, h 192 (len 12) / 255 (len 16, clamped) |
 | 16 | TruncatedFrame | Solid | TSq with only 3 encoded rows | Pillar, face SE, h 3 |
 
-Faces: a wall half stands on the cell's centre line, so the left half (LeftTrapezoid ground micro or SOL
+Faces (rev. 5): a wall half stands on the cell's centre line, so the left half (LeftTrapezoid ground micro or SOL
 `TransparentLeft`) is the SE face (+x, a wall running along y) and the right half (RightTrapezoid or `TransparentRight`) the
 SW face (+y, a wall running along x). A Solid piece whose ground micro is a Square or TransparentSquare gets the face of
 that half too, without being promoted from Pillar to Wall. The piece names above follow the drawn half.

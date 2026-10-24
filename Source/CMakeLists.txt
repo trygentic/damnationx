@@ -377,10 +377,15 @@ add_devilutionx_object_library(libdevilutionx_direction
   engine/direction.cpp
 )
 
+# HUD core (modules/hud, header-only): pointer ownership between the HUD and the 3D views (fpv/hud_bridge.hpp).
+include(${PROJECT_SOURCE_DIR}/modules/hud/integration/devilutionx.cmake)
+
 add_devilutionx_object_library(libdevilutionx_fpv_math
   fpv/fpv_math.cpp
+  fpv/view_provider.cpp
 )
 target_link_dependencies(libdevilutionx_fpv_math PUBLIC
+  diablo_hud::core
   libdevilutionx_direction
 )
 
@@ -410,7 +415,7 @@ target_link_libraries(libdevilutionx_endian_write INTERFACE
   DevilutionX::SDL
 )
 
-# Surface::BlitFrom stamps the UI it blits as Unlit, so the surface library carries the G-buffer planes.
+# Surface::BlitFrom stamps the UI it blits as Unlit (SPEC §5.4), so the surface library carries the G-buffer planes.
 add_devilutionx_object_library(libdevilutionx_surface
   engine/surface.cpp
 )
@@ -431,8 +436,14 @@ target_link_dependencies(libdevilutionx_gbuffer PUBLIC
 # glTF loading and pose sampling of the skinned 3D warrior (cgltf); gltf_model_test.
 add_devilutionx_object_library(libdevilutionx_gltf_model
   render3d/gltf_model.cpp
+  render3d/static_mesh.cpp
 )
 target_link_dependencies(libdevilutionx_gltf_model PUBLIC cgltf)
+
+# Static mesh placement files (render3d/placement.hpp, docs/design/static-mesh-placement.md); placement_test.
+add_devilutionx_object_library(libdevilutionx_placement
+  render3d/placement.cpp
+)
 
 # Engine-independent HD sprite logic (index parser, frame selection, texture LRU, occlusion plane, the shared
 # world-to-screen transform of the HD passes); hd_sprites_test, hd_view_transform_test.
@@ -500,7 +511,7 @@ target_link_dependencies(libdevilutionx_dun_tile_data PUBLIC
   libdevilutionx_sdl2_to_1_2_backports
 )
 
-# Reads the dun_tile_data globals only; must never link libdevilutionx_gendung.
+# Reads the dun_tile_data globals only; must never link libdevilutionx_gendung (SPEC §8.1).
 add_devilutionx_object_library(libdevilutionx_tile_geometry
   levels/tile_geometry.cpp
 )
@@ -1107,14 +1118,56 @@ else()
     engine/render/webgpu_platform_native.cpp)
 endif()
 
+# VR (xr/xr.hpp, docs/design/vr.md): OpenXR on Android (Quest) and Windows, WebXR in the browser.
+if(DEVILUTIONX_XR)
+  list(APPEND libdevilutionx_SRCS xr/xr_core.cpp)
+  if(EMSCRIPTEN)
+    list(APPEND libdevilutionx_SRCS xr/xr_webxr.cpp)
+  elseif(ANDROID OR WIN32 OR (APPLE AND NOT IOS))
+    list(APPEND libdevilutionx_SRCS
+      xr/xr_openxr.cpp
+      xr/xr_bridge_d3d11.cpp
+      xr/xr_bridge_vulkan_android.cpp)
+    if(APPLE)
+      # macOS: OpenXR runtimes with XR_KHR_metal_enable (OXRSys streams to a Quest).
+      enable_language(OBJCXX)
+      list(APPEND libdevilutionx_SRCS xr/xr_bridge_metal.mm)
+      set_source_files_properties(xr/xr_bridge_metal.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    endif()
+  else()
+    list(APPEND libdevilutionx_SRCS xr/xr_null.cpp)
+  endif()
+endif()
+
 # First-person 3D world renderer (render3d/world_renderer.hpp).
 list(APPEND libdevilutionx_SRCS
+  render3d/placement_runtime.cpp
+  render3d/static_mesh_renderer.cpp
   render3d/world_gpu.cpp
   render3d/world_level.cpp
   render3d/world_sprites.cpp)
 
+if(DAMNATIONX_HOST_LIB)
+  # Embedding API (host/host_api.hpp); the game files only call the hooks in host/host_hooks.hpp.
+  list(APPEND libdevilutionx_SRCS
+    host/host_api.cpp
+    host/host_art.cpp
+    host/host_hd.cpp
+    host/host_input.cpp
+    host/host_panels.cpp
+    host/host_snapshot.cpp
+    host/host_state.cpp
+    host/host_runtime.cpp
+    host/host_world.cpp)
+endif()
+
 if(NOT DISABLE_DEMOMODE)
   list(APPEND libdevilutionx_SRCS engine/demomode.cpp)
+endif()
+
+if(DAMNATION_S1_BRIDGE)
+  list(APPEND libdevilutionx_SRCS s1_bridge.cpp s1_headless.cpp)
+  add_compile_definitions(DAMNATION_S1_BRIDGE)
 endif()
 
 if(NOT NONET)
@@ -1149,6 +1202,13 @@ if(NOT USE_SDL1)
     controls/touch/event_handlers.cpp
     controls/touch/gamepad.cpp
     controls/touch/renderers.cpp)
+endif()
+
+if(DEVILUTIONX_TRAINER)
+  list(APPEND libdevilutionx_SRCS
+    lua/modules/dev/trainer.cpp
+    lua/trainer_socket.cpp
+  )
 endif()
 
 if(DISCORD_INTEGRATION)
@@ -1197,6 +1257,8 @@ endif()
 
 add_devilutionx_object_library(libdevilutionx ${libdevilutionx_SRCS})
 target_include_directories(libdevilutionx PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+# render3d/placement_runtime.cpp checks the sha256 pins of placed meshes.
+target_include_directories(libdevilutionx PRIVATE ${PROJECT_SOURCE_DIR}/3rdParty/PicoSHA2)
 target_link_dependencies(libdevilutionx PUBLIC
   DevilutionX::SDL
   libdevilutionx_freeform_movement
@@ -1227,6 +1289,7 @@ target_link_dependencies(libdevilutionx PUBLIC
   libdevilutionx_gbuffer
   libdevilutionx_gendung
   libdevilutionx_gltf_model
+  libdevilutionx_placement
   libdevilutionx_hd_floor
   libdevilutionx_hd_sprites_core
   libdevilutionx_hd_tiles_core
@@ -1293,6 +1356,7 @@ file(GENERATE OUTPUT ${CONFIG_PATH} CONTENT
 #define PROJECT_VERSION_MINOR ${PROJECT_VERSION_MINOR}
 #define PROJECT_VERSION_PATCH ${PROJECT_VERSION_PATCH}
 #define DEVILUTIONX_WEBGPU $<BOOL:${DEVILUTIONX_WEBGPU}>
+#define DEVILUTIONX_XR $<BOOL:${DEVILUTIONX_XR}>
 ")
 
 if(DEVILUTIONX_D2_SOUND_IMPORT)
@@ -1425,6 +1489,11 @@ target_link_dependencies(libdevilutionx PUBLIC ${DEVILUTIONX_PLATFORM_LINK_LIBRA
 if(DEVILUTIONX_WEBGPU AND NOT EMSCRIPTEN)
   # CMake/Dawn.cmake: native Dawn and the HD art decoders.
   target_link_libraries(libdevilutionx PUBLIC dawn::webgpu_dawn PNG::PNG WebP::webpdecoder)
+endif()
+
+if(DEVILUTIONX_XR AND (ANDROID OR WIN32 OR (APPLE AND NOT IOS)))
+  include(OpenXR)
+  devilutionx_link_openxr(libdevilutionx)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")

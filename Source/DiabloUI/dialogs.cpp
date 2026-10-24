@@ -173,7 +173,7 @@ void UiOkDialog(std::string_view caption, std::string_view text, bool error, con
 		LogError("{}", text);
 	}
 
-	if (!gbActive || inDialog) {
+	if (CompanionHeadless() || !gbActive || inDialog) {
 		if (!HeadlessMode) {
 			if (!SDLC_ShowCursor()) {
 				LogError("{}", SDL_GetError());

@@ -63,11 +63,11 @@ TEST(ModIdentity, VersionedManifestValidatesCompleteVersion)
 	}
 }
 
-// The repository-root sample package as written by `tools/modkit`: comma lists must parse and the
+// The repository-root DXM-A06 package as written by `tools/modkit`: comma lists must parse and the
 // identity input must hash to the value modkit prints (`modkit validate manifest.ini`).
 TEST(ModIdentity, ModkitManifestInteroperates)
 {
-	const std::string manifestIni = R"ini(; Distributable sample asset package (schema 1)
+	const std::string manifestIni = R"ini(; DXM-A06 distributable sample asset package (schema 1, design §5.1)
 ; This pack contains only original sample art. Original game data is resolved locally.
 ; Release metadata is the distribution identity shared by native and web artifacts.
 
@@ -82,15 +82,15 @@ proprietaryGameData=excluded
 version = 1
 
 [package]
-id = damnationx.original.samples
+id = dxm.a06.original.samples
 version = 1.0.0
-aliases = damnationx-original-samples
+aliases = dxm-a06-original-samples
 
 [capabilities]
 provides = terrain,monster,item,ui
 
 [mod]
-name=DamnationX Original Pixel Samples
+name=DXM Original Pixel Samples
 description=Original dungeon, monster, item, and UI samples demonstrating material fallback and partial replacement.
 version=1.0.0
 author=DevilutionX contributors
@@ -106,13 +106,13 @@ index=assets.json
 	const ModManifest manifest = ParseModManifest(manifestIni);
 	ASSERT_EQ(manifest.activation, ModActivation::NewSchema);
 	ASSERT_TRUE(manifest.versioned.has_value());
-	EXPECT_EQ(manifest.versioned->canonicalId, "damnationx.original.samples");
+	EXPECT_EQ(manifest.versioned->canonicalId, "dxm.a06.original.samples");
 	EXPECT_EQ(manifest.versioned->version, "1.0.0");
-	EXPECT_EQ(manifest.versioned->aliases, std::vector<std::string> { "damnationx-original-samples" });
+	EXPECT_EQ(manifest.versioned->aliases, std::vector<std::string> { "dxm-a06-original-samples" });
 	EXPECT_EQ(manifest.versioned->capabilities, (std::vector<std::string> { "terrain", "monster", "item", "ui" }));
-	EXPECT_EQ(manifest.name, "DamnationX Original Pixel Samples");
+	EXPECT_EQ(manifest.name, "DXM Original Pixel Samples");
 	const std::string input = VersionedModIdentityInput(*manifest.versioned, {});
-	EXPECT_EQ(picosha2::hash256_hex_string(input), "d2341882196f307d9b7f4ba14439847a8ad1a215e552f68f965df2e7e6c3748c");
+	EXPECT_EQ(picosha2::hash256_hex_string(input), "e59f4ed88bdb252a4ea55bb503711f62e4a70f3c61681512796660cf0ee18519");
 
 	const auto repeated = ParseVersionedModManifest("[schema]\nversion=1\n[package]\nid=x\nversion=1.0.0\naliases=b, a\naliases=a\n[capabilities]\nprovides=terrain\nprovides=terrain,ui\n");
 	ASSERT_TRUE(repeated.has_value());

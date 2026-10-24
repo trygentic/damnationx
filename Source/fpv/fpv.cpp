@@ -1,8 +1,9 @@
 /**
  * @file fpv/fpv.cpp
  *
- * First-person view gameplay: activation, camera, mouselook, WASD movement,
- * crosshair picking into the classic cursor globals and FPV actions.
+ * First- and third-person gameplay: activation, camera modes (through the view providers of
+ * fpv/view_provider.hpp), mouselook with pointer lock, WASD and click-to-move, crosshair picking into the
+ * classic cursor globals and the 3D view's actions.
  */
 #include "fpv/fpv.hpp"
 
@@ -10,8 +11,15 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <string_view>
 #include <vector>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/em_js.h>
+#include <emscripten/html5.h>
+#endif
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
@@ -38,12 +46,15 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/ui_scale.hpp"
 #include "engine/render/webgpu_presenter.hpp"
+#include "fpv/camera_rig.hpp"
 #include "fpv/fpv_math.hpp"
 #include "fpv/fpv_state.hpp"
 #include "fpv/fpv_viewmodel_inputs.hpp"
+#include "fpv/view_provider.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "help.h"
 #include "inv.h"
 #include "items.h"
@@ -70,6 +81,31 @@
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
 
+#ifdef __EMSCRIPTEN__
+// The browser grants the pointer lock only inside a user event handler, and SDL's own request is deferred to the next
+// event after the game loop saw the click. So while the lock is lost, a capturing mousedown listener on the canvas
+// asks for it directly, inside the click that takes the mouse back.
+EM_JS(void, DxInstallPointerLockClick, (), {
+	if (Module.dxPointerLockClick) return;
+	var canvas = Module.canvas;
+	if (!canvas || !canvas.requestPointerLock) return;
+	Module.dxPointerLockClick = true;
+	canvas.addEventListener('mousedown', function (event) {
+		if (!Module.dxWantPointerLock || document.pointerLockElement === canvas) return;
+		var rect = canvas.getBoundingClientRect();
+		if (rect.height > 0 && (event.clientY - rect.top) / rect.height >= Module.dxPointerLockMaxY) return; // control panel
+		try {
+			var request = canvas.requestPointerLock();
+			if (request && request.catch) request.catch(function () {});
+		} catch (e) {}
+	}, true);
+});
+EM_JS(void, DxSetWantPointerLock, (int want, float maxY), {
+	Module.dxWantPointerLock = want !== 0;
+	Module.dxPointerLockMaxY = maxY;
+});
+#endif
+
 namespace devilution {
 namespace fpv {
 
@@ -77,7 +113,12 @@ namespace {
 
 constexpr float kMaxPitch = 75.0F * kPi / 180.0F;
 constexpr float kCameraTimeConstant = 0.035F; // seconds
-constexpr float kHeadBobAmplitude = 0.012F;
+/** Default downward look when third person starts (radians). */
+constexpr float kThirdPersonStartPitch = -0.28F;
+/** Melee aim assist: an adjacent monster within this angle of the crosshair is attacked (radians). */
+constexpr float kMeleeAssistAngle = 40.0F * kPi / 180.0F;
+/** Dungeon ceiling margin for the third-person camera (world units below the wall height). */
+constexpr float kCeilingMargin = 0.06F;
 /** Object::_oVar4 of a closed door (DOOR_CLOSED in objects.cpp). */
 constexpr int DoorClosed = 0;
 
@@ -90,16 +131,35 @@ struct MoveKeys {
 
 struct State {
 	bool active = false;
+	/** First or third person while active (a VR provider counts as first person for the gameplay rules). */
+	CameraMode mode = CameraMode::Isometric;
 	bool cameraValid = false;
 	CameraState camera;
+	ViewOutput view;
 	float yaw = 0.0F;
 	float pitch = 0.0F;
+	/** Pitch kept per mode, so switching first <-> third restores each one's own look height. */
+	float savedPitchFirst = 0.0F;
+	float savedPitchThird = kThirdPersonStartPitch;
 	float bobPhase = 0.0F;
 	uint32_t lastFrameMs = 0;
+	uint32_t lastLookMs = 0;
+	/** Smoothed player position (x, z) and floor height the view providers follow. */
+	float followX = 0.0F;
+	float followZ = 0.0F;
+	float floorY = 0.0F;
+
+	/** Third person: wanted shoulder side (+1 camera right of the player, -1 left) and boom length (tiles). */
+	float shoulderSide = 1.0F;
+	float distance = 2.2F;
 
 	bool mouseLook = false;
 	bool relativeMouse = false;
 	int skipMotionEvents = 0;
+	/** Browser: the pointer lock was released (Esc) or never granted; a click on the 3D view takes it back. */
+	bool pointerLockLost = false;
+	bool pointerLockSeen = false;
+	uint32_t pointerLockRequestMs = 0;
 
 	MoveKeys keys;
 	bool moving = false;
@@ -119,10 +179,15 @@ State S;
 HudState Hud;
 ViewmodelInputs Viewmodel;
 ViewmodelAvailableQuery ViewmodelQuery = nullptr;
+HudWantsCursorQuery HudCursorQuery = nullptr;
+FirstPersonView FirstPersonProvider;
+ThirdPersonView ThirdPersonProvider;
+render3d::ViewProvider *ActiveProvider = nullptr;
 float LastFrameYaw = 0.0F;
 float LastFramePitch = 0.0F;
 float LastTargetX = 0.0F;
 float LastTargetZ = 0.0F;
+VrControl Vr;
 
 int CurrentLevelKey()
 {
@@ -159,7 +224,22 @@ bool UiWantsCursor()
 	return invflag || CharFlag || SpellbookFlag || QuestLogIsOpen || IsStashOpen || IsVisualStoreOpen
 	    || IsPlayerInStore() || gmenu_is_active() || ChatFlag || SpellSelectFlag || qtextflag || HelpFlag
 	    || ChatLogFlag || DropGoldFlag || IsWithdrawGoldOpen || DoomFlag || MyPlayerIsDead || PauseMode != 0
-	    || (PartySidePanelOpen && *GetOptions().Gameplay.showMultiplayerPartyInfo && gbIsMultiplayer);
+	    || (PartySidePanelOpen && *GetOptions().Gameplay.showMultiplayerPartyInfo && gbIsMultiplayer)
+	    || (HudCursorQuery != nullptr && HudCursorQuery());
+}
+
+/** The 3D camera mode wanted now (Isometric: the 3D view is off). A VR provider plays by first-person rules. */
+CameraMode WantedMode()
+{
+	if (render3d::GetViewProvider() != nullptr)
+		return CameraMode::FirstPerson;
+	return *GetOptions().Graphics.cameraMode;
+}
+
+/** Third-person boom length from the option (tenths of a tile). */
+float OptionDistance()
+{
+	return std::clamp(static_cast<float>(*GetOptions().Graphics.thirdPersonDistance) / 10.0F, kThirdPersonMinDistance, kThirdPersonMaxDistance);
 }
 
 bool AltHeld()
@@ -181,6 +261,11 @@ void SetRelativeMouse(bool on)
 	if (S.relativeMouse == on)
 		return;
 	S.relativeMouse = on;
+	if (on) {
+		// Browser: SDL defers the pointer lock request to the next user event (the key or button release).
+		S.pointerLockRequestMs = NowMs();
+		S.pointerLockSeen = false;
+	}
 #ifdef USE_SDL3
 	if (ghMainWnd != nullptr)
 		SDL_SetWindowRelativeMouseMode(ghMainWnd, on);
@@ -214,14 +299,29 @@ bool CanPlayerTakeFpvAction()
 	return !MyPlayerIsDead && PauseMode != 2 && !MyPlayer->_pInvincible;
 }
 
+/** Switches between first and third person (or from Isometric when entering): each mode keeps its own pitch. */
+void EnterMode(CameraMode mode)
+{
+	if (S.mode == CameraMode::FirstPerson)
+		S.savedPitchFirst = S.pitch;
+	else if (S.mode == CameraMode::ThirdPerson)
+		S.savedPitchThird = S.pitch;
+	S.mode = mode;
+	S.pitch = mode == CameraMode::ThirdPerson ? S.savedPitchThird : S.savedPitchFirst;
+	S.distance = OptionDistance();
+	ActiveProvider = nullptr; // UpdateFrame resets the new provider
+	Hud.helpUntil = NowMs() + 6000;
+	LogVerbose("3D view: {} camera", mode == CameraMode::ThirdPerson ? "third-person" : "first-person");
+}
+
 void OnEnter()
 {
 	const Player &player = *MyPlayer;
 	S.yaw = DirectionToYaw(player._pdir);
-	S.pitch = 0.0F;
+	EnterMode(WantedMode());
 	S.cameraValid = false;
 	LastFrameYaw = S.yaw;
-	LastFramePitch = 0.0F;
+	LastFramePitch = S.pitch;
 	S.keys = {};
 	S.moving = false;
 	S.lastGoal = { -1, -1 };
@@ -238,6 +338,16 @@ void OnExit()
 	if (S.mouseLook)
 		SetCursorPos(ScreenToUi(ViewCentreScreen()));
 	S.mouseLook = false;
+	S.pointerLockLost = false;
+#ifdef __EMSCRIPTEN__
+	DxSetWantPointerLock(0, 1.0F);
+#endif
+	if (S.mode == CameraMode::FirstPerson)
+		S.savedPitchFirst = S.pitch;
+	else if (S.mode == CameraMode::ThirdPerson)
+		S.savedPitchThird = S.pitch;
+	S.mode = CameraMode::Isometric;
+	ActiveProvider = nullptr;
 	S.keys = {};
 	S.moving = false;
 	S.target = {};
@@ -246,6 +356,35 @@ void OnExit()
 	if (player._pmode == PM_STAND && player.CanChangeAction())
 		player._pdir = YawToDirection(S.yaw);
 	LogVerbose("FPV: exit, facing {} from yaw {:.2f}", static_cast<int>(player._pdir), S.yaw);
+}
+
+
+/**
+ * Browser pointer lock: SDL's relative mode asks for it, but the browser grants it only from a user event and drops it
+ * on Esc. When it is gone (or was not granted within a few seconds) the cursor comes back and a click on the 3D view
+ * asks again (HandleMouseDown).
+ */
+void UpdatePointerLock()
+{
+#ifdef __EMSCRIPTEN__
+	DxInstallPointerLockClick();
+	// Clicks below the top of the control panel (fraction of the window height) stay normal clicks.
+	const float panelTop = static_cast<float>(std::min(UiToScreen(GetMainPanel().position).y, ViewHeight())) / static_cast<float>(std::max<int>(gnScreenHeight, 1));
+	DxSetWantPointerLock(S.pointerLockLost && !UiWantsCursor() ? 1 : 0, panelTop);
+	if (!S.relativeMouse)
+		return;
+	EmscriptenPointerlockChangeEvent status {};
+	if (emscripten_get_pointerlock_status(&status) != EMSCRIPTEN_RESULT_SUCCESS)
+		return;
+	if (status.isActive) {
+		S.pointerLockSeen = true;
+		return;
+	}
+	if (S.pointerLockSeen || NowMs() - S.pointerLockRequestMs > 3000) {
+		S.pointerLockLost = true;
+		LogVerbose("3D view: pointer lock {}", S.pointerLockSeen ? "released by the browser" : "not granted");
+	}
+#endif
 }
 
 /** Runs the activation edge and keeps the mouse mode in sync. */
@@ -262,6 +401,10 @@ void SyncState()
 	if (!active)
 		return;
 
+	const CameraMode wanted = WantedMode();
+	if (wanted != S.mode && wanted != CameraMode::Isometric)
+		EnterMode(wanted);
+
 	const int levelKey = CurrentLevelKey();
 	if (levelKey != S.levelKey) {
 		S.levelKey = levelKey;
@@ -272,11 +415,13 @@ void SyncState()
 		Hud.bannerUntil = NowMs() + 3000;
 	}
 
-	const bool wantLook = !UiWantsCursor() && !AltHeld() && WindowFocused();
+	UpdatePointerLock();
+	const bool wantLook = !UiWantsCursor() && !AltHeld() && (WindowFocused() || Vr.active) && !S.pointerLockLost
+	    && !(Vr.active && Vr.uiPointing);
 	if (wantLook != S.mouseLook) {
 		S.mouseLook = wantLook;
 		if (wantLook) {
-			SetRelativeMouse(ControlMode == ControlTypes::KeyboardAndMouse);
+			SetRelativeMouse(ControlMode == ControlTypes::KeyboardAndMouse && !Vr.active);
 			S.skipMotionEvents = 2;
 		} else {
 			SetRelativeMouse(false);
@@ -284,8 +429,8 @@ void SyncState()
 		}
 	}
 	if (S.mouseLook) {
-		if (S.relativeMouse != (ControlMode == ControlTypes::KeyboardAndMouse))
-			SetRelativeMouse(ControlMode == ControlTypes::KeyboardAndMouse);
+		if (S.relativeMouse != (ControlMode == ControlTypes::KeyboardAndMouse && !Vr.active))
+			SetRelativeMouse(ControlMode == ControlTypes::KeyboardAndMouse && !Vr.active);
 		MousePosition = ScreenToUi(ViewCentreScreen());
 	}
 	if (!WindowFocused())
@@ -296,7 +441,10 @@ void AddLook(float dxRadians, float dyRadians)
 {
 	S.yaw = WrapAngle(S.yaw - dxRadians);
 	const float invert = *GetOptions().Gameplay.fpvInvertMouseY ? -1.0F : 1.0F;
-	S.pitch = std::clamp(S.pitch - dyRadians * invert, -kMaxPitch, kMaxPitch);
+	const bool third = S.mode == CameraMode::ThirdPerson;
+	S.pitch = std::clamp(S.pitch - dyRadians * invert, third ? kThirdPersonMinPitch : -kMaxPitch, third ? kThirdPersonMaxPitch : kMaxPitch);
+	if (dxRadians != 0.0F || dyRadians != 0.0F)
+		S.lastLookMs = NowMs();
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +486,9 @@ std::optional<Point> FindMoveGoal(const Player &player, float dirX, float dirZ)
 	float pz;
 	PlayerWorldPosition(player, px, pz);
 
-	constexpr float LookAhead = 3.0F;
+	// A goal far ahead keeps the walked line close to the view direction (the goal is a tile centre, so a near goal
+	// would bend the line by up to ~13 degrees); WalkLine still stops it at the first wall.
+	constexpr float LookAhead = 6.0F;
 	const Point target { static_cast<int>(std::floor(px + dirX * LookAhead)), static_cast<int>(std::floor(pz + dirZ * LookAhead)) };
 	if (target != from) {
 		const Point reach = WalkLine(player, from, target);
@@ -384,9 +534,16 @@ void UpdateMovement()
 	Player &player = *MyPlayer;
 	float forward = (S.keys.forward ? 1.0F : 0.0F) - (S.keys.back ? 1.0F : 0.0F);
 	float strafe = (S.keys.right ? 1.0F : 0.0F) - (S.keys.left ? 1.0F : 0.0F);
-	if (ControlMode == ControlTypes::Gamepad) {
-		forward += leftStickY;
-		strafe += leftStickX;
+	// The left stick only when no movement key is held: a connected pad's resting or drifting stick flips the control
+	// mode to Gamepad and must not cancel WASD.
+	const bool anyKey = S.keys.forward || S.keys.back || S.keys.left || S.keys.right;
+	if (!anyKey && ControlMode == ControlTypes::Gamepad) {
+		forward = leftStickY;
+		strafe = leftStickX;
+	}
+	if (Vr.active) {
+		forward += Vr.moveForward;
+		strafe += Vr.moveStrafe;
 	}
 
 	const bool blocked = MyPlayerIsDead || PauseMode != 0 || (!gbIsMultiplayer && gmenu_is_active()) || IsPlayerInStore()
@@ -406,7 +563,7 @@ void UpdateMovement()
 	float fwdZ;
 	float rightX;
 	float rightZ;
-	GroundAxes(S.yaw, fwdX, fwdZ, rightX, rightZ);
+	GroundAxes(Vr.active ? Vr.moveYaw : S.yaw, fwdX, fwdZ, rightX, rightZ);
 	float dirX = fwdX * forward + rightX * strafe;
 	float dirZ = fwdZ * forward + rightZ * strafe;
 	const float len = std::sqrt(dirX * dirX + dirZ * dirZ);
@@ -417,13 +574,31 @@ void UpdateMovement()
 	dirX /= len;
 	dirZ /= len;
 
+	const uint32_t now = NowMs();
+	if (*GetOptions().Gameplay.viewMovement == ViewMovement::TileSteps) {
+		// One tile per step: the next step starts once the player stands on the tile it walked to (held keys repeat).
+		S.moving = true;
+		if (player._pmode != PM_STAND || player.isWalking() || player.position.tile != player.position.future)
+			return;
+		const Point from = player.position.tile;
+		const Point target = from + StepDirectionFor(dirX, dirZ);
+		if (!CanStepBetween(player, from, target)) {
+			S.moving = false;
+			return;
+		}
+		if (target != S.lastGoal || now - S.lastSendMs > 300) {
+			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, target);
+			S.lastGoal = target;
+			S.lastSendMs = now;
+		}
+		return;
+	}
+
 	const std::optional<Point> goal = FindMoveGoal(player, dirX, dirZ);
 	if (!goal) {
 		StopMoving(player);
 		return;
 	}
-
-	const uint32_t now = NowMs();
 	if (*goal != S.lastGoal || now - S.lastSendMs > 250) {
 		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, *goal);
 		S.lastGoal = *goal;
@@ -738,6 +913,53 @@ void UpdateTargetInfo()
 	S.target = target;
 }
 
+/**
+ * Melee aim assist for a click with nothing under the crosshair: attacks the adjacent monster closest to the
+ * crosshair direction, if one is within kMeleeAssistAngle. False when there is none (the swing goes ahead).
+ */
+bool TryMeleeAssist(const Player &player)
+{
+	if (player.UsesRangedWeapon() || leveltype == DTYPE_TOWN)
+		return false;
+	float px;
+	float pz;
+	PlayerWorldPosition(player, px, pz);
+	int best = -1;
+	float bestAngle = kMeleeAssistAngle;
+	for (size_t i = 0; i < ActiveMonsterCount; ++i) {
+		const unsigned id = ActiveMonsters[i];
+		const Monster &monster = Monsters[id];
+		if (monster.hasNoLife() || (monster.flags & MFLAG_HIDDEN) != 0 || monster.isPlayerMinion() || !IsTileLit(monster.position.tile))
+			continue;
+		if (monster.position.tile.WalkingDistance(player.position.tile) > 1 && monster.position.future.WalkingDistance(player.position.tile) > 1)
+			continue;
+		float mx;
+		float mz;
+		MonsterWorldPosition(monster, mx, mz);
+		const float angle = std::abs(WrapAngle(std::atan2(mx - px, mz - pz) - S.yaw));
+		if (angle < bestAngle) {
+			bestAngle = angle;
+			best = static_cast<int>(id);
+		}
+	}
+	if (best < 0)
+		return false;
+	LastPlayerAction = PlayerActionType::AttackMonsterTarget;
+	NetSendCmdParam1(true, CMD_ATTACKID, static_cast<uint16_t>(best));
+	return true;
+}
+
+/** Ceiling the third-person camera stays under: the wall height in dungeons, none in town. */
+float CeilingY()
+{
+	return leveltype == DTYPE_TOWN ? 100.0F : kWallHeight - kCeilingMargin;
+}
+
+bool CameraBlocked(float x, float y, float z)
+{
+	return render3d::CameraBlockedAt(x, y, z);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -746,7 +968,22 @@ void UpdateTargetInfo()
 
 bool IsActive()
 {
-	return *GetOptions().Graphics.firstPersonView && !HeadlessMode && gbRunGame && MyPlayer != nullptr && WebGpuIsReady();
+	return WantedMode() != CameraMode::Isometric && !HeadlessMode && gbRunGame && MyPlayer != nullptr && WebGpuIsReady();
+}
+
+bool IsFirstPerson()
+{
+	return IsActive() && WantedMode() == CameraMode::FirstPerson;
+}
+
+bool IsThirdPerson()
+{
+	return IsActive() && WantedMode() == CameraMode::ThirdPerson;
+}
+
+const ViewOutput &GetViewOutput()
+{
+	return S.view;
 }
 
 const CameraState &GetCamera()
@@ -799,7 +1036,7 @@ bool IsMouseLook()
 
 bool SkipIsometricWorld()
 {
-	return IsActive();
+	return IsActive() || host::DrawsWorld3D(); // embedded World3D: the host renders the world, the game only its UI
 }
 
 void OnGameEnd()
@@ -827,7 +1064,8 @@ void SetViewmodelAvailableQuery(ViewmodelAvailableQuery query)
 
 bool ShowSlashOverlay()
 {
-	return !*GetOptions().Graphics.fpvWeapon || !ViewmodelAvailable();
+	// Third person shows the 3D body's own attack (or the sprite's): no 2D slash there.
+	return S.mode == CameraMode::FirstPerson && (!*GetOptions().Graphics.fpvWeapon || !ViewmodelAvailable());
 }
 
 bool OwnsMovement()
@@ -835,11 +1073,83 @@ bool OwnsMovement()
 	return S.active;
 }
 
+void SetVrControl(const VrControl &control)
+{
+	const float pendingTurn = Vr.turn;
+	Vr = control;
+	Vr.turn += pendingTurn; // turns accumulate until the next UpdateFrame applies them
+}
+
+const VrControl &GetVrControl()
+{
+	return Vr;
+}
+
+bool UiOpen()
+{
+	return UiWantsCursor();
+}
+
 void ToggleFirstPerson()
 {
-	auto &option = GetOptions().Graphics.firstPersonView;
-	option.SetValue(!*option);
+	auto &option = GetOptions().Graphics.cameraMode;
+	option.SetValue(*option == CameraMode::FirstPerson ? CameraMode::Isometric : CameraMode::FirstPerson);
 	SyncState();
+}
+
+void CycleCameraMode()
+{
+	auto &option = GetOptions().Graphics.cameraMode;
+	switch (*option) {
+	case CameraMode::Isometric:
+		option.SetValue(CameraMode::FirstPerson);
+		break;
+	case CameraMode::FirstPerson:
+		option.SetValue(CameraMode::ThirdPerson);
+		break;
+	default:
+		option.SetValue(CameraMode::Isometric);
+		break;
+	}
+	SyncState();
+}
+
+void SwapShoulder()
+{
+	if (!S.active || S.mode != CameraMode::ThirdPerson)
+		return;
+	if (*GetOptions().Graphics.thirdPersonStyle != ThirdPersonStyle::OverShoulder)
+		GetOptions().Graphics.thirdPersonStyle.SetValue(ThirdPersonStyle::OverShoulder);
+	S.shoulderSide = -S.shoulderSide;
+}
+
+bool HandleWheel(int notches)
+{
+	if (!S.active || S.mode != CameraMode::ThirdPerson || notches == 0 || UiWantsCursor())
+		return false;
+	S.distance = ZoomBoom(S.distance, static_cast<float>(notches));
+	GetOptions().Graphics.thirdPersonDistance.SetValue(static_cast<int>(std::lround(S.distance * 10.0F)));
+	return true;
+}
+
+bool HandleMouseDown(Point uiPosition)
+{
+	if (!S.active || !S.pointerLockLost || UiWantsCursor())
+		return false;
+	if (uiPosition.y >= std::min(GetMainPanel().position.y, ScreenToUi({ 0, ViewHeight() }).y))
+		return false; // on the control panel: a normal click
+	S.pointerLockLost = false; // SyncState asks for the lock again; this click only takes the mouse back
+	return true;
+}
+
+bool IsPointerLockLost()
+{
+	return S.active && S.pointerLockLost;
+}
+
+void SetHudWantsCursorQuery(HudWantsCursorQuery query)
+{
+	HudCursorQuery = query;
 }
 
 void ProcessInput()
@@ -847,6 +1157,14 @@ void ProcessInput()
 	SyncState();
 	if (!S.active)
 		return;
+	// Developer knob: DVL_FPV_HOLD=<letters of w, a, s, d> holds those movement keys (scripted movement tests).
+	if (static const char *Hold = std::getenv("DVL_FPV_HOLD"); Hold != nullptr && gbRunGame && !MyPlayer->_pLvlChanging) {
+		const std::string_view keys = Hold;
+		S.keys.forward = keys.find('w') != std::string_view::npos;
+		S.keys.left = keys.find('a') != std::string_view::npos;
+		S.keys.back = keys.find('s') != std::string_view::npos;
+		S.keys.right = keys.find('d') != std::string_view::npos;
+	}
 	UpdateMovement();
 	UpdateCombatFeedback();
 }
@@ -865,28 +1183,73 @@ void UpdateFrame()
 	float z;
 	PlayerWorldPosition(player, x, z);
 
-	if (!S.cameraValid || std::hypot(x - S.camera.x, z - S.camera.z) > 2.5F) {
-		S.camera.x = x;
-		S.camera.z = z;
-		S.cameraValid = true;
+	// Developer knob: DVL_FPV_TURN=<degrees per second> turns the view (scripted smooth-turning tests).
+	if (static const char *Turn = std::getenv("DVL_FPV_TURN"); Turn != nullptr)
+		S.yaw = WrapAngle(S.yaw + std::strtof(Turn, nullptr) * kPi / 180.0F * dt);
+	const bool snap = !S.cameraValid || std::hypot(x - S.followX, z - S.followZ) > 2.5F;
+	if (snap) {
+		S.followX = x;
+		S.followZ = z;
+		S.floorY = render3d::FloorHeightAt(x, z);
 	} else {
 		const float alpha = SmoothingAlpha(dt, kCameraTimeConstant);
-		S.camera.x += (x - S.camera.x) * alpha;
-		S.camera.z += (z - S.camera.z) * alpha;
+		S.followX += (x - S.followX) * alpha;
+		S.followZ += (z - S.followZ) * alpha;
+		// The view follows the floor of the 3D world (stairs), smoothed.
+		S.floorY += (render3d::FloorHeightAt(S.followX, S.followZ) - S.floorY) * SmoothingAlpha(dt, 0.08F);
 	}
 
 	if (player.isWalking())
 		S.bobPhase += dt * 9.0F;
 	else
 		S.bobPhase *= 0.9F;
-	// The eye follows the floor of the 3D world (stairs), smoothed.
-	static float FloorY = 0.0F;
-	FloorY += (render3d::FloorHeightAt(S.camera.x, S.camera.z) - FloorY) * SmoothingAlpha(dt, 0.08F);
-	S.camera.y = FloorY + kEyeHeight + kHeadBobAmplitude * std::sin(S.bobPhase);
-	S.camera.yaw = S.yaw;
-	S.camera.pitch = S.pitch;
+	if (Vr.active) {
+		// The headset owns the head: no bob, no pitch (the view provider adds the tracked pose).
+		S.yaw = WrapAngle(S.yaw + Vr.turn);
+		Vr.turn = 0.0F;
+		S.pitch = 0.0F;
+	}
+
+	const Options &options = GetOptions();
+	ViewInputs inputs;
+	inputs.dt = dt;
+	inputs.feet = { S.followX, S.floorY, S.followZ };
+	inputs.floorY = S.floorY;
+	inputs.yaw = S.yaw;
+	inputs.pitch = S.pitch;
+	inputs.playerYaw = DirectionToYaw(player._pdir);
+	inputs.autoWalking = player.isWalking() && !S.moving;
+	inputs.idleLookSeconds = static_cast<float>(now - S.lastLookMs) / 1000.0F;
 	const float aspect = static_cast<float>(ViewWidth()) / static_cast<float>(ViewHeight());
-	S.camera.fovYDeg = HorizontalToVerticalFov(static_cast<float>(*GetOptions().Graphics.fpvFieldOfView), aspect);
+	inputs.fovYDeg = HorizontalToVerticalFov(static_cast<float>(*options.Graphics.fpvFieldOfView), aspect);
+	inputs.headBob = *options.Graphics.fpvHeadBob && !Vr.active;
+	inputs.bobPhase = S.bobPhase;
+	inputs.style = *options.Graphics.thirdPersonStyle;
+	inputs.distance = S.distance;
+	inputs.shoulderSide = S.shoulderSide;
+	inputs.ceilingY = CeilingY();
+	inputs.isBlocked = CameraBlocked;
+	inputs.fullBody = *options.Graphics.fpvFullBody;
+
+	render3d::ViewProvider *provider = render3d::GetViewProvider();
+	if (provider == nullptr)
+		provider = S.mode == CameraMode::ThirdPerson ? static_cast<render3d::ViewProvider *>(&ThirdPersonProvider) : &FirstPersonProvider;
+	if (provider != ActiveProvider || snap) {
+		provider->Reset(inputs);
+		ActiveProvider = provider;
+		LogVerbose("3D view: {} view provider", provider->Name());
+	}
+	S.cameraValid = true;
+	S.view = provider->Update(inputs);
+	if (S.view.lookYawOverride)
+		S.yaw = *S.view.lookYawOverride;
+	else if (provider == &ThirdPersonProvider)
+		S.yaw = ThirdPersonProvider.yaw(); // the orbit chase may have swung the view
+	S.camera = S.view.camera;
+	// Developer knob: DVL_FPV_TRACE=1 logs the camera every drawn frame (checks that movement is smooth between ticks).
+	static const bool Trace = std::getenv("DVL_FPV_TRACE") != nullptr;
+	if (Trace)
+		Log("FPV trace: t={} x={:.4f} z={:.4f} yaw={:.3f} walking={}", now, S.camera.x, S.camera.z, S.camera.yaw, player.isWalking() ? 1 : 0);
 
 	// Viewmodel motion inputs (fpv_viewmodel_inputs.hpp).
 	{
@@ -986,7 +1349,13 @@ Point PickFromScreen(Point screenPosition)
 	if (!S.cameraValid)
 		UpdateFrame();
 	const Point origin = IsMouseLook() ? ViewCentreScreen() : screenPosition;
-	const Ray ray = ScreenRay(S.camera, static_cast<float>(origin.x) + 0.5F, static_cast<float>(origin.y) + 0.5F, ViewWidth(), ViewHeight());
+	Ray ray = ScreenRay(S.camera, static_cast<float>(origin.x) + 0.5F, static_cast<float>(origin.y) + 0.5F, ViewWidth(), ViewHeight());
+	if (S.view.chaseAim)
+		ray = ChaseAimRay(ray, S.view.aimPivot); // third person: nothing between the camera and the player is picked
+	if (Vr.active && Vr.aimValid) {
+		ray.origin = { Vr.aimOrigin[0], Vr.aimOrigin[1], Vr.aimOrigin[2] };
+		ray.dir = { Vr.aimDirection[0], Vr.aimDirection[1], Vr.aimDirection[2] };
+	}
 	S.pick = Pick(ray);
 	UpdateTargetInfo();
 	Point tile = S.pick.tile;
@@ -1027,12 +1396,22 @@ bool ApplyPickToCursor()
 bool HandleWorldClick(bool shift)
 {
 	if (!IsMouseLook())
-		return false;
+		return false; // free cursor (Alt): the classic click-to-move / click-to-act on what is under the cursor
 	if (pcursitem != -1 || ObjectUnderCursor != nullptr || pcursmonst != -1 || PlayerUnderCursor != nullptr)
 		return false;
-	if (leveltype == DTYPE_TOWN)
-		return true; // no click-to-walk in first person: WASD moves
 	Player &player = *MyPlayer;
+	// Click-to-move on the floor under the crosshair: always in town, and in the dungeon with the orbit camera (Shift
+	// attacks in place there). WASD takes over again as soon as a key is pressed.
+	const bool orbit = S.mode == CameraMode::ThirdPerson && *GetOptions().Graphics.thirdPersonStyle == ThirdPersonStyle::Orbit;
+	if (leveltype == DTYPE_TOWN || (orbit && !shift)) {
+		if (S.pick.hitWorld && IsAnyOf(S.pick.kind, TargetKind::None, TargetKind::Trigger) && CanPlayerTakeFpvAction()) {
+			LastPlayerAction = PlayerActionType::Walk;
+			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+		}
+		return true;
+	}
+	if (TryMeleeAssist(player))
+		return true;
 	LastPlayerAction = PlayerActionType::Attack;
 	if (player.UsesRangedWeapon()) {
 		NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, cursPosition);

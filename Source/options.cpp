@@ -282,6 +282,13 @@ void LoadOptions()
 		}
 	}
 
+	// "First Person View=1" from before the camera modes: carry it over once, then the legacy switch stays off.
+	if (*options.Graphics.firstPersonView) {
+		if (*options.Graphics.cameraMode == CameraMode::Isometric)
+			options.Graphics.cameraMode.SetValue(CameraMode::FirstPerson);
+		options.Graphics.firstPersonView.SetValue(false);
+	}
+
 	ini->getUtf8Buf("Hellfire", "SItem", options.Hellfire.szItem, sizeof(options.Hellfire.szItem));
 	ini->getUtf8Buf("Network", "Bind Address", "0.0.0.0", options.Network.szBindAddress, sizeof(options.Network.szBindAddress));
 	ini->getUtf8Buf("Network", "Previous Game ID", options.Network.szPreviousZTGame, sizeof(options.Network.szPreviousZTGame));
@@ -988,7 +995,7 @@ GraphicsOptions::GraphicsOptions()
               { GBufferDebugView::Volume, N_("Volume") },
               { GBufferDebugView::Emissive, N_("Emissive") },
           })
-    , warrior3dModel("3D Warrior Model", HybridOptionFlags(), N_("3D Warrior Model"), N_("Draw the Warrior as a lit, animated 3D model instead of prerendered HD sprites (needs the HD pack)."), true)
+    , warrior3dModel("3D Warrior Model", HybridOptionFlags(), N_("3D Character Models"), N_("Draw the Warrior and the Rogue as lit, animated 3D models instead of prerendered HD sprites (needs the HD pack)."), true)
     , colorCycling("Color Cycling", OptionEntryFlags::None, N_("Color Cycling"), N_("Color cycling effect used for water, lava, and acid animation."), true)
     , alternateNestArt("Alternate nest art", OptionEntryFlags::OnlyHellfire | OptionEntryFlags::CantChangeInGame, N_("Alternate nest art"), N_("The game will use an alternative palette for Hellfire’s nest tileset."), false)
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -997,9 +1004,29 @@ GraphicsOptions::GraphicsOptions()
     , hardwareCursorMaxSize("Hardware Cursor Maximum Size", OptionEntryFlags::CantChangeInGame | OptionEntryFlags::RecreateUI | (HardwareCursorSupported() ? OptionEntryFlags::None : OptionEntryFlags::Invisible), N_("Hardware Cursor Maximum Size"), N_("Maximum width / height for the hardware cursor. Larger cursors fall back to software."), 128, { 0, 64, 128, 256, 512 })
 #endif
     , showFPS("Show FPS", OptionEntryFlags::None, N_("Show FPS"), N_("Displays the FPS in the upper left corner of the screen."), false)
-    , firstPersonView("First Person View", HybridOptionFlags(), N_("First Person View"), N_("Play in first person over the 3D world (WebGPU builds only). Toggle in game with G."), false)
-    , fpvFieldOfView("First Person Field of View", HybridOptionFlags(), N_("Field of View"), N_("Horizontal field of view of the first-person view, in degrees."), 95, { 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110 })
+    , cameraMode("Camera Mode", HybridOptionFlags(), N_("Camera Mode"), N_("Isometric, first-person or third-person view over the 3D world (WebGPU builds only). In game, T cycles the modes and G toggles first person."), CameraMode::Isometric,
+          {
+              { CameraMode::Isometric, N_("Isometric") },
+              { CameraMode::FirstPerson, N_("First person") },
+              { CameraMode::ThirdPerson, N_("Third person") },
+          })
+    , hostRenderMode("Host Render Mode", OptionEntryFlags::Invisible, N_("Render Mode"), N_("How the game is drawn: the 3D world, the original graphics, or the HD pack's 2D art."), HostRenderModeOption::World3D,
+          {
+              { HostRenderModeOption::World3D, N_("3D world") },
+              { HostRenderModeOption::Classic, N_("Original graphics") },
+              { HostRenderModeOption::Hd2D, N_("HD 2D") },
+          })
+    , firstPersonView("First Person View", OptionEntryFlags::Invisible, N_("First Person View"), N_("Legacy switch, replaced by Camera Mode."), false)
+    , fpvFieldOfView("First Person Field of View", HybridOptionFlags(), N_("Field of View"), N_("Horizontal field of view of the first- and third-person views, in degrees."), 95, { 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110 })
     , fpvWeapon("First-Person Weapon", HybridOptionFlags(), N_("First-Person Weapon"), N_("Show the 3D weapon and arms in the first-person view. When off (or without the 3D model) a 2D slash shows melee swings."), true)
+    , fpvHeadBob("First Person Head Bob", HybridOptionFlags(), N_("Head Bob"), N_("The first-person camera bobs up and down while walking."), true)
+    , fpvFullBody("First Person Full Body", HybridOptionFlags(), N_("Full-Body Awareness"), N_("See your own legs and shadow when looking down in first person (needs the 3D warrior from the HD pack)."), true)
+    , thirdPersonStyle("Third Person Style", HybridOptionFlags(), N_("Third-Person Camera"), N_("Over the shoulder: close, offset to one side, aim with the crosshair (middle mouse swaps the shoulder). Orbit: centred and further back, swings behind you while you walk to a clicked spot."), ThirdPersonStyle::OverShoulder,
+          {
+              { ThirdPersonStyle::OverShoulder, N_("Over the shoulder") },
+              { ThirdPersonStyle::Orbit, N_("Orbit chase") },
+          })
+    , thirdPersonDistance("Third Person Distance", HybridOptionFlags(), N_("Third-Person Distance"), N_("How far behind the player the third-person camera sits, in tenths of a tile. The mouse wheel zooms in game."), 22, { 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32, 36, 40, 45, 50, 60 })
 {
 }
 std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
@@ -1025,9 +1052,15 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&hdArt,
 		&hdGraphics,
 		&showFPS,
+		&cameraMode,
+		&hostRenderMode,
 		&firstPersonView,
 		&fpvFieldOfView,
 		&fpvWeapon,
+		&fpvHeadBob,
+		&fpvFullBody,
+		&thirdPersonStyle,
+		&thirdPersonDistance,
 		&perPixelLighting,
 		&rayTracedLighting,
 		&lightingQuality,
@@ -1057,9 +1090,14 @@ GameplayOptions::GameplayOptions()
     , runInTown("Run in Town", OptionEntryFlags::CantChangeInMultiPlayer, N_("Run in Town"), N_("Enable jogging/fast walking in town for Diablo and Hellfire. This option was introduced in the expansion."), false)
     , enableRun("Enable Run", OptionEntryFlags::None, N_("Enable Run"), N_("Show the Run button in single-player games. Running uses stamina and speeds up movement, while combat keeps its normal speed."), true)
     , smoothMovement("Smooth Movement", OptionEntryFlags::CantChangeInMultiPlayer, N_("Smooth Movement"), N_("Walk in straight lines at any angle with smooth movement between tiles, like Diablo II. When off, movement follows the classic eight directions."), true)
-    , cathedralPortal("Cathedral Portal", OptionEntryFlags::CantChangeInGame, N_("Cathedral Portal"), N_("A permanent portal next to the town fountain leads straight to the Cathedral (dungeon level 1)."), true)
-    , fpvMouseSensitivity("First Person Mouse Sensitivity", HybridOptionFlags(), N_("Mouse Sensitivity (FPV)"), N_("How fast the mouse turns the camera in the first-person view."), 5, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20 })
-    , fpvInvertMouseY("First Person Invert Mouse Y", HybridOptionFlags(), N_("Invert Mouse Y"), N_("Moving the mouse up looks down in the first-person view."), false)
+    , cathedralPortal("Cathedral Portal", OptionEntryFlags::CantChangeInMultiPlayer, N_("Free town portal"), N_("A free portal east of Deckard Cain returns to the entrance of your last visited dungeon section: Cathedral, Catacombs, Caves or Hell."), true)
+    , viewMovement("3D View Movement", HybridOptionFlags(), N_("Movement (3D)"), N_("How WASD and the stick move you in the first- and third-person views. Smooth glides continuously in the direction you look (uses Smooth Movement); Tile steps moves one tile per step."), ViewMovement::Smooth,
+          {
+              { ViewMovement::Smooth, N_("Smooth") },
+              { ViewMovement::TileSteps, N_("Tile steps") },
+          })
+    , fpvMouseSensitivity("First Person Mouse Sensitivity", HybridOptionFlags(), N_("Mouse Sensitivity (3D)"), N_("How fast the mouse turns the camera in the first- and third-person views."), 5, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20 })
+    , fpvInvertMouseY("First Person Invert Mouse Y", HybridOptionFlags(), N_("Invert Mouse Y"), N_("Moving the mouse up looks down in the first- and third-person views."), false)
     , grabInput("Grab Input", OptionEntryFlags::None, N_("Grab Input"), N_("When enabled mouse is locked to the game window."), false)
     , pauseOnFocusLoss("Pause Game When Window Loses Focus", OptionEntryFlags::None, N_("Pause Game When Window Loses Focus"), N_("When enabled, the game will pause when focus is lost."), true)
     , theoQuest("Theo Quest", OptionEntryFlags::CantChangeInGame | OptionEntryFlags::OnlyHellfire, N_("Theo Quest"), N_("Enable Little Girl quest."), false)
@@ -1118,6 +1156,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&enableRun,
 		&smoothMovement,
 		&cathedralPortal,
+		&viewMovement,
 		&fpvMouseSensitivity,
 		&fpvInvertMouseY,
 		&quickCast,
@@ -1789,6 +1828,74 @@ const PadmapperOptions::Action *PadmapperOptions::findAction(ControllerButton bu
 	return nullptr;
 }
 
+namespace {
+
+constexpr OptionEntryFlags VrOptionFlags()
+{
+#if DEVILUTIONX_XR
+	return OptionEntryFlags::None;
+#else
+	return OptionEntryFlags::Invisible;
+#endif
+}
+
+} // namespace
+
+bool VrOptionsVisible()
+{
+	return DEVILUTIONX_XR != 0;
+}
+
+VrOptions::VrOptions()
+    : OptionCategoryBase("VR", N_("Virtual Reality"), N_("Virtual Reality Settings"))
+    , enabled("Enabled", VrOptionFlags(), N_("VR Mode"), N_("Play in a VR headset when an OpenXR runtime is running (Quest Link, Air Link, Virtual Desktop, SteamVR). The Quest app always plays in VR."), false)
+    , turnMode("Turn Mode", VrOptionFlags(), N_("Turning"), N_("Snap turning jumps by a fixed angle and is the most comfortable; smooth turning rotates continuously."), VrTurnMode::Snap,
+          {
+              { VrTurnMode::Snap, N_("Snap") },
+              { VrTurnMode::Smooth, N_("Smooth") },
+          })
+    , snapTurnAngle("Snap Turn Angle", VrOptionFlags(), N_("Snap Turn Angle"), N_("Degrees per snap turn."), 30, { 15, 30, 45, 60, 90 })
+    , smoothTurnSpeed("Smooth Turn Speed", VrOptionFlags(), N_("Smooth Turn Speed"), N_("Degrees per second at full stick."), 120, { 45, 60, 90, 120, 180, 240 })
+    , vignette("Comfort Vignette", VrOptionFlags(), N_("Comfort Vignette"), N_("Darkens the edges of the view while moving or turning with the stick, which reduces motion sickness."), VrComfortVignette::Medium,
+          {
+              { VrComfortVignette::Off, N_("Off") },
+              { VrComfortVignette::Low, N_("Low") },
+              { VrComfortVignette::Medium, N_("Medium") },
+              { VrComfortVignette::High, N_("High") },
+          })
+    , worldScale("World Scale", VrOptionFlags(), N_("World Scale"), N_("Size of the world around you in percent. 100 makes the warrior 1.85 m tall; larger values make the world feel bigger."), 100, { 50, 60, 70, 80, 90, 100, 110, 125, 150, 175, 200 })
+    , renderScale("Render Scale", VrOptionFlags(), N_("Render Scale"), N_("Percent of the headset's recommended resolution. Lower is faster (Quest 2: 70 to 80)."), 80, { 50, 60, 70, 80, 90, 100 })
+    , seated("Seated", VrOptionFlags(), N_("Seated Mode"), N_("Use the character's eye height instead of your real height."), false)
+    , moveDirection("Move Direction", VrOptionFlags(), N_("Move Direction"), N_("Whether the move stick walks where you look or where the off hand points."), VrMoveDirection::Head,
+          {
+              { VrMoveDirection::Head, N_("Head") },
+              { VrMoveDirection::Controller, N_("Controller") },
+          })
+    , dominantHand("Dominant Hand", VrOptionFlags(), N_("Dominant Hand"), N_("The hand that aims, attacks and points at the game screen. The other hand's stick moves."), VrHand::Right,
+          {
+              { VrHand::Right, N_("Right") },
+              { VrHand::Left, N_("Left") },
+          })
+    , panelDistance("Panel Distance", VrOptionFlags(), N_("Screen Distance"), N_("Distance of the game screen (menus, inventory, belt) in centimetres."), 140, { 80, 100, 120, 140, 170, 200, 250 })
+{
+}
+std::vector<OptionEntryBase *> VrOptions::GetEntries()
+{
+	return {
+		&enabled,
+		&turnMode,
+		&snapTurnAngle,
+		&smoothTurnSpeed,
+		&vignette,
+		&worldScale,
+		&renderScale,
+		&seated,
+		&moveDirection,
+		&dominantHand,
+		&panelDistance,
+	};
+}
+
 ModOptions::ModOptions()
     : OptionCategoryBase("Mods", N_("Mods"), N_("Mod Settings"))
 {
@@ -1893,7 +2000,7 @@ ModOptions::ModEntry::ModEntry(std::string_view name, const ModManifest &manifes
     : name(name)
     , displayName(manifest.name.empty() ? std::string(name) : manifest.name)
     , description(BuildModDescription(manifest))
-    , enabled(this->name, OptionEntryFlags::RecreateUI, this->displayName.c_str(), this->description.c_str(), false)
+    , enabled(this->name, OptionEntryFlags::RecreateUI, this->displayName.c_str(), this->description.c_str(), name == "permanent_cathedral_portal")
 {
 }
 

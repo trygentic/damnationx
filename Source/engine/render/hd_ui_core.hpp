@@ -1,7 +1,7 @@
 /**
  * @file hd_ui_core.hpp
  *
- * Engine-independent parts of the opt-in HD UI (`?hdUi=1`):
+ * Engine-independent parts of the opt-in HD UI (`?hdUi=1`, DamnationX HD runtime contract v1 section 6):
  * the hd/ui.txt index, the asset key interner, the registry that maps loaded CLX frames to asset keys, the HD
  * content of off-screen surfaces (the control panel buffers, composed char panel and buttons), CLX opacity masks,
  * the retained layer tracker that decides which HD UI texels the classic painter order shows, and the colour

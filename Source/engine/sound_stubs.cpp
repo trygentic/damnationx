@@ -24,5 +24,6 @@ int SoundGetOrSetAudioCuesVolume(int volume) { return 0; }
 void music_mute() { }
 void music_unmute() { }
 _music_id GetLevelMusic(dungeon_type dungeonType) { return TMUSIC_TOWN; }
+const char *GetMusicTrackPath(_music_id track) { return nullptr; }
 
 } // namespace devilution

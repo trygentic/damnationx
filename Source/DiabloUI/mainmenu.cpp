@@ -108,7 +108,7 @@ void mainmenu_restart_repintro()
 	dwAttractTicks = SDL_GetTicks() + mainmenu_attract_time_out * 1000;
 }
 
-bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int attractTimeOut)
+bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int attractTimeOut, bool (*autoStart)())
 {
 	MainMenuResult = MAINMENU_NONE;
 	while (MainMenuResult == MAINMENU_NONE) {
@@ -129,6 +129,8 @@ bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int att
 				break;
 			}
 #endif
+			if (autoStart != nullptr && autoStart())
+				MainMenuResult = MAINMENU_SINGLE_PLAYER;
 			if (SDL_GetTicks() >= dwAttractTicks && (HaveIntro() || gbIsHellfire)) {
 				MainMenuResult = MAINMENU_ATTRACT_MODE;
 			}

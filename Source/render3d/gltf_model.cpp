@@ -257,22 +257,67 @@ int GltfModel::findPart(std::string_view name) const
 	return -1;
 }
 
-bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error)
+namespace {
+
+/**
+ * TRS of a node given as a matrix (other exporters than Blender's write these for static meshes). Assumes no shear;
+ * a negative determinant is folded into the x scale.
+ */
+void DecomposeMatrix(const cgltf_float *m, GltfNode &node)
+{
+	node.translation = { m[12], m[13], m[14] };
+	Vec3 axes[3] { { m[0], m[1], m[2] }, { m[4], m[5], m[6] }, { m[8], m[9], m[10] } };
+	float scale[3];
+	for (int i = 0; i < 3; ++i) {
+		scale[i] = std::sqrt(skm::Dot(axes[i], axes[i]));
+		if (scale[i] > 1e-12F)
+			axes[i] = axes[i] * (1.0F / scale[i]);
+	}
+	if (skm::Dot(skm::Cross(axes[0], axes[1]), axes[2]) < 0.0F) {
+		scale[0] = -scale[0];
+		axes[0] = axes[0] * -1.0F;
+	}
+	node.scale = { scale[0], scale[1], scale[2] };
+	// Rotation matrix (columns axes[]) to quaternion.
+	const float r00 = axes[0].x, r10 = axes[0].y, r20 = axes[0].z;
+	const float r01 = axes[1].x, r11 = axes[1].y, r21 = axes[1].z;
+	const float r02 = axes[2].x, r12 = axes[2].y, r22 = axes[2].z;
+	const float trace = r00 + r11 + r22;
+	Quat q;
+	if (trace > 0.0F) {
+		const float s = std::sqrt(trace + 1.0F) * 2.0F;
+		q = { (r21 - r12) / s, (r02 - r20) / s, (r10 - r01) / s, 0.25F * s };
+	} else if (r00 > r11 && r00 > r22) {
+		const float s = std::sqrt(1.0F + r00 - r11 - r22) * 2.0F;
+		q = { 0.25F * s, (r01 + r10) / s, (r02 + r20) / s, (r21 - r12) / s };
+	} else if (r11 > r22) {
+		const float s = std::sqrt(1.0F + r11 - r00 - r22) * 2.0F;
+		q = { (r01 + r10) / s, 0.25F * s, (r12 + r21) / s, (r02 - r20) / s };
+	} else {
+		const float s = std::sqrt(1.0F + r22 - r00 - r11) * 2.0F;
+		q = { (r02 + r20) / s, (r12 + r21) / s, 0.25F * s, (r10 - r01) / s };
+	}
+	node.rotation = skm::Normalize(q);
+}
+
+} // namespace
+
+bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error, const GltfLoadOptions &options)
 {
 	model = {};
-	cgltf_options options {};
+	cgltf_options parseOptions {};
 	CgltfData parsed;
-	if (cgltf_parse(&options, glb.data(), glb.size(), &parsed.data) != cgltf_result_success) {
+	if (cgltf_parse(&parseOptions, glb.data(), glb.size(), &parsed.data) != cgltf_result_success) {
 		error = "not a valid glTF / GLB file";
 		return false;
 	}
-	if (cgltf_load_buffers(&options, parsed.data, nullptr) != cgltf_result_success) {
+	if (cgltf_load_buffers(&parseOptions, parsed.data, nullptr) != cgltf_result_success) {
 		error = "the GLB has no embedded binary buffer";
 		return false;
 	}
 	const cgltf_data &data = *parsed.data;
-	if (data.skins_count != 1) {
-		error = "expected exactly one skin";
+	if (data.skins_count != 1 && !(options.allowStatic && data.skins_count == 0)) {
+		error = options.allowStatic ? "expected no skin or exactly one skin" : "expected exactly one skin";
 		return false;
 	}
 
@@ -283,10 +328,8 @@ bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &
 		GltfNode &node = model.nodes[i];
 		node.name = source.name != nullptr ? source.name : "";
 		node.parent = NodeIndex(data, source.parent);
-		if (source.has_matrix) {
-			// Not produced by the Blender exporter for this asset; keep the translation only.
-			node.translation = { source.matrix[12], source.matrix[13], source.matrix[14] };
-		}
+		if (source.has_matrix)
+			DecomposeMatrix(source.matrix, node);
 		if (source.has_translation)
 			node.translation = { source.translation[0], source.translation[1], source.translation[2] };
 		if (source.has_rotation)
@@ -306,9 +349,9 @@ bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &
 	for (size_t i = 0; i < model.nodes.size(); ++i)
 		place(static_cast<int>(i));
 
-	// Skin.
-	const cgltf_skin &skin = data.skins[0];
-	for (cgltf_size j = 0; j < skin.joints_count; ++j) {
+	// Skin (static models have none: every mesh node is rigid).
+	for (cgltf_size j = 0; data.skins_count != 0 && j < data.skins[0].joints_count; ++j) {
+		const cgltf_skin &skin = data.skins[0];
 		model.joints.push_back(NodeIndex(data, skin.joints[j]));
 		Mat4 inverseBind;
 		if (skin.inverse_bind_matrices != nullptr)
@@ -357,7 +400,7 @@ bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &
 		model.imageBytes = model.images[static_cast<size_t>(model.bodyImage)].bytes;
 		model.imageMimeType = model.images[static_cast<size_t>(model.bodyImage)].mimeType;
 	}
-	if (meshNodes.size() > 24) {
+	if (meshNodes.size() > (options.allowStatic ? 255U : 128U)) {
 		error = "too many mesh nodes";
 		return false;
 	}

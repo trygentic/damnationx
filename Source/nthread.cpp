@@ -19,6 +19,7 @@
 #include "engine/demomode.h"
 #include "game_mode.hpp"
 #include "gmenu.h"
+#include "host/host_hooks.hpp"
 #include "storm/storm_net.hpp"
 #include "utils/sdl_mutex.h"
 #include "utils/sdl_thread.h"
@@ -35,6 +36,12 @@ int last_tick;
 uint8_t ProgressToNextGameTick = 0;
 
 namespace {
+
+/** The game tick clock: SDL's, or the host's virtual clock when embedded (host/host_hooks.hpp). */
+int GameClockMs()
+{
+	return static_cast<int>(host::IsActive() ? host::GameClockMs() : SDL_GetTicks());
+}
 
 SdlMutex MemCrit;
 bool nthread_should_run;
@@ -60,7 +67,7 @@ void NthreadHandler()
 		nthread_send_and_recv_turn(0, 0);
 		int delta = gnTickDelay;
 		if (nthread_recv_turns())
-			delta = last_tick - SDL_GetTicks();
+			delta = last_tick - GameClockMs();
 		MemCrit.unlock();
 		if (delta > 0)
 			SDL_Delay(delta);
@@ -127,7 +134,7 @@ bool nthread_recv_turns(bool *pfSendAsync)
 	}
 	if (!sgbTicsOutOfSync) {
 		sgbTicsOutOfSync = true;
-		last_tick = SDL_GetTicks();
+		last_tick = GameClockMs();
 	}
 	sgbSyncCountdown = 4;
 	multi_msg_countdown();
@@ -144,7 +151,7 @@ void nthread_set_turn_upper_bit()
 
 void nthread_start(bool setTurnUpperBit)
 {
-	last_tick = SDL_GetTicks();
+	last_tick = GameClockMs();
 	sgbPacketCountdown = 1;
 	sgbSyncCountdown = 1;
 	sgbTicsOutOfSync = true;
@@ -218,7 +225,7 @@ void nthread_ignore_mutex(bool bStart)
 
 bool nthread_has_500ms_passed(bool *drawGame /*= nullptr*/)
 {
-	const int currentTickCount = SDL_GetTicks();
+	const int currentTickCount = GameClockMs();
 	int ticksElapsed = currentTickCount - last_tick;
 	// Check if we missed multiple game ticks (> 10)
 	if (ticksElapsed > gnTickDelay * 10) {
@@ -252,7 +259,7 @@ void nthread_UpdateProgressToNextGameTick()
 {
 	if (!gbRunGame || PauseMode != 0 || (!gbIsMultiplayer && gmenu_is_active()) || !gbProcessPlayers || demo::IsRunning()) // if game is not running or paused there is no next gametick in the near future
 		return;
-	const int currentTickCount = SDL_GetTicks();
+	const int currentTickCount = GameClockMs();
 	const int ticksMissing = last_tick - currentTickCount;
 	if (ticksMissing <= 0) {
 		ProgressToNextGameTick = AnimationInfo::baseValueFraction; // game tick is due

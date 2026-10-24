@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""modkit: validate, build and preview schema-v1 asset packages.
+"""modkit: validate, build and preview schema-v1 asset packages (design §5.1/§5.2, DXM-A02).
 
     modkit validate <package-dir | manifest.ini> [--search-path DIR]...
     modkit build    <package-dir | manifest.ini> --output pack.mpq [--search-path DIR]...

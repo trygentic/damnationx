@@ -1,0 +1,102 @@
+{
+  "schema": "damnationx.3d-pack-source/1",
+  "pack": "damnationx-3d-free",
+  "tier": "free",
+  "title": "DamnationX FREE 3D pack",
+  "install_dir": "hd/3d/free",
+  "source_dir": "free",
+  "attribution": "3D models by Douglas Opan (diablo-3d, https://github.com/douglasopan/diablo-3d)",
+  "license": "Sustainable Use License 1.0",
+  "files": {
+    "NOTICE.md": "free/NOTICE.md",
+    "LICENSE.md": "free/LICENSE.md"
+  },
+  "models": [
+    {
+      "id": "cottage_stone_plain",
+      "source": "stone cottage 3d model.glb"
+    },
+    {
+      "id": "cottage_thatched_a",
+      "source": "thatched+cottage+3d+model (1).glb"
+    },
+    {
+      "id": "cottage_thatched_b",
+      "source": "thatched+cottage+3d+model (2).glb"
+    },
+    {
+      "id": "hut_thatched_plain",
+      "source": "thatched+hut+3d+model (1).glb"
+    },
+    {
+      "id": "hut_thatched_a",
+      "source": "thatched+hut+3d+model (3).glb"
+    },
+    {
+      "id": "hut_thatched_b",
+      "source": "thatched+hut+3d+model (4).glb"
+    },
+    {
+      "id": "church_stone_plain",
+      "source": "stone+church+3d+model.glb"
+    },
+    {
+      "id": "church_stone",
+      "source": "stone+church+3d+model (1).glb"
+    },
+    {
+      "id": "chest_stone_plain",
+      "source": "stone+chest+3d+model.glb",
+      "scale": 0.65
+    },
+    {
+      "id": "chest_stone",
+      "source": "stone+chest+3d+model (1).glb",
+      "scale": 0.65
+    },
+    {
+      "id": "chest_treasure",
+      "source": "treasure+chest+3d+model.glb",
+      "scale": 0.55
+    },
+    {
+      "id": "chest_wooden",
+      "source": "wooden+treasure+chest+3d+model.glb",
+      "scale": 0.6
+    },
+    {
+      "id": "arch_stone",
+      "source": "stone+arch+3d+model.glb",
+      "scale": [
+        1.26,
+        1.0,
+        1.5
+      ]
+    },
+    {
+      "id": "door_arch_wooden",
+      "source": "wooden+arch+door+3d+model.glb",
+      "scale": [
+        2.3,
+        0.95,
+        1.2
+      ]
+    },
+    {
+      "id": "brazier_metal",
+      "source": "metal+brazier+3d+model_Clone1.glb",
+      "scale": 0.8
+    },
+    {
+      "id": "sword_great",
+      "source": "great+sword+3d+model.glb",
+      "scale": 0.6
+    },
+    {
+      "id": "warrior_fantasy",
+      "source": "fantasy warrior 3d model.glb",
+      "scale": 0.67
+    }
+  ],
+  "placement": "placement.json"
+}

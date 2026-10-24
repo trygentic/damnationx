@@ -1,7 +1,7 @@
 /**
  * @file hd_items_core.hpp
  *
- * Engine-independent parts of the opt-in HD dropped items: the
+ * Engine-independent parts of the opt-in HD dropped items (DamnationX HD runtime contract v1, section 6): the
  * hd/items.txt clip keys and the choice of HD clip and frame for an item on the ground, resting or still dropping.
  *
  * Nothing here touches game state, SDL or WebGPU so it is covered by native unit tests (test/hd_items_test.cpp).

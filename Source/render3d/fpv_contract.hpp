@@ -2,7 +2,8 @@
 /**
  * @file render3d/fpv_contract.hpp
  *
- * Shared contract between the first-person (FPV) / 3D subsystems.
+ * Shared contract between the first-person (FPV) / 3D subsystems. See
+ * docs/design/first-person-3d.md for the full design.
  *
  *   Source/fpv/        owns gameplay: camera state, input, picking, HUD overlays.
  *   Source/render3d/   owns the WebGPU 3D world renderer (geometry, billboards,
@@ -40,10 +41,18 @@ struct CameraState {
 	float fovYDeg = kDefaultFovYDeg;
 };
 
-/** True when the FPV option is on and the WebGPU 3D renderer is usable. Implemented in Source/fpv. */
+/**
+ * True when a 3D view is on (Graphics > Camera Mode first or third person, or a VR view provider is installed) and the
+ * WebGPU 3D renderer is usable. Implemented in Source/fpv.
+ */
 bool IsActive();
 
-/** Camera for the current frame (interpolated). Implemented in Source/fpv. */
+/** IsActive() with the first-person camera (weapon viewmodel, no local player body except the legs). */
+bool IsFirstPerson();
+/** IsActive() with the third-person chase camera (the local player is drawn). */
+bool IsThirdPerson();
+
+/** Camera for the current frame (interpolated), from the active view provider (fpv/view_provider.hpp). */
 const CameraState &GetCamera();
 
 /** Yaw (radians) that matches a classic 8-way facing, and the inverse. Implemented in Source/fpv. */

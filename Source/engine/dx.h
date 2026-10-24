@@ -61,7 +61,7 @@ RendererDiagnostics &MutableRendererDiagnostics();
 
 #if DEVILUTIONX_WEBGPU
 /**
- * @brief Presentation-only lighting data for WebGpuPresent.
+ * @brief Presentation-only lighting data for WebGpuPresent (SPEC §9.1, §9.7).
  *
  * Fills a static instance (~52 KB) and returns it; disabled (legacy and hybrid) when there is no running game
  * (MyPlayer == nullptr || !gbRunGame). `hybrid.enabled` follows gbuffer::BackBufferIsHybrid().

@@ -1,6 +1,6 @@
 # dun_render golden fixtures
 
-Consumed by `test/dun_render_golden_test.cpp`. Copied next to the
+Consumed by `test/dun_render_golden_test.cpp` (SPEC §12.1). Copied next to the
 test binary as `test/fixtures/dun_render/` by the `dun_render_golden_test_resources`
 target (`CMake/Tests.cmake`).
 
@@ -97,7 +97,7 @@ The surface is pre-filled with `((7x + 13y) << 1) | 1`, the light tables are
 synthetic bijections and `paletteTransparencyLookup[a][b] = 5a + 3b + 1`, so
 the hashes cover blended output and argument order without game data.
 
-Recorded before any hybrid-lighting change to
+Recorded on T0's merge commit (`876986a9e`) before any change to
 `Source/engine/render/dun_render.cpp`; classic output must stay byte-identical
 across the hybrid lighting work. Re-record only for an intentional classic
 rendering change:
@@ -109,7 +109,7 @@ DUN_RENDER_GOLDEN_RECORD=$PWD/../test/fixtures/dun_render/goldens.tsv ./dun_rend
 ## Known pre-existing behaviour preserved by the goldens
 
 The `Left`/`Right` prefix masks do not reproduce the unclipped blend cut-out on
-some clipped frames (measured before the hybrid lighting work):
+some clipped frames (measured on the T0 tree, `876986a9e`):
 
 * `RenderTrapezoidUpperHalfClip*` seed the prefix from
   `InitPrefix<Mask>(clip.bottom)` while the upper half starts at frame row 16,

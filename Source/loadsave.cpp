@@ -637,7 +637,11 @@ void LoadPlayer(LoadHelper &file, Player &player)
 	player.pDiabloKillLevel = file.NextLE<uint32_t>();
 	sgGameInitInfo.nDifficulty = static_cast<_difficulty>(file.NextLE<uint32_t>());
 	player.pDamAcFlags = static_cast<ItemSpecialEffectHf>(file.NextLE<uint32_t>());
-	file.Skip(20); // Available bytes
+	FreeTownPortalSaveState freeTownPortalState;
+	for (uint8_t &byte : freeTownPortalState)
+		byte = file.NextLE<uint8_t>();
+	player.lastFreeTownPortalSection = DecodeFreeTownPortalState(freeTownPortalState, currlevel, setlevel);
+	file.Skip(16); // Remaining available bytes; player/save layout is unchanged.
 	CalcPlrInv(player, false);
 
 	player.executedSpell = player.queuedSpell; // Ensures backwards compatibility
@@ -1490,7 +1494,9 @@ void SavePlayer(SaveHelper &file, const Player &player)
 	file.WriteLE<uint32_t>(player.pDiabloKillLevel);
 	file.WriteLE<uint32_t>(sgGameInitInfo.nDifficulty);
 	file.WriteLE<uint32_t>(static_cast<uint32_t>(player.pDamAcFlags));
-	file.Skip(20); // Available bytes
+	for (const uint8_t byte : EncodeFreeTownPortalState(player.lastFreeTownPortalSection))
+		file.WriteLE<uint8_t>(byte);
+	file.Skip(16); // Remaining available bytes; legacy readers skip all twenty.
 
 	// Omit pointer _pNData
 	// Omit pointer _pWData
@@ -2680,6 +2686,8 @@ std::expected<void, std::string> LoadGame(bool firstflag)
 		}
 	}
 
+	// Saved trap missiles never override the current free-portal option or endpoint.
+	RefreshFreeTownPortal();
 	SetUpMissileAnimationData();
 	RedoMissileFlags();
 	gbProcessPlayers = IsDiabloAlive(!firstflag);

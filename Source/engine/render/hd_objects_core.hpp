@@ -1,7 +1,7 @@
 /**
  * @file hd_objects_core.hpp
  *
- * Engine-independent parts of the opt-in HD dungeon object sprites:
+ * Engine-independent parts of the opt-in HD dungeon object sprites (DamnationX HD runtime contract v1, section 3):
  * the hd/objects.txt parser and the choice of HD clip and frame for an object's classic CEL frame and animation state.
  *
  * Nothing here touches game state, SDL or WebGPU so it is covered by native unit tests (test/hd_objects_test.cpp).

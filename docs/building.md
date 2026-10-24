@@ -41,8 +41,9 @@ The Emdawnwebgpu/WebGPU renderer path and its WGSL shaders are built by the
 `-DDEVILUTIONX_WEBGPU=ON` configuration described under "Emscripten" below; the
 browser Wasm (`wasmi`) mod host is a target, not yet shipped. The browser
 supports single-player only: game data is imported at runtime with the in-page
-File Manager, and saves persist to IndexedDB. The lobby and relay services that
-online play connects to are not part of this repository.
+File Manager, and saves persist to IndexedDB. The native WebSocket relay service
+is built separately from `Packaging/relay/` and proxied over `wss://` in
+production; the browser relay client is not yet implemented.
 
 ## Native WebGPU (Dawn) on macOS, Windows, Linux, and Android
 
@@ -669,7 +670,7 @@ There are two Emscripten configurations with different toolchain requirements:
 
 * **Default (SDL/legacy presentation):** any recent Emscripten SDK works.
 * **WebGPU (`-DDEVILUTIONX_WEBGPU=ON`):** enables the WebGPU presenter and the
-  2.5D hybrid lighting path. It needs
+  2.5D hybrid lighting path (`docs/design/hybrid-2p5d-lighting.md`). It needs
   Emscripten **4.0.11 or newer** (`DEVILUTIONX_WEBGPU_EMSCRIPTEN_VERSION`,
   `CMake/Dependencies.cmake`) and the pinned Emdawnwebgpu port described below.
 
