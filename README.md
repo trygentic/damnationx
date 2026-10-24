@@ -13,15 +13,26 @@ Beta 8 adds a desktop launcher and the native 3D Resurrect Update, built on the 
 
 The launcher selects your game executable and Diablo data, installs local HD packs, and converts art and sounds from your own Diablo II: Resurrected installation. Imported game assets stay on your computer. See the [release notes](https://github.com/trygentic/damnationx/releases/tag/v1.6.0-beta.8) for the files available in this beta and their requirements.
 
-The browser build at [damnationx.net](https://damnationx.net) uses the separate C++ WASM/WebGPU renderer. Native 3D engine features are not available in that build. Windows, Linux and Android downloads from beta 7 remain available on their release page.
+The browser build at [damnationx.net](https://damnationx.net) uses the separate C++ WASM/WebGPU renderer. Native 3D engine features are not available in that build. Android remains on beta 7; its download is on that release page.
 
-## Desktop launcher
+## Install the game and launcher
 
-Extract the launcher package into a writable directory and keep its resources beside the executable. Select the native game executable, then the folder containing your own `DIABDAT.MPQ`. Install your local HD pack under Asset library. D2R conversion requires an owned installation; the launcher shows any Python or helper requirements before importing.
+Each desktop download combines the native game and launcher. Extract the complete archive into a writable folder and keep its files together.
+
+| Platform | Beta 8 package | Requirements |
+| --- | --- | --- |
+| Windows (build in progress) | `damnationx-game-and-launcher-1.6.0-beta.8-windows-x64.zip` is not attached yet | 64-bit Windows 10 or later, with a GPU and driver that support Direct3D 12 or Vulkan |
+| Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-x64.tar.gz` | Ubuntu 24.04 or a compatible system with glibc 2.39 or later, X11 or Wayland, and a Vulkan driver |
+| Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-arm64.tar.gz` | The same Linux requirements, on 64-bit ARM hardware |
+| macOS | `damnationx-game-and-launcher-1.6.0-beta.8-macos26.2-arm64.tar.gz` | Apple Silicon and macOS 26.2 or later |
+
+Run `launcher.exe` on Windows, or open a terminal in the extracted folder and run `./launcher` on Linux or macOS. The launcher finds the neighboring game executable. Select the folder containing your own `DIABDAT.MPQ`, install an optional local HD pack under Asset library, then press Play. D2R conversion requires an owned installation; the launcher shows any Python or helper requirements before importing.
+
+The macOS binaries are ad-hoc signed and are not notarized by Apple. If the system blocks them, use macOS Privacy & Security to approve the application you downloaded.
 
 The native runtime starts with ray tracing disabled. You can enable it on supported GPUs, choose a hero model per character, or switch to Classic or HD 2D. The new pause menu supports mouse, keyboard and controller. Singleplayer pauses while it is open; multiplayer stays live.
 
-The platform instructions below describe the legacy C++ builds. The standalone launcher can start a legacy executable as well as the native 3D runtime. Building the public source does not build the proprietary native engine.
+The platform instructions below describe the legacy C++ builds. The launcher can start a legacy executable as well as the native 3D runtime. Building the public source does not build the proprietary native engine.
 
 ## You need the Diablo game data
 
@@ -31,7 +42,7 @@ DamnationX doesn't include Diablo's art, music or sounds. You need `DIABDAT.MPQ`
 - The original CD: the file is on the disc.
 - No copy? `spawn.mpq` from the [shareware version](https://github.com/diasurgical/devilutionx-assets/releases/latest/download/spawn.mpq) lets you play the shareware part of the game.
 
-## Play on macOS
+## Legacy C++ build on macOS
 
 This build needs an Apple Silicon Mac (M1 or newer) running macOS 26 or later.
 
@@ -67,7 +78,7 @@ If you use another web server, make sure it sends `.wasm` files as `application/
 
 A copy you host yourself is for single player. For online games, play at [damnationx.net](https://damnationx.net) or use the macOS app.
 
-## Play on Windows
+## Legacy C++ build on Windows
 
 The Windows build needs 64-bit Windows 10 or later and a graphics card with Direct3D 12.
 
@@ -77,7 +88,7 @@ The Windows build needs 64-bit Windows 10 or later and a graphics card with Dire
 
 Keep `d3dcompiler_47.dll` next to the exe. Without it the game starts with the classic graphics and no HD.
 
-## Play on Linux
+## Legacy C++ build on Linux
 
 There are builds for x86_64 and for 64-bit ARM (aarch64). They need glibc 2.38 or newer (Ubuntu 24.04, Debian 13, Fedora 39 or later), an X11 or Wayland desktop, and a working Vulkan driver. On Debian and Ubuntu that means `libvulkan1` and `mesa-vulkan-drivers`, or the NVIDIA driver. SDL is built in, so you don't need to install it.
 
@@ -87,7 +98,7 @@ There are builds for x86_64 and for 64-bit ARM (aarch64). They need glibc 2.38 o
 
 If you'd rather use your package manager, the release also has `.deb` and `.rpm` packages. If Vulkan doesn't work on your machine, `./devilutionx --no-webgpu` starts the game with the classic graphics.
 
-## Play on Android
+## Legacy C++ build on Android
 
 The Android build needs Android 7.0 or later on a 64-bit ARM or x86_64 device with Vulkan.
 

@@ -32,6 +32,7 @@ endif()
 # manifest can name their files.
 find_package(ZLIB QUIET)
 find_package(BZip2 QUIET)
+find_package(PNG QUIET)
 
 # Collects the link closure of `target` (static/shared libraries, flags) into `out_var`, depth first, without the
 # object libraries whose objects are already inside the archive.

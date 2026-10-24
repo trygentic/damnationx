@@ -162,6 +162,12 @@ endif()
 set(DEVILUTIONX_RELEASE_ID "${DEVILUTIONX_RELEASE_NAMESPACE}-${DEVILUTIONX_RELEASE_VERSION}-${DEVILUTIONX_RELEASE_COMMIT}" CACHE INTERNAL "Validated immutable release identity")
 message(STATUS "Validated release identity: ${DEVILUTIONX_RELEASE_ID}")
 
+# Native host bundles also consume this contract when CPack is disabled.
+configure_file(
+  "${PROJECT_SOURCE_DIR}/Packaging/release-manifest.ini.in"
+  "${CMAKE_BINARY_DIR}/release-manifest.ini"
+  @ONLY)
+
 # Platform definitions can override options and we want `cmake_dependent_option` to see the effects.
 # Note that a few options are still defined before this because they're needed by `VcPkgManifestFeatures.cmake`.
 include(Platforms)
@@ -967,10 +973,6 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
   # Ship provenance without proprietary game data. Runtime libraries and their
   # notices are supplied by the platform/package manager or explicit install
   # rules above; this contract makes the release identity auditable.
-  configure_file(
-    "${PROJECT_SOURCE_DIR}/Packaging/release-manifest.ini.in"
-    "${CMAKE_BINARY_DIR}/release-manifest.ini"
-    @ONLY)
   install(FILES "${CMAKE_BINARY_DIR}/release-manifest.ini" DESTINATION ".")
   include(CPack)
 endif()
