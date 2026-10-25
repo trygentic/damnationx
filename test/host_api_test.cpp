@@ -925,14 +925,23 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		EXPECT_GT(checkedStairs, 0);
 	}
 
-	// A walkable tile a few steps from the player to walk to.
+	// A walkable tile outside the host's generous object pick area. Otherwise
+	// this walking check can open a nearby door and legitimately rebuild geometry.
 	const Point start = MyPlayer->position.tile;
 	Point target = start;
+	const auto hasNearbyObject = [](Point candidate) {
+		for (const Displacement offset : { Displacement { 0, 0 }, Displacement { 1, 1 }, Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { 2, 2 } }) {
+			const Object *object = FindObjectAtPosition(candidate + offset);
+			if (object != nullptr && object->canInteractWith())
+				return true;
+		}
+		return false;
+	};
 	for (int radius = 4; radius >= 2 && target == start; --radius) {
 		for (const Displacement step : { Displacement { radius, 0 }, Displacement { 0, radius }, Displacement { -radius, 0 }, Displacement { 0, -radius },
 		         Displacement { radius, radius }, Displacement { -radius, -radius } }) {
 			const Point candidate = start + step;
-			if (InDungeonBounds(candidate) && IsTileWalkable(candidate) && PosOkPlayer(*MyPlayer, candidate)) {
+			if (InDungeonBounds(candidate) && IsTileWalkable(candidate) && PosOkPlayer(*MyPlayer, candidate) && !hasNearbyObject(candidate)) {
 				target = candidate;
 				break;
 			}
