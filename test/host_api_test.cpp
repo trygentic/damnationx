@@ -1408,15 +1408,20 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		// The nearest living monster of the level, moved a few tiles from the hero into its light (exploring the level
 		// for one is not what this checks; a monster created from scratch lacked parts of its graphics).
 		Point spawnAt = MyPlayer->position.tile;
-		for (const Displacement step : { Displacement { 3, 0 }, Displacement { 0, 3 }, Displacement { -3, 0 }, Displacement { 0, -3 },
-		         Displacement { 2, 2 }, Displacement { -2, -2 }, Displacement { 2, -2 }, Displacement { -2, 2 } }) {
-			const Point candidate = MyPlayer->position.tile + step;
-			if (InDungeonBounds(candidate) && IsTileWalkable(candidate) && dMonster[candidate.x][candidate.y] == 0 && dPlayer[candidate.x][candidate.y] == 0) {
-				spawnAt = candidate;
-				break;
+		for (int radius = 1; radius <= 3 && spawnAt == MyPlayer->position.tile; ++radius) {
+			for (const Displacement step : { Displacement { radius, 0 }, Displacement { 0, radius }, Displacement { -radius, 0 }, Displacement { 0, -radius } }) {
+				const Point candidate = MyPlayer->position.tile + step;
+				int8_t path[MaxPathLengthPlayer];
+				if (InDungeonBounds(candidate) && IsTileWalkable(candidate) && IsTileLit(candidate)
+				    && dMonster[candidate.x][candidate.y] == 0 && dPlayer[candidate.x][candidate.y] == 0
+				    && LineClearMissile(MyPlayer->position.tile, candidate)
+				    && FindPath(CanStep, [](Point tile) { return PosOkPlayer(*MyPlayer, tile); }, MyPlayer->position.future, candidate, path, MaxPathLengthPlayer) != 0) {
+					spawnAt = candidate;
+					break;
+				}
 			}
 		}
-		ASSERT_NE(spawnAt, MyPlayer->position.tile) << "no free tile next to the hero";
+		ASSERT_NE(spawnAt, MyPlayer->position.tile) << "no reachable, lit tile in line of sight next to the hero";
 		Monster *spawned = nullptr;
 		int best = 1 << 30;
 		for (size_t i = 0; i < ActiveMonsterCount; ++i) {
@@ -1431,7 +1436,8 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		}
 		ASSERT_NE(spawned, nullptr) << "no monster on this level";
 		M_ClearSquares(*spawned);
-		spawned->position.tile = spawned->position.future = spawned->position.old = spawnAt;
+		spawned->position.tile = spawned->position.future = spawned->position.old = spawned->position.temp = spawnAt;
+		spawned->position.ResetFreeform();
 		dMonster[spawnAt.x][spawnAt.y] = static_cast<int16_t>(spawned->getId() + 1);
 		if (spawned->lightId != NO_LIGHT)
 			ChangeLightXY(spawned->lightId, spawnAt);
@@ -1439,6 +1445,17 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		const uint32_t target = (static_cast<uint32_t>(HostEntityKind::Monster) << 24) | (static_cast<uint32_t>(spawned->getId()) + 1);
 
 		HostSetRenderMode(HostRenderMode::Classic);
+		HostSnapshot();
+		const HostView2DFrame &initialView = HostView2DSnapshot();
+		bool initiallyVisible = false;
+		for (uint32_t r = 0; r < initialView.rectCount; ++r) {
+			const HostEntityScreenRect &rect = initialView.rects[r];
+			if (rect.entityId == target && rect.w > 0 && rect.h > 0
+			    && rect.x + rect.w / 2 >= 0 && rect.x + rect.w / 2 < initialView.view.viewportW
+			    && rect.y + rect.h / 2 >= 0 && rect.y + rect.h / 2 < initialView.view.viewportH)
+				initiallyVisible = true;
+		}
+		ASSERT_TRUE(initiallyVisible) << "Classic click fixture requires a visible, on-screen monster before clicking";
 		const uint32_t experienceBefore = MyPlayer->_pExperience;
 		int clicks = 0;
 		bool sawTarget = false;
@@ -1481,6 +1498,14 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		EXPECT_TRUE(sawTarget) << "the spawned monster has no screen rectangle";
 		EXPECT_GT(MyPlayer->_pExperience, experienceBefore) << "Classic clicks on the monster did not kill it (" << clicks << " clicks)";
 		std::cout << "[  NOTE    ] Classic kill: " << clicks << " clicks, experience " << experienceBefore << " -> " << MyPlayer->_pExperience << "\n";
+		// A kill can end the loop on its mouse-down frame. Complete that input
+		// gesture before the independent checkpoint walk starts a new click.
+		HostInputFrame release = EmptyInput(nullptr);
+		release.inputFlags = kInputNoWorldPick;
+		release.buttonsReleased = static_cast<uint32_t>(HostButton::Primary);
+		HostSubmitInput(release);
+		ASSERT_EQ(HostTick(50).quitRequested, 0);
+		ASSERT_EQ(sgbMouseDown, CLICK_NONE);
 		HostSetRenderMode(HostRenderMode::World3D);
 		HostSnapshot();
 	}
@@ -1513,12 +1538,24 @@ TEST(HostApi, HundredTicksInTheCathedral)
 
 		// Walk somewhere else.
 		Point away = savedTile;
-		for (const Displacement step : { Displacement { 3, 0 }, Displacement { 0, 3 }, Displacement { -3, 0 }, Displacement { 0, -3 } }) {
-			if (IsTileWalkable(savedTile + step) && PosOkPlayer(*MyPlayer, savedTile + step)) {
-				away = savedTile + step;
-				break;
+		for (int radius = 3; radius <= 5 && away == savedTile; ++radius) {
+			for (const Displacement step : { Displacement { radius, 0 }, Displacement { 0, radius }, Displacement { -radius, 0 }, Displacement { 0, -radius } }) {
+				const Point candidate = savedTile + step;
+				int8_t path[MaxPathLengthPlayer];
+				if (!InDungeonBounds(candidate) || !IsTileWalkable(candidate) || !PosOkPlayer(*MyPlayer, candidate) || hasNearbyObject(candidate)
+				    || FindPath(CanStep, [](Point tile) { return PosOkPlayer(*MyPlayer, tile); }, MyPlayer->position.future, candidate, path, MaxPathLengthPlayer) == 0)
+					continue;
+				HostInputFrame probe = EmptyInput(nullptr);
+				probe.hoverTileX = candidate.x;
+				probe.hoverTileY = candidate.y;
+				HostSubmitInput(probe);
+				if (pcursmonst == -1 && pcursitem == -1 && ObjectUnderCursor == nullptr && PlayerUnderCursor == nullptr && WalkTarget(candidate) == candidate) {
+					away = candidate;
+					break;
+				}
 			}
 		}
+		ASSERT_NE(away, savedTile) << "checkpoint fixture requires a reachable ground-only walk target";
 		for (int frame = 0; frame < 40; ++frame) {
 			HostInputFrame input = EmptyInput(nullptr);
 			input.hoverTileX = away.x;
