@@ -579,6 +579,28 @@ fn game_status(path: Option<&Path>) -> AssetStatus {
     AssetStatus::result(canonical.or_else(|| Some(path.to_path_buf())), result)
 }
 
+fn base_archive_name(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| {
+        let name = name.to_string_lossy();
+        name.eq_ignore_ascii_case("diabdat.mpq") || name.eq_ignore_ascii_case("spawn.mpq")
+    })
+}
+
+fn base_archive_status(path: &Path) -> Result<String, String> {
+    regular_file(path)?;
+    let mut header = [0; 4];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .map_err(|error| error.to_string())?;
+    if header != *b"MPQ\x1a" && header != *b"MPQ\x1b" {
+        return Err("Base archive has no MPQ signature".into());
+    }
+    Ok(format!(
+        "Owned base archive: {}",
+        path.file_name().unwrap().to_string_lossy()
+    ))
+}
+
 fn base_status(path: Option<&Path>) -> AssetStatus {
     let Some(path) = path else {
         return AssetStatus::result(
@@ -586,34 +608,35 @@ fn base_status(path: Option<&Path>) -> AssetStatus {
             Err("Choose the folder with DIABDAT.MPQ or SPAWN.MPQ".into()),
         );
     };
-    let root = if path.is_file() {
+    let explicit_archive = path.is_file();
+    let root = if explicit_archive {
         path.parent().unwrap_or(path)
     } else {
         path
     };
     let result = (|| {
+        // A selected file may be readable while its directory cannot be listed
+        // (for example, a macOS privacy guard or a searchable-only Unix folder).
+        if explicit_archive {
+            if !base_archive_name(path) {
+                return Err("Choose DIABDAT.MPQ or SPAWN.MPQ".into());
+            }
+            return base_archive_status(path);
+        }
+        for name in ["DIABDAT.MPQ", "diabdat.mpq", "SPAWN.MPQ", "spawn.mpq"] {
+            let candidate = root.join(name);
+            match fs::symlink_metadata(&candidate) {
+                Ok(_) => return base_archive_status(&candidate),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        // Preserve mixed-case archive discovery on case-sensitive filesystems
+        // only when none of the standard filenames is present.
         for entry in fs::read_dir(root).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
-            if matches!(
-                entry
-                    .file_name()
-                    .to_string_lossy()
-                    .to_ascii_lowercase()
-                    .as_str(),
-                "diabdat.mpq" | "spawn.mpq"
-            ) {
-                regular_file(&entry.path())?;
-                let mut header = [0; 4];
-                File::open(entry.path())
-                    .and_then(|mut f| f.read_exact(&mut header))
-                    .map_err(|e| e.to_string())?;
-                if header != *b"MPQ\x1a" && header != *b"MPQ\x1b" {
-                    return Err("Base archive has no MPQ signature".into());
-                }
-                return Ok(format!(
-                    "Owned base archive: {}",
-                    entry.file_name().to_string_lossy()
-                ));
+            if base_archive_name(&entry.path()) {
+                return base_archive_status(&entry.path());
             }
         }
         Err("DIABDAT.MPQ or SPAWN.MPQ not found".into())
@@ -918,6 +941,54 @@ pub fn python_candidates() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_base_archive_is_checked_directly_and_mixed_case_folder_fallback_works() {
+        let temp = tempfile::tempdir().unwrap();
+        let selected = temp.path().join("SpAwN.MpQ");
+        fs::write(&selected, b"MPQ\x1bowned fixture").unwrap();
+        let explicit = base_status(Some(&selected));
+        assert!(explicit.ready, "{}", explicit.detail);
+        assert!(explicit.detail.contains("SpAwN.MpQ"));
+        assert_eq!(explicit.path.as_deref(), Some(temp.path()));
+        assert!(base_status(Some(temp.path())).ready);
+        fs::write(temp.path().join("unrelated.mpq"), b"MPQ\x1aowned fixture").unwrap();
+        assert!(!base_status(Some(&temp.path().join("unrelated.mpq"))).ready);
+        fs::write(&selected, b"not an archive").unwrap();
+        assert!(!base_status(Some(&selected)).ready);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn base_archive_does_not_require_listing_a_searchable_only_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        struct RestorePermissions {
+            path: PathBuf,
+            permissions: fs::Permissions,
+        }
+        impl Drop for RestorePermissions {
+            fn drop(&mut self) {
+                fs::set_permissions(&self.path, self.permissions.clone()).unwrap();
+            }
+        }
+
+        for name in ["DIABDAT.MPQ", "diabdat.mpq", "SPAWN.MPQ", "spawn.mpq"] {
+            let temp = tempfile::tempdir().unwrap();
+            let archive = temp.path().join(name);
+            fs::write(&archive, b"MPQ\x1aowned fixture").unwrap();
+            let _restore = RestorePermissions {
+                path: temp.path().to_path_buf(),
+                permissions: fs::metadata(temp.path()).unwrap().permissions(),
+            };
+            fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o111)).unwrap();
+            // Root may still enumerate it; ordinary user runs exercise the
+            // distinction between opening a known file and listing its folder.
+            let explicit = base_status(Some(&archive));
+            let folder = base_status(Some(temp.path()));
+            assert!(explicit.ready, "{name}: {}", explicit.detail);
+            assert!(folder.ready, "{name}: {}", folder.detail);
+        }
+    }
 
     #[test]
     fn sound_pack_needs_completed_manifest_and_audio_bytes() {
