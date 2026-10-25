@@ -107,6 +107,8 @@ enum HostInputFlag : uint32_t {
 	 */
 	kInputNoWorldPick = 1U << 0,
 	kInputToggleRun = 1U << 1,
+	/** Toggle the first-person camera mode (Graphics > Camera Mode), like the game's ToggleFirstPerson key action. */
+	kInputToggleFirstPerson = 1U << 2,
 };
 
 struct HostTickResult {
@@ -166,7 +168,7 @@ struct HostEntity {
 	uint32_t typeId;
 	uint32_t variant;   // player: armor/weapon class bits; monster: unique id + 1 or 0; item: unique/magic tier
 	float x, y, z;
-	uint16_t anim;      // player_graphic / MonsterGraphic / object frame set, per kind
+	uint16_t anim;      // player_graphic / MonsterGraphic / object frame set; chests: 0 closed, 2 open
 	uint16_t frame;     // current frame within anim
 	uint16_t frameCount;
 	uint16_t lightRadius; // 0 for none
@@ -544,6 +546,42 @@ struct HostEntityArt {
 /** Sprite art and model clips for the entities of the last HostSnapshot. Pointers stay valid until the next HostTick. */
 const HostEntityArt &HostEntityArtSnapshot();
 
+/**
+ * The HD pack's 2D frame of an entity (additive, no version bump: a host that does not call HostEntityHdArtSnapshot
+ * sees nothing new): the clip frame and recolour the Hd2D view draws for a towner, monster or player body, chosen the
+ * same way but outside a world pass. Listed only when the pack's hd/sprites.txt has art for the entity (and Graphics >
+ * HD Graphics is on); every other entity keeps its classic HostEntitySprite.
+ *
+ * Same billboard convention as HostEntitySprite, in HD pixels: `scale` HD pixels per classic pixel (the pack's 4x),
+ * the cell horizontally placed with `anchorX` on the entity and the entity's ground `anchorY` pixels below the
+ * cell's top edge (the clip pivot plus the classic frame's offset between its feet and HostEntitySprite::anchorY), so
+ * dividing by `scale` gives the size and anchor the classic frame would have.
+ */
+struct HostEntityHdSprite {
+	uint32_t entityId;
+	uint32_t clip;                // index of the clip in hd/sprites.txt (stable for the run): one sheet per clip
+	float srcX, srcY, srcW, srcH; // the frame's cell in texels of the full-size sheet
+	uint32_t sheetWidth;          // the full-size sheet (cols x cell width by rows x cell height)
+	uint32_t sheetHeight;
+	float anchorX;                // HD pixels from the cell's left edge to the entity
+	float anchorY;                // HD pixels from the cell's top edge to the entity's ground
+	float scale;                  // HD pixels per classic pixel
+	float tint[3];                // per channel multiplier after the desaturation (identity: 1)
+	float saturation;             // 1: unchanged, 0: grey (luma)
+	uint32_t flags;               // HostHdDrawFlag: kHdSelfLit
+	const char *path;             // the sheet file (PNG/WebP in the HD pack folder)
+};
+static_assert(sizeof(HostEntityHdSprite) == 64 + sizeof(void *));
+
+struct HostEntityHdArt {
+	const HostEntityHdSprite *sprites; // entities of the last HostSnapshot drawn with HD 2D art
+	uint32_t spriteCount;
+	uint32_t reserved;
+};
+
+/** HD 2D frames of the entities of the last HostSnapshot. Pointers stay valid until the next HostTick. */
+const HostEntityHdArt &HostEntityHdArtSnapshot();
+
 // =====================================================================================================================
 // Version 5: UI state, 2D view geometry, audio settings, state checkpoints
 // =====================================================================================================================
@@ -603,6 +641,14 @@ struct HostView2D {
 	int32_t viewportX, viewportY, viewportW, viewportH; // the world area of the UI layer (the panel lies below)
 };
 static_assert(sizeof(HostView2D) == 48);
+
+/**
+ * World3D: the host camera, for the overlays the game draws over the world in screen space (the ground item labels
+ * of Alt / Show Item Labels). `screenFromWorld` is a column-major 4x4 matrix taking a world point (x east, y up,
+ * z south, w = 1; the units of HostEntity) to homogeneous UI-layer pixels: screen = (r.x / r.w, r.y / r.w), in front
+ * of the camera when r.w > 0. nullptr forgets it (no labels). Call between ticks; later frames use it.
+ */
+void HostSetWorldView(const float *screenFromWorld);
 
 /**
  * Where an entity's classic sprite lies in the UI layer (2D modes): its frame centred on the feet with the bottom row
@@ -669,6 +715,9 @@ bool HostLoadState(const uint8_t *data, uint32_t size);
  * hero is drawn with). Valid until the next HostTick.
  */
 const char *HostHeroName();
+/** Text the game wants on the OS clipboard (a lobby invite link), or ""; taking it clears it. Valid until the
+ * next call. */
+const char *HostTakeClipboardText();
 /** Base item mesh name for a player's weapon (slot 0) or shield (slot 1), e.g. Short_Sword / Buckler.
  * Empty for no item or an invalid entity/slot. Copy before the next call; between ticks only. */
 const char *HostPlayerEquipmentName(uint32_t entityId, uint32_t slot);
@@ -718,10 +767,21 @@ static_assert(sizeof(HostHudState) == 212);
 /** Read on the host thread between ticks, like HostSnapshot; owns all its data. */
 HostHudState HostHudStateSnapshot();
 
+/** Copy the core's UTF-8 hover description into a NUL-terminated buffer. Returns UiFlags text colour.
+ * Separate from HostHudState so the existing snapshot layout remains stable. */
+uint32_t HostHoverInfo(uint8_t *text, uint32_t capacity);
+
 /** Presentation only; default visible. A change marks the UI for full redraw on the next tick. */
 void HostSetHudVisible(bool visible);
 
 /** Toggle the local run preference between ticks. Returns false outside a game, when disabled, dead, or multiplayer. */
 bool HostToggleRun();
+
+/**
+ * Whether the hero voices (sfx\warrior\, sfx\rogue\, sfx\sorceror\, sfx\monk\) come from the imported Diablo II
+ * sound packs. The host passes true only while the local hero is drawn with a D2R model; the default (false) plays the
+ * game's own class voice. Other imported sounds are unaffected. Takes effect for the next asset lookup (HostReadAsset).
+ */
+void HostSetHeroVoiceD2(bool d2);
 
 } // namespace devilution::host

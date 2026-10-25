@@ -8,13 +8,16 @@
 #include "host/host_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <optional>
 #include <unordered_map>
 
 #include "cursor.h"
 #include "engine/freeform_movement.hpp"
 #include "engine/path.h"
+#include "engine/render/ui_scale.hpp"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
@@ -26,6 +29,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "qol/itemlabels.h"
 #include "render3d/world_level.hpp"
 #include "tables/misdat.h"
 #include "tables/itemdat.h"
@@ -221,6 +225,10 @@ void AddObjects()
 		FillCommon(entity, HostEntityKind::Object, static_cast<uint32_t>(id),
 		    { static_cast<float>(object.position.x) + 0.5F, static_cast<float>(object.position.y) + 0.5F }, 0.0F);
 		entity.typeId = static_cast<uint32_t>(object._otype);
+		// Classic chests jump directly between closed/open sprite poses; their
+		// frame number also encodes an art variant, not opening animation time.
+		if (object.IsChest())
+			entity.anim = object.canInteractWith() ? 0 : 2;
 		if (object.IsBroken())
 			entity.flags |= kEntityDead;
 		entity.frame = ClampU16(static_cast<int>(object._oAnimFrame));
@@ -416,6 +424,50 @@ const std::vector<EntitySpriteSource> &SnapshotSprites()
 void ResetSnapshot()
 {
 	SoundsDelivered = false;
+}
+
+namespace {
+
+/** HostSetWorldView: the host camera as UI-layer pixels from world points (column-major), when it sent one. */
+std::optional<std::array<float, 16>> WorldView;
+
+} // namespace
+
+void HostSetWorldView(const float *screenFromWorld)
+{
+	if (screenFromWorld == nullptr) {
+		WorldView = std::nullopt;
+		return;
+	}
+	WorldView.emplace();
+	std::copy_n(screenFromWorld, 16, WorldView->begin());
+}
+
+void QueueWorldItemLabels(int width, int height)
+{
+	if (!WorldView || !IsHighlightingLabelsEnabled())
+		return;
+	const std::array<float, 16> &m = *WorldView;
+	for (uint8_t i = 0; i < ActiveItemCount; ++i) {
+		const int id = ActiveItems[i];
+		const Item &item = Items[id];
+		// As the isometric pass: items it does not leave in the dark, once their drop animation has landed.
+		if (!InDungeonBounds(item.position) || (leveltype != DTYPE_TOWN && !IsTileLit(item.position))
+		    || !(item.AnimInfo.isLastFrame() || item._iCurs == ICURS_MAGIC_ROCK))
+			continue;
+		// The label sits half a tile above the item, where the classic one rises above its sprite.
+		const float x = static_cast<float>(item.position.x) + 0.5F;
+		const float z = static_cast<float>(item.position.y) + 0.5F;
+		const float y = render3d::FloorHeightOf(Level, x, z) + 0.5F;
+		const float w = m[3] * x + m[7] * y + m[11] * z + m[15];
+		if (w <= 1e-4F)
+			continue;
+		const float sx = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+		const float sy = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+		if (!(sx >= 0 && sx < static_cast<float>(width) && sy >= 0 && sy < static_cast<float>(height)))
+			continue;
+		AddItemToLabelQueueAt(id, ScreenToUi({ static_cast<int>(sx), static_cast<int>(sy) }));
+	}
 }
 
 const HostFrame &BuildSnapshot()

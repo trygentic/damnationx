@@ -28,7 +28,7 @@ enum class Direction : std::uint8_t;
 namespace fpv {
 
 constexpr float kEyeHeight = 0.62F;          // world units above floor
-constexpr float kWallHeight = 1.0F;          // dungeon wall height in world units
+constexpr float kWallHeight = 1.6F;          // dungeon wall height in world units (~2.4x the hero)
 constexpr float kWarriorMetersToWorld = 0.36F; // 1.85 m -> ~0.67 tiles tall
 constexpr float kDefaultFovYDeg = 70.0F;     // ~95 deg horizontal at 16:9
 

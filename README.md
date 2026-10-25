@@ -1,143 +1,93 @@
 # DamnationX
-<p align="center">
-  <img width="512" height="768"  alt="image" src="https://github.com/user-attachments/assets/64de5c9a-e64f-4c9c-8c89-ede3522c0b18" />
-</p>
 
-DamnationX is a build of [DevilutionX](https://github.com/diasurgical/devilutionX), the open source port of Diablo. It adds optional HD art drawn with WebGPU, a lobby for playing online, and sound packs you can import from your own copy of Diablo II or Diablo II: Resurrected.
+DamnationX is a build of [DevilutionX](https://github.com/diasurgical/devilutionX) with optional HD art, a native 3D runtime, an online lobby and sound packs imported from your own copy of Diablo II or Diablo II: Resurrected.
 
-This repository holds the source code and the release builds. Download the builds from the [Releases](https://github.com/trygentic/damnationx/releases) page.
+Download the game from [Releases](https://github.com/trygentic/damnationx/releases), or play the browser build at [damnationx.net](https://damnationx.net). You must supply your own Diablo game data.
 
-## Latest beta
+## Beta 8 and the next hotfix
 
-Beta 8 adds a desktop launcher and the native 3D Resurrect Update, built on the custom Toxoid game engine. The original game simulation still handles combat, quests and saves. The native runtime supports 3D, Classic and HD 2D modes. Toxoid is proprietary and ships only compiled into the native game; its source is not included here.
+Beta 8 is the latest published release. Beta 8.1 is being prepared and fixes Windows asset paths and Python discovery, restores enemy and item hover information, improves 3D targeting, and keeps chests in the correct closed or open pose. D2R imports include the required Town Portal gradient and can resume after a failure or cancellation. Ground item labels follow the 3D camera; hold Alt or enable Show Item Labels to see them.
 
-The launcher selects your game executable and Diablo data, installs local HD packs, and converts art and sounds from your own Diablo II: Resurrected installation. Imported game assets stay on your computer. See the [release notes](https://github.com/trygentic/damnationx/releases/tag/v1.6.0-beta.8) for the files available in this beta and their requirements.
+The native game supports 3D, Classic and HD 2D rendering. Its Toxoid engine ships as compiled code with a license notice. This repository contains the game core and launcher; it does not contain the proprietary engine implementation.
 
-The browser build at [damnationx.net](https://damnationx.net) uses the separate C++ WASM/WebGPU renderer. Native 3D engine features are not available in that build. Android remains on beta 7; its download is on that release page.
+The browser uses a separate C++ WASM/WebGPU renderer. It supports local HD packs and D2R sound imports, but it does not run the native engine or convert D2R characters and environments. Android remains on beta 7.
 
-## Install the game and launcher
+## Install the desktop game
 
-Each desktop download combines the native game and launcher. Extract the complete archive into a writable folder and keep its files together.
+The table below lists the published beta 8 downloads. Hotfix packages will appear in Releases when beta 8.1 is ready. Each desktop download contains the game and launcher. Extract the complete archive into a writable folder and keep its files together.
 
-| Platform | Beta 8 package | Requirements |
+| Platform | Package | Requirements |
 | --- | --- | --- |
-| Windows | `damnationx-game-and-launcher-1.6.0-beta.8-windows-x64.zip` | 64-bit Windows 10 or later, with a GPU and driver that support Direct3D 12 or Vulkan |
-| Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-x64.tar.gz` | Ubuntu 24.04 or a compatible system with glibc 2.39 or later, X11 or Wayland, and a Vulkan driver |
-| Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-arm64.tar.gz` | The same Linux requirements, on 64-bit ARM hardware |
-| macOS | `damnationx-game-and-launcher-1.6.0-beta.8-macos26.2-arm64.tar.gz` | Apple Silicon and macOS 26.2 or later |
+| Windows | `damnationx-game-and-launcher-1.6.0-beta.8-windows-x64.zip` | 64-bit Windows 10 or later; Direct3D 12 or Vulkan GPU and driver |
+| Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-x64.tar.gz` | Ubuntu 24.04 or compatible; glibc 2.39 or later; X11 or Wayland; Vulkan driver |
+| Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8-linux-arm64.tar.gz` | The same Linux requirements on 64-bit ARM hardware |
+| macOS | `damnationx-game-and-launcher-1.6.0-beta.8-macos26.2-arm64.tar.gz` | Apple Silicon; macOS 26.2 or later |
 
-Run `launcher.exe` on Windows, or open a terminal in the extracted folder and run `./launcher` on Linux or macOS. The launcher finds the neighboring game executable. Select the folder containing your own `DIABDAT.MPQ`, install an optional local HD pack under Asset library, then press Play. D2R conversion requires an owned installation; the launcher shows any Python or helper requirements before importing.
+Run `launcher.exe` on Windows. On Linux or macOS, open a terminal in the extracted folder and run `./launcher`. The launcher finds the neighboring game executable. Select your Diablo data folder, import any optional art or sound packs, then press Play.
 
-The macOS binaries are ad-hoc signed and are not notarized by Apple. If the system blocks them, use macOS Privacy & Security to approve the application you downloaded.
+The macOS package is ad-hoc signed and is not notarized by Apple.
 
-The native runtime starts with ray tracing disabled. You can enable it on supported GPUs, choose a hero model per character, or switch to Classic or HD 2D. The new pause menu supports mouse, keyboard and controller. Singleplayer pauses while it is open; multiplayer stays live.
+Native ray tracing starts disabled. You can enable it on supported GPUs, select a hero model, or switch to Classic or HD 2D. Singleplayer pauses while the pause menu is open; multiplayer continues running.
 
-The platform instructions below describe the legacy C++ builds. The launcher can start a legacy executable as well as the native 3D runtime. Building the public source does not build the proprietary native engine.
+## Supply your Diablo data
 
-## You need the Diablo game data
+The downloads do not include Diablo's art, music or sounds. Choose the folder containing `DIABDAT.MPQ` from a copy you own:
 
-DamnationX doesn't include Diablo's art, music or sounds. You need `DIABDAT.MPQ` from a copy you own:
+- [GOG.com](https://www.gog.com/game/diablo) or Battle.net: find it in the installed game folder. The DevilutionX wiki also explains how to [extract the GOG installer](https://github.com/diasurgical/devilutionX/wiki/Extracting-MPQs-from-the-GoG-installer).
+- Original CD: copy the file from the disc.
+- Shareware: `SPAWN.MPQ` lets you play the shareware part of Diablo.
 
-- Diablo from [GOG.com](https://www.gog.com/game/diablo) or Battle.net: the file is in the game folder. With the GOG installer you can also [extract it](https://github.com/diasurgical/devilutionX/wiki/Extracting-MPQs-from-the-GoG-installer).
-- The original CD: the file is on the disc.
-- No copy? `spawn.mpq` from the [shareware version](https://github.com/diasurgical/devilutionx-assets/releases/latest/download/spawn.mpq) lets you play the shareware part of the game.
+Keep your saves when updating. Extract a new release into a new folder and select the same data folder in its launcher.
 
-## Legacy C++ build on macOS
+## Optional art pack
 
-This build needs an Apple Silicon Mac (M1 or newer) running macOS 26 or later.
+The prepared optional `damnationx-art-pack-20261024-hotfix1.zip` will accompany beta 8.1. It combines the base HD artwork, FREE 3D props, HD 3D props and character models. You do not need to choose a tier: the game selects the installed art automatically. You can play with classic art without downloading this pack.
 
-1. Download `DamnationX-<version>-macos-arm64.zip` from the latest release and unzip it.
-2. Move `DamnationX.app` to your Applications folder.
-3. Copy `DIABDAT.MPQ` into `~/Library/Application Support/diasurgical/devilution/`. In Finder, press Cmd+Shift+G and paste that path. Create the folder if it doesn't exist.
-4. The app isn't signed by Apple, so macOS blocks it the first time. Right-click `DamnationX.app`, choose Open, then confirm. If macOS still refuses, run this once in Terminal:
+In the desktop launcher, open Asset library, choose Import ZIP under HD art pack, and select the archive. Existing packs can be selected with Use folder. If installing by hand, preserve the archive's `hd/` folder structure.
 
-   ```
-   xattr -dr com.apple.quarantine /Applications/DamnationX.app
-   ```
+The pack uses the existing WebP export, with PNG files where that export retains them. The archive includes the notices for its 3D content. It contains no D2R assets.
 
-5. Open the app. Single Player works offline. Multi Player connects to the lobby at `lobby.damnationx.net`.
+## Import Diablo II: Resurrected art
+
+Use Import installed D2R in the desktop launcher and select your owned D2R installation. Converted models, environments, interface art and portal fields remain on your computer.
+
+The importer requires Python 3.11 or later. It checks the saved interpreter and searches for another installed version if that selection is missing or too old. Windows Store execution aliases are skipped. You can choose an interpreter under Launch options > Python. Managed environments are rebuilt when broken; upgrading Python does not require deleting launcher settings in AppData.
+
+The native import helper can be supplied in the package. If it is absent, conversion requires CMake 3.20 or later and a C/C++17 compiler. The launcher creates a Python environment and installs NumPy and Pillow by default, which requires internet access. A failed or cancelled import preserves the previous playable assets and keeps completed conversion work for a retry.
+
+D2R art is optional and independent of the HD pack. The browser cannot run this conversion.
 
 ## Play in a browser
 
-The simplest option is the hosted version at [damnationx.net](https://damnationx.net). Click Game files…, choose your `DIABDAT.MPQ`, then click Play.
+At [damnationx.net](https://damnationx.net), choose your game files and press Play. Use Chrome or Edge with WebGPU enabled.
 
-To host the browser build yourself:
+To host the browser download yourself:
 
-1. Download `DamnationX-<version>-web.zip` and unzip it.
-2. Serve the folder over HTTP. Opening `index.html` straight from disk doesn't work. With Python, for example:
+1. Extract `DamnationX-1.6.0-beta.8-web.zip`.
+2. Serve its folder over HTTP on localhost, or HTTPS on another host. Opening `index.html` directly from disk does not work.
+3. Open the page in Chrome or Edge and select your own game data.
 
-   ```
-   cd DamnationX-<version>-web
-   python3 -m http.server 8000
-   ```
+For a local server:
 
-3. Open `http://localhost:8000` in Chrome or Edge. WebGPU needs a secure context, and `localhost` counts as one. On another host, use HTTPS.
-4. Click Game files…, choose your `DIABDAT.MPQ`, then click Play.
+```sh
+cd DamnationX-1.6.0-beta.8-web
+python3 -m http.server 8000
+```
 
-If you use another web server, make sure it sends `.wasm` files as `application/wasm`.
+Open `http://localhost:8000`. A web server must serve `.wasm` files as `application/wasm`. A copy you host yourself supports singleplayer; use the hosted site or desktop game for the configured online lobby.
 
-A copy you host yourself is for single player. For online games, play at [damnationx.net](https://damnationx.net) or use the macOS app.
+## Diablo II sound packs
 
-## Legacy C++ build on Windows
+The desktop launcher imports both Classic and Remastered sound packs from an owned D2R installation. Select the imported pack under Sounds. The browser can import sounds from a locally selected game folder; use Chrome or Edge for D2R imports. Conversion runs locally and does not upload game files.
 
-The Windows build needs 64-bit Windows 10 or later and a graphics card with Direct3D 12.
+## Build the public game core
 
-1. Download `DamnationX-<version>-windows-x64.zip` and unzip it anywhere.
-2. Copy `DIABDAT.MPQ` into the unzipped folder, next to `devilutionx.exe`. You can also put it in `%APPDATA%\diasurgical\devilution\`.
-3. Run `devilutionx.exe`. The program isn't signed, so Windows SmartScreen may warn you the first time. Click More info, then Run anyway.
+See [docs/building.md](docs/building.md). Native C++ WebGPU builds use `-DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON`; their first configure downloads and builds Dawn. The browser build has its own instructions. Building this repository produces the public C++ client and launcher, not the proprietary native runtime.
 
-Keep `d3dcompiler_47.dll` next to the exe. Without it the game starts with the classic graphics and no HD.
+## Report a problem
 
-## Legacy C++ build on Linux
-
-There are builds for x86_64 and for 64-bit ARM (aarch64). They need glibc 2.38 or newer (Ubuntu 24.04, Debian 13, Fedora 39 or later), an X11 or Wayland desktop, and a working Vulkan driver. On Debian and Ubuntu that means `libvulkan1` and `mesa-vulkan-drivers`, or the NVIDIA driver. SDL is built in, so you don't need to install it.
-
-1. Download `DamnationX-<version>-linux-x86_64.tar.xz` or `DamnationX-<version>-linux-arm64.tar.xz` and extract it.
-2. Copy `DIABDAT.MPQ` into `~/.local/share/diasurgical/devilution/`, or into the extracted folder next to `devilutionx`.
-3. Run `./devilutionx`.
-
-If you'd rather use your package manager, the release also has `.deb` and `.rpm` packages. If Vulkan doesn't work on your machine, `./devilutionx --no-webgpu` starts the game with the classic graphics.
-
-## Legacy C++ build on Android
-
-The Android build needs Android 7.0 or later on a 64-bit ARM or x86_64 device with Vulkan.
-
-1. Download `DamnationX-<version>-android.apk` on the device and open it. Allow installs from your browser or file manager if Android asks.
-2. Open DamnationX (Dev). It asks for the game data the first time: pick your `DIABDAT.MPQ`, or download the shareware data.
-
-This APK is a debug build signed with a development key. It installs as a separate app from earlier betas and from DevilutionX, so you'll need to add your game data again. A later release signed with a different key may need you to uninstall it first. Your files are kept under `Android/data/net.damnationx.dev/`.
-
-## HD art
-
-The HD art pack isn't distributed here. If you have it, here's where each build looks for it. The folder must be named `hd` and contain `sprites.txt`.
-
-- Windows: next to `devilutionx.exe`, or `%APPDATA%\diasurgical\devilution\hd`.
-- Linux: next to `devilutionx`, or `~/.local/share/diasurgical/devilution/hd`.
-- Android: long-press the DamnationX icon and choose Import Data, or tap Import Data on the game data screen, then pick the HD pack zip. The WebP version of the pack is the better fit for phones: it's about 830 MB, against 3 GB for the PNG one. The app unpacks it and shows HD the next time it starts.
-
-If the HD pack has a `3d/warrior` folder inside `hd`, Warriors are drawn as an animated 3D model instead of HD sprites. Settings > Graphics > 3D Warrior Model switches that off.
-
-If the `hd` folder is in place but WebGPU can't start, the game falls back to the classic graphics and says so in the message log. Updating the graphics driver usually fixes that. The HD fonts aren't used yet, so text stays in the classic font.
-
-## Diablo II sounds
-
-DamnationX can replace Diablo's sounds with the ones from Diablo II or Diablo II: Resurrected, if you own either game.
-
-- On macOS, open Settings > Audio and choose a Sound Pack. The game looks for the install, including inside CrossOver and Whisky bottles, and imports the sounds. If it can't find it, set its folder as `Diablo II Path` or `Diablo II Resurrected Path` under `[Audio]` in `diablo.ini`.
-- In the browser, choose a Sound Pack in Settings > Audio, then pick the game folder in the dialog that opens. Use Chrome or Edge for Diablo II: Resurrected. Only the sounds are saved, in your browser.
-
-Nothing from Diablo II is uploaded anywhere.
-
-## Building from source
-
-DamnationX builds the same way as DevilutionX. See [docs/building.md](docs/building.md) for each platform. The HD art needs the WebGPU build. On Windows, macOS and Linux, configure CMake with `-DUSE_SDL3=ON -DDEVILUTIONX_WEBGPU=ON`. The first configure downloads and builds Dawn, which takes a while. For Android, run `./gradlew assembleDebug -Pwebgpu` in `android-project`. The browser build has its own section on that page.
-
-The lobby and relay servers that online games connect to are not part of this repository.
-
-## Reporting problems
-
-Open an issue on this repository. Say which build you used (macOS, Windows, Linux, Android or browser), what you did, and what happened.
+Open an issue with your operating system, package filename, selected art and sound options, steps to reproduce, and the error text or launcher activity log. For targeting problems, include the rendering mode and whether D2R or HD art is enabled.
 
 ## License
 
-DamnationX is based on DevilutionX and is distributed under the [Sustainable Use License](LICENSE.md). Diablo is a trademark of Blizzard Entertainment. This project is not affiliated with or endorsed by Blizzard.
+DamnationX is based on DevilutionX and is distributed free for non-commercial use under the [Sustainable Use License](LICENSE.md). Individual art files and bundled libraries retain their own notices. Diablo and Diablo II: Resurrected are Blizzard Entertainment trademarks. This project is not affiliated with or endorsed by Blizzard Entertainment.

@@ -136,6 +136,8 @@ void FreeControlPan();
 /**
  * Sets a string to be drawn in the info box and then draws it.
  */
+// Refresh names and descriptions independently of the classic HUD drawing.
+void UpdateInfoBox();
 void DrawInfoBox(const Surface &out);
 void DrawFloatingInfoBox(const Surface &out);
 void CheckLevelButton();

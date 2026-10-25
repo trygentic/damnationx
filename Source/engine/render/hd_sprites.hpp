@@ -89,6 +89,27 @@ struct HdSpriteInstance {
 	int outlineColor = -1;
 };
 
+/** Classic pixels between the bottom row of a classic player, towner or monster frame and the HD pivot (the feet). */
+constexpr int HdSpritesPivotAboveClassicBottom = 11;
+
+/**
+ * The HD clip frame standing in for an entity's classic frame, chosen as the world pass chooses it (HdSpritesDrawTowner,
+ * HdSpritesDrawPlayer, HdSpritesDrawMonster) but outside one: an embedding host that draws the world itself (World3D
+ * billboards, host/host_art.cpp) loads the clip textures itself, so every clip of the index counts as resident.
+ */
+struct HdSpritePose {
+	int clip = -1;
+	int frame = 0;
+	HdSpriteTint tint;
+	/** The classic frame is drawn without a light table (stone curse). */
+	bool selfLit = false;
+};
+
+/** True when hd/sprites.txt has a clip for the towner (`pose` filled); false keeps the classic frame. */
+bool HdSpritesTownerPose(const Towner &towner, HdSpritePose &pose);
+/** As HdSpritesTownerPose for a player body (the prerendered clips; never the 3D imposter). */
+bool HdSpritesPlayerPose(const Player &player, HdSpritePose &pose);
+
 /**
  * While alive, every instance recorded gets the hover outline `paletteIndex` (-1: none). The world pass wraps an
  * HdSpritesDraw* call for the entity under the cursor in it and draws the classic outline only when that returns

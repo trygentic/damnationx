@@ -487,3 +487,13 @@ uwp-project/Assets/ui_art
 # Local chat screenshots and graphics references (including Blizzard imagery).
 # Keep image bytes and their local provenance manifest out of Git.
 /references/graphics/
+
+# Remotion media is restored from the team Drive backup; retain source code in Git.
+/remotion/**/*.[jJ][pP][gG]
+/remotion/**/*.[mM][pP]3
+/remotion/**/*.[mM][pP]4
+/remotion/**/*.[pP][nN][gG]
+/remotion/**/*.[wW][aA][vV]
+
+# Local Cargo outputs
+/target/

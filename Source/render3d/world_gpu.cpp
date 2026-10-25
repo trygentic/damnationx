@@ -961,7 +961,7 @@ bool WorldGpuPrepare(const WorldGpuFrame &frame)
 	for (uint32_t i = 0; i < frame.lightCount && i < 32 && frame.lights != nullptr; ++i) {
 		const WebGpuHybridLight &light = frame.lights[i];
 		WorldLight world;
-		world.position = { light.worldX, std::max(0.05F, light.worldZ * Level.wallHeight), light.worldY };
+		world.position = { light.worldX, std::max(0.05F, light.worldZ), light.worldY };
 		world.radius = light.radius;
 		world.color = { light.red, light.green, light.blue };
 		world.intensity = light.intensity;

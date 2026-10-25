@@ -36,6 +36,7 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/render/hd_view_transform.hpp"
 #include "engine/render/scrollrt.h"
+#include "engine/render/ui_scale_core.hpp"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "effects.h"
@@ -106,6 +107,22 @@ HostHudState HostHudStateSnapshot()
 	return state;
 }
 
+uint32_t HostHoverInfo(uint8_t *text, uint32_t capacity)
+{
+	if (text == nullptr || capacity == 0)
+		return 0;
+	text[0] = 0;
+	if (!InGame())
+		return 0;
+	if (HideHud)
+		UpdateInfoBox();
+	const std::string_view description = InfoString.str();
+	const size_t length = std::min(description.size(), static_cast<size_t>(capacity - 1));
+	std::memcpy(text, description.data(), length);
+	text[length] = 0;
+	return static_cast<uint32_t>(InfoColor);
+}
+
 bool HostToggleRun()
 {
 	if (!InGame() || gbIsMultiplayer || MyPlayerIsDead || !*GetOptions().Gameplay.enableRun)
@@ -128,6 +145,7 @@ bool MenuActionInProgress = false;
 std::array<std::optional<int32_t>, 2> PendingMenuAudio;
 std::optional<bool> PendingRunEnabled;
 std::optional<bool> PendingFreePortalEnabled;
+std::optional<int32_t> PendingUiScale;
 
 DxpMenuSnapshot MenuSnapshot()
 {
@@ -221,6 +239,7 @@ void ResetHostMenu()
 	PendingMenuAudio = {};
 	PendingRunEnabled.reset();
 	PendingFreePortalEnabled.reset();
+	PendingUiScale.reset();
 }
 
 void ProcessMenuCommands()
@@ -233,6 +252,7 @@ void ProcessMenuCommands()
 	const auto audio = std::exchange(PendingMenuAudio, {});
 	const auto runEnabled = std::exchange(PendingRunEnabled, std::nullopt);
 	const auto freePortalEnabled = std::exchange(PendingFreePortalEnabled, std::nullopt);
+	const auto uiScale = std::exchange(PendingUiScale, std::nullopt);
 	if (!InGame() || !gmenu_is_active())
 		return;
 	for (size_t channel = 0; channel < audio.size(); ++channel) {
@@ -262,6 +282,8 @@ void ProcessMenuCommands()
 	}
 	if (freePortalEnabled.has_value())
 		SetFreeTownPortalEnabled(*freePortalEnabled);
+	if (uiScale.has_value())
+		GetOptions().Graphics.uiScale.SetValue(*uiScale); // relayouts and redraws on a change (ui_scale.cpp), saved with the options when the menu closes
 	const uint32_t flags = MenuSnapshot().flags;
 	MenuActionInProgress = action != 0;
 	switch (action) {
@@ -614,5 +636,24 @@ extern "C" bool dxp_menu_gameplay(uint32_t setting, bool enabled)
 		PendingFreePortalEnabled = enabled;
 	else
 		PendingRunEnabled = enabled;
+	return true;
+}
+
+extern "C" bool dxp_menu_ui_scale(int32_t *chosen, int32_t *effective)
+{
+	using namespace devilution;
+	if (chosen == nullptr || effective == nullptr || !host::IsActive())
+		return false;
+	*chosen = *GetOptions().Graphics.uiScale;
+	*effective = EffectiveUiScaleQuarters(*chosen, gnScreenWidth, gnScreenHeight);
+	return true;
+}
+
+extern "C" bool dxp_menu_set_ui_scale(int32_t quarters)
+{
+	using namespace devilution;
+	if ((host::MenuSnapshot().flags & DxpMenuOpen) == 0)
+		return false;
+	host::PendingUiScale = std::clamp<int32_t>(quarters, OptionEntryQuarterScale::MinQuarters, OptionEntryQuarterScale::MaxQuarters);
 	return true;
 }

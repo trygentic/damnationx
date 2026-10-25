@@ -2,6 +2,7 @@
 //! blocking join runs on egui's thread. A completed staging tree is published
 //! only after validation; cancellation before commit leaves the old tree intact.
 use crate::assets::{self, AssetPaths, AssetReadiness};
+use crate::d2r_cache::{self, CacheDecision, ImportStamp};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -22,7 +23,8 @@ const MAX_REFERENCE_DEPTH: usize = 64;
 #[derive(Clone, Debug)]
 pub struct D2rImportRequest {
     pub game_dir: PathBuf,
-    /// Cache parent, not its glb child. All writes occur in a sibling stage.
+    /// Cache parent, not its glb child. Conversion work is retained separately
+    /// from the published glb tree until the whole import validates.
     pub cache_dir: PathBuf,
     pub importer_dir: PathBuf,
     pub python: PathBuf,
@@ -37,6 +39,8 @@ pub struct D2rSoundImportRequest {
     pub destination: PathBuf,
     pub classic_runtime: bool,
     pub data_dir: Option<PathBuf>,
+    /// Import record that lets an unchanged repeat import be skipped.
+    pub stamp: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -55,14 +59,22 @@ pub enum JobRequest {
     },
     ImportD2r(D2rImportRequest),
     ImportD2rSounds(D2rSoundImportRequest),
+    /// Remove the launcher-created D2R art cache and sound packs only.
+    ClearD2r {
+        cache_dir: PathBuf,
+        sound_mods: PathBuf,
+        protected: Vec<PathBuf>,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub enum JobOutcome {
     Inspected(AssetReadiness),
     InstalledHd(PathBuf),
-    ImportedD2r(PathBuf),
-    ImportedD2rSounds(PathBuf),
+    /// Published folder, and whether an unchanged previous import was reused.
+    ImportedD2r(PathBuf, bool),
+    ImportedD2rSounds(PathBuf, bool),
+    ClearedD2r(Vec<PathBuf>),
 }
 
 #[derive(Clone, Debug)]
@@ -112,11 +124,24 @@ impl JobHandle {
                 } => {
                     copy_hd_reference(&source, &destination, &reporter).map(JobOutcome::InstalledHd)
                 }
-                JobRequest::ImportD2r(request) => {
-                    import_d2r(&request, &reporter).map(JobOutcome::ImportedD2r)
-                }
+                JobRequest::ImportD2r(request) => import_d2r_cached(&request, &reporter)
+                    .map(|(path, reused)| JobOutcome::ImportedD2r(path, reused)),
                 JobRequest::ImportD2rSounds(request) => {
-                    import_d2r_sounds(&request, &reporter).map(JobOutcome::ImportedD2rSounds)
+                    import_d2r_sounds_cached(&request, &reporter)
+                        .map(|(path, reused)| JobOutcome::ImportedD2rSounds(path, reused))
+                }
+                JobRequest::ClearD2r {
+                    cache_dir,
+                    sound_mods,
+                    protected,
+                } => {
+                    reporter.progress("Clearing imported D2R assets", 0, None);
+                    d2r_cache::clear_import(&cache_dir, &sound_mods, &protected).map(|removed| {
+                        for path in &removed {
+                            reporter.log(format!("Removed {}", path.display()));
+                        }
+                        JobOutcome::ClearedD2r(removed)
+                    })
                 }
             }))
             .unwrap_or_else(|_| {
@@ -963,6 +988,65 @@ fn python_call(
     run(program, &argv, cwd, env, reporter)
 }
 
+const PYTHON_PROBE: &str = "import sys; sys.version_info >= (3,11) or sys.exit('Python 3.11 or newer is required'); print(sys.executable); print(sys.version)";
+
+fn python_environment_name(program: &Path, identity: &[String]) -> String {
+    // Include the actual runtime identity: upgrading Python in place or
+    // changing py.exe's default must not reuse an obsolete environment.
+    let mut hash = 14695981039346656037u64;
+    for byte in format!("{}\n{}", program.display(), identity.join("\n")).as_bytes() {
+        hash = (hash ^ *byte as u64).wrapping_mul(1099511628211);
+    }
+    format!(".launcher-python-{hash:016x}")
+}
+
+fn managed_python_healthy(
+    program: &Path,
+    cwd: &Path,
+    environment: &[(OsString, OsString)],
+    reporter: &Reporter,
+) -> bool {
+    // An interrupted venv creation can leave a runnable interpreter without
+    // pip. Rebuild that environment before trying to install dependencies.
+    program.is_file()
+        && python_call(
+            program,
+            &[],
+            &["-c", &format!("{PYTHON_PROBE}; import pip")],
+            cwd,
+            environment,
+            reporter,
+        )
+        .is_ok()
+}
+
+fn select_python(
+    preferred: &Path,
+    candidates: Vec<PathBuf>,
+    mut probe: impl FnMut(&Path) -> Result<Vec<String>, String>,
+) -> Result<(PathBuf, Vec<String>), String> {
+    let mut tried = BTreeSet::new();
+    let mut failures = Vec::new();
+    for path in std::iter::once(preferred.to_path_buf()).chain(candidates) {
+        if !tried.insert(path.clone()) {
+            continue;
+        }
+        if path.components().any(|part| {
+            part.as_os_str()
+                .to_string_lossy()
+                .eq_ignore_ascii_case("WindowsApps")
+        }) {
+            failures.push(format!("{}: Windows Store execution alias", path.display()));
+            continue;
+        }
+        match probe(&path) {
+            Ok(identity) => return Ok((path, identity)),
+            Err(error) => failures.push(format!("{}: {error}", path.display())),
+        }
+    }
+    Err(format!("No working Python 3.11+ found. Install Python from python.org, then retry or select it under Launch options > Python. Windows Store execution aliases are not an installed Python.\n{}", failures.join("\n")))
+}
+
 fn copy_existing_converted(
     source: &Path,
     destination: &Path,
@@ -989,6 +1073,65 @@ fn copy_existing_converted(
     }
 }
 
+/// Skip an import whose record still matches the install, importer and the
+/// published files; otherwise import and record the result. Per-asset reuse
+/// inside a re-import is the importer's job (existing GLBs, recipe hashes).
+fn import_d2r_cached(
+    request: &D2rImportRequest,
+    reporter: &Reporter,
+) -> Result<(PathBuf, bool), String> {
+    reporter.check()?;
+    let destination = request.cache_dir.join("glb");
+    let stamp_path = request.cache_dir.join(d2r_cache::ART_STAMP);
+    reporter.progress("Checking previous D2R import", 0, None);
+    let source = assets::is_d2r_install(&request.game_dir)
+        .then(|| {
+            d2r_cache::importer_fingerprint(&request.importer_dir)
+                .and_then(|hash| d2r_cache::source_fingerprint(&request.game_dir, hash))
+        })
+        .and_then(Result::ok);
+    if let Some(source) = &source {
+        let stamp = d2r_cache::load_stamp(&stamp_path);
+        let actual = d2r_cache::scan_outputs(&destination, &[]);
+        let decision = d2r_cache::decide(
+            stamp.as_ref(),
+            source,
+            actual.as_ref().map_err(String::as_str),
+        );
+        match decision {
+            CacheDecision::Skip
+                if assets::inspect(&AssetPaths {
+                    d2r_dir: Some(destination.clone()),
+                    ..Default::default()
+                })
+                .d2r_ready() =>
+            {
+                reporter.log(format!(
+                    "D2R art from build {} is already imported and unchanged; nothing to convert.",
+                    source.build
+                ));
+                return Ok((destination, true));
+            }
+            CacheDecision::Skip => {
+                reporter.log("Previous import fails validation; importing again")
+            }
+            CacheDecision::Import(reason) => reporter.log(format!("Importing D2R art: {reason}")),
+        }
+    }
+    let published = import_d2r(request, reporter)?;
+    if let Some(source) = source {
+        let recorded = d2r_cache::scan_outputs(&published, &[]).and_then(|outputs| {
+            d2r_cache::write_stamp(&stamp_path, &ImportStamp::new(source, outputs))
+        });
+        if let Err(error) = recorded {
+            reporter.log(format!(
+                "Import installed; its cache record could not be written: {error}"
+            ));
+        }
+    }
+    Ok((published, false))
+}
+
 fn import_d2r(request: &D2rImportRequest, reporter: &Reporter) -> Result<PathBuf, String> {
     reporter.check()?;
     if !assets::is_d2r_install(&request.game_dir) {
@@ -1004,13 +1147,23 @@ fn import_d2r(request: &D2rImportRequest, reporter: &Reporter) -> Result<PathBuf
     }
     let destination = request.cache_dir.join("glb");
     let mut stage = Stage::new(&destination)?;
-    let cache = stage.directory.join("content");
-    fs::create_dir(&cache).map_err(|e| e.to_string())?;
-    // Raw CASC extracts and the helper remain in their existing cache. Only
-    // playable converted files are cloned and atomically replaced. Fresh raw
-    // files needed by the importer stay isolated until its job completes.
-    if destination.is_dir() {
-        copy_existing_converted(&destination, &cache.join("glb"), reporter)?;
+    let mut work = crate::d2r_resume::Work::open(&request.cache_dir, &request.game_dir)?;
+    let cache = work.cache.clone();
+    reporter.log(format!(
+        "Conversion work is retained at {} for retries after failure or cancellation",
+        cache.display()
+    ));
+    if !cache.join("glb").exists() {
+        if work.continuing && destination.is_dir() {
+            // An interrupted seed copy must not look like damaged conversion
+            // work on the next retry. Publish the seed only after copying it.
+            let seed = stage.directory.join("seed");
+            copy_existing_converted(&destination, &seed, reporter)?;
+            if seed.is_dir() {
+                fs::rename(seed, cache.join("glb")).map_err(|e| e.to_string())?;
+            }
+        }
+        fs::create_dir_all(cache.join("glb")).map_err(|e| e.to_string())?;
     }
     let mut environment = vec![
         ("D2R_IMPORT_CACHE".into(), cache.as_os_str().into()),
@@ -1030,37 +1183,49 @@ fn import_d2r(request: &D2rImportRequest, reporter: &Reporter) -> Result<PathBuf
     } else if cached_tool.is_file() {
         environment.push(("D2RTOOL".into(), cached_tool.clone().into_os_string()));
     }
-    let mut python = request.python.clone();
+    let selected = select_python(&request.python, assets::python_candidates(), |path| {
+        reporter.check()?;
+        python_call(
+            path,
+            &python_prefix(path),
+            &["-c", PYTHON_PROBE],
+            &request.importer_dir,
+            &environment,
+            reporter,
+        )
+    });
+    reporter.check()?;
+    let (mut python, identity) = selected?;
+    if python != request.python {
+        reporter.log(format!(
+            "Selected working Python {} instead of {}",
+            python.display(),
+            request.python.display()
+        ));
+    }
     let mut prefix = python_prefix(&python);
-    python_call(
-        &python,
-        &prefix,
-        &[
-            "-c",
-            "import sys; assert sys.version_info >= (3,11), 'Python 3.11 or newer is required'",
-        ],
-        &request.importer_dir,
-        &environment,
-        reporter,
-    )?;
     if request.create_venv {
         // The interpreter/tools cache is separate from the playable asset tree.
         // Re-running pip repairs an interrupted first setup without touching it.
-        let mut hash = 14695981039346656037u64;
-        for byte in request.python.to_string_lossy().as_bytes() {
-            hash = (hash ^ *byte as u64).wrapping_mul(1099511628211);
-        }
         let venv = request
             .cache_dir
             .parent()
             .unwrap()
-            .join(format!(".launcher-python-{hash:016x}"));
+            .join(python_environment_name(&python, &identity));
         let executable = venv.join(if cfg!(windows) {
             "Scripts/python.exe"
         } else {
             "bin/python"
         });
-        if !executable.is_file() {
+        let usable =
+            managed_python_healthy(&executable, &request.importer_dir, &environment, reporter);
+        reporter.check()?;
+        if !usable {
+            if venv.exists() {
+                reporter.log("Rebuilding stale importer Python environment");
+                fs::remove_dir_all(&venv)
+                    .map_err(|e| format!("Could not rebuild {}: {e}", venv.display()))?;
+            }
             reporter.progress("Creating importer Python environment", 0, None);
             let mut argv = prefix.clone();
             argv.extend([
@@ -1115,7 +1280,44 @@ fn import_d2r(request: &D2rImportRequest, reporter: &Reporter) -> Result<PathBuf
         ("Extracting D2R interface", &["ui"]),
         ("Extracting Town Portal fields", &["vfx", "town_portal"]),
     ];
+    let mut reused_models = false;
     for (index, (label, args)) in steps.iter().enumerate() {
+        reporter.check()?;
+        let phase = match index {
+            1 | 2 => Some("models"),
+            3 => Some("environment"),
+            4 => Some("ui"),
+            5 => Some("portal"),
+            _ => None,
+        };
+        let ready_for = |phase: &str| {
+            let status = assets::inspect(&AssetPaths {
+                d2r_dir: Some(cache.join("glb")),
+                ..Default::default()
+            });
+            match phase {
+                "models" => status.d2r_mapping.ready,
+                "environment" => status.d2r_environment.ready,
+                "ui" => status.d2r_ui.ready,
+                "portal" => status.d2r_portal.ready,
+                _ => false,
+            }
+        };
+        let reuse = if index == 2 {
+            reused_models
+        } else if let Some(phase) = phase {
+            work.begin(phase, &request.importer_dir, ready_for(phase))?
+        } else {
+            false
+        };
+        if index == 1 {
+            reused_models = reuse;
+        }
+        if reuse {
+            reporter.log(format!("Reusing completed phase: {label}"));
+            reporter.progress(label, (index + 1) as u64, Some(steps.len() as u64));
+            continue;
+        }
         reporter.progress(label, index as u64, Some(steps.len() as u64));
         let mut argv = prefix.clone();
         argv.extend([
@@ -1131,6 +1333,11 @@ fn import_d2r(request: &D2rImportRequest, reporter: &Reporter) -> Result<PathBuf
             &environment,
             reporter,
         )?;
+        if index != 1 {
+            if let Some(phase) = phase.filter(|phase| ready_for(phase)) {
+                work.complete(phase)?;
+            }
+        }
         reporter.progress(label, (index + 1) as u64, Some(steps.len() as u64));
     }
     reporter.progress("Validating converted assets", 0, None);
@@ -1230,6 +1437,59 @@ fn publish_sound_packs(
     Ok(())
 }
 
+fn import_d2r_sounds_cached(
+    request: &D2rSoundImportRequest,
+    reporter: &Reporter,
+) -> Result<(PathBuf, bool), String> {
+    reporter.check()?;
+    let Some(stamp_path) = request.stamp.clone() else {
+        return import_d2r_sounds(request, reporter).map(|path| (path, false));
+    };
+    let source = d2r_cache::program_fingerprint(&request.program, request.classic_runtime)
+        .and_then(|hash| d2r_cache::source_fingerprint(&request.game_dir, hash))
+        .ok();
+    if let Some(source) = &source {
+        let stamp = d2r_cache::load_stamp(&stamp_path);
+        let actual = d2r_cache::scan_outputs(&request.destination, &assets::D2R_SOUND_PACKS);
+        match d2r_cache::decide(
+            stamp.as_ref(),
+            source,
+            actual.as_ref().map_err(String::as_str),
+        ) {
+            CacheDecision::Skip
+                if assets::D2R_SOUND_PACKS.iter().all(|name| {
+                    assets::sound_pack_status(&request.destination.join(name)).is_ok()
+                }) =>
+            {
+                reporter.log(format!(
+                    "D2R sounds from build {} are already imported and unchanged.",
+                    source.build
+                ));
+                return Ok((request.destination.clone(), true));
+            }
+            CacheDecision::Skip => {
+                reporter.log("Previous sound import fails validation; importing again")
+            }
+            CacheDecision::Import(reason) => {
+                reporter.log(format!("Importing D2R sounds: {reason}"))
+            }
+        }
+    }
+    let published = import_d2r_sounds(request, reporter)?;
+    if let Some(source) = source {
+        let recorded =
+            d2r_cache::scan_outputs(&published, &assets::D2R_SOUND_PACKS).and_then(|outputs| {
+                d2r_cache::write_stamp(&stamp_path, &ImportStamp::new(source, outputs))
+            });
+        if let Err(error) = recorded {
+            reporter.log(format!(
+                "Sounds installed; their cache record could not be written: {error}"
+            ));
+        }
+    }
+    Ok((published, false))
+}
+
 fn import_d2r_sounds(
     request: &D2rSoundImportRequest,
     reporter: &Reporter,
@@ -1312,6 +1572,154 @@ mod tests {
         }
     }
 
+    fn available_python() -> Option<PathBuf> {
+        let mut candidates = Vec::new();
+        for key in ["PYTHON_SYS_EXECUTABLE", "PYTHON"] {
+            if let Some(path) = std::env::var_os(key) {
+                candidates.push(PathBuf::from(path));
+            }
+        }
+        candidates.extend([
+            PathBuf::from("/opt/homebrew/bin/python3"),
+            PathBuf::from("python3"),
+            PathBuf::from("python"),
+            PathBuf::from("py.exe"),
+        ]);
+        candidates.into_iter().find(|program| {
+            Command::new(program)
+                .args(python_prefix(program))
+                .args([
+                    "-c",
+                    "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)",
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        })
+    }
+
+    #[test]
+    fn python_upgrade_recovers_from_a_cached_old_or_deleted_interpreter() {
+        for failure in ["Python 3.11 or newer is required", "file not found"] {
+            let old = PathBuf::from("old-python");
+            let new = PathBuf::from("new-python");
+            let mut attempts = Vec::new();
+            let (selected, _) = select_python(&old, vec![old.clone(), new.clone()], |path| {
+                attempts.push(path.to_path_buf());
+                if path == old {
+                    Err(failure.into())
+                } else {
+                    Ok(vec!["Python 3.13".into()])
+                }
+            })
+            .unwrap();
+            assert_eq!(selected, new);
+            assert_eq!(attempts, vec![old, new]);
+        }
+    }
+
+    #[test]
+    fn working_explicit_python_wins_and_missing_python_gives_recovery_steps() {
+        let chosen = Path::new("selected-python");
+        let (selected, _) = select_python(chosen, vec!["other-python".into()], |path| {
+            assert_eq!(path, chosen);
+            Ok(Vec::new())
+        })
+        .unwrap();
+        assert_eq!(selected, chosen);
+        let error =
+            select_python(chosen, Vec::new(), |_| Err("exit code: 9009".into())).unwrap_err();
+        assert!(error.contains("Launch options > Python"));
+        assert!(error.contains("exit code: 9009"));
+    }
+
+    #[test]
+    fn store_alias_is_skipped_without_starting_it() {
+        let path = Path::new("WindowsApps/python.exe");
+        let result = select_python(path, Vec::new(), |_| panic!("must not open the Store"));
+        assert!(result
+            .unwrap_err()
+            .contains("Windows Store execution alias"));
+    }
+
+    #[test]
+    fn runtime_upgrade_or_launcher_default_change_invalidates_the_venv_key() {
+        let path = Path::new("py.exe");
+        let old = vec!["Python311/python.exe".into(), "3.11.9".into()];
+        let upgrade = vec!["Python311/python.exe".into(), "3.11.10".into()];
+        let changed_default = vec!["Python313/python.exe".into(), "3.13.0".into()];
+        let original = python_environment_name(path, &old);
+        assert_eq!(original, python_environment_name(path, &old));
+        assert_ne!(original, python_environment_name(path, &upgrade));
+        assert_ne!(original, python_environment_name(path, &changed_default));
+    }
+
+    #[test]
+    fn minimum_python_version_is_checked_even_with_optimization_enabled() {
+        let Some(python) = available_python() else {
+            eprintln!("SKIP Python probe: Python 3.11+ is unavailable");
+            return;
+        };
+        let script = format!("import sys; sys.version_info = (3,10); {PYTHON_PROBE}");
+        let output = Command::new(&python)
+            .args(python_prefix(&python))
+            .args(["-O", "-c", &script])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("Python 3.11 or newer is required")
+        );
+    }
+
+    #[test]
+    fn interrupted_venv_without_pip_is_unhealthy_until_bootstrapped() {
+        let Some(python) = available_python() else {
+            eprintln!("SKIP venv recovery: Python 3.11+ is unavailable");
+            return;
+        };
+        let temp = tempfile::tempdir().unwrap();
+        let venv = temp.path().join("managed python");
+        let report = reporter();
+        let mut args = python_prefix(&python);
+        args.extend([
+            OsString::from("-m"),
+            OsString::from("venv"),
+            OsString::from("--without-pip"),
+            venv.clone().into_os_string(),
+        ]);
+        run(&python, &args, temp.path(), &[], &report).unwrap();
+        let executable = venv.join(if cfg!(windows) {
+            "Scripts/python.exe"
+        } else {
+            "bin/python"
+        });
+        assert!(!managed_python_healthy(
+            &executable,
+            temp.path(),
+            &[],
+            &report
+        ));
+        // ensurepip uses the interpreter's bundled wheels, without network access.
+        python_call(
+            &executable,
+            &[],
+            &["-m", "ensurepip"],
+            temp.path(),
+            &[],
+            &report,
+        )
+        .unwrap();
+        assert!(managed_python_healthy(
+            &executable,
+            temp.path(),
+            &[],
+            &report
+        ));
+    }
+
     fn sound_pack(path: &Path, marker: &[u8]) {
         fs::create_dir_all(path.join("sfx")).unwrap();
         fs::write(
@@ -1389,7 +1797,40 @@ print('Imported 1 classic and 1 remastered sound', flush=True)
             destination,
             classic_runtime: false,
             data_dir: None,
+            stamp: None,
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn repeated_sound_import_is_skipped_until_outputs_or_install_change() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut request = sound_worker_fixture(temp.path());
+        let stamp = temp.path().join("d2r-models").join(d2r_cache::SOUND_STAMP);
+        request.stamp = Some(stamp.clone());
+        let called = request.game_dir.join("called");
+        // First import runs the converter and records the result.
+        assert!(!import_d2r_sounds_cached(&request, &reporter()).unwrap().1);
+        assert!(called.is_file() && stamp.is_file());
+        // Unchanged: the converter is not started again.
+        fs::remove_file(&called).unwrap();
+        assert!(import_d2r_sounds_cached(&request, &reporter()).unwrap().1);
+        assert!(!called.exists());
+        // A missing output re-imports.
+        fs::remove_file(request.destination.join("d2r-sounds-classic/sfx/test.wav")).unwrap();
+        assert!(!import_d2r_sounds_cached(&request, &reporter()).unwrap().1);
+        assert!(called.is_file());
+        fs::remove_file(&called).unwrap();
+        assert!(import_d2r_sounds_cached(&request, &reporter()).unwrap().1);
+        // A patched install re-imports.
+        fs::write(request.game_dir.join(".build.info"), "patched").unwrap();
+        assert!(!import_d2r_sounds_cached(&request, &reporter()).unwrap().1);
+        assert!(called.is_file());
+        // Unrelated mods are never part of the record.
+        assert_eq!(
+            fs::read(request.destination.join("unrelated-user-mod/keep.txt")).unwrap(),
+            b"untouched"
+        );
     }
 
     #[test]
@@ -1790,31 +2231,7 @@ print('Imported 1 classic and 1 remastered sound', flush=True)
     }
     #[test]
     fn six_step_d2r_worker_publishes_valid_assets_and_preserves_them_on_failure() {
-        let mut candidates = Vec::new();
-        for key in ["PYTHON_SYS_EXECUTABLE", "PYTHON"] {
-            if let Some(path) = std::env::var_os(key) {
-                candidates.push(PathBuf::from(path));
-            }
-        }
-        candidates.extend([
-            PathBuf::from("/opt/homebrew/bin/python3"),
-            PathBuf::from("python3"),
-            PathBuf::from("python"),
-            PathBuf::from("py.exe"),
-        ]);
-        let python = candidates.into_iter().find(|program| {
-            Command::new(program)
-                .args(python_prefix(program))
-                .args([
-                    "-c",
-                    "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)",
-                ])
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .is_ok_and(|status| status.success())
-        });
+        let python = available_python();
         let Some(python) = python else {
             eprintln!("SKIP six-step D2R worker transaction: Python 3.11+ is unavailable");
             return;
@@ -1837,7 +2254,7 @@ print('Imported 1 classic and 1 remastered sound', flush=True)
         }
         fs::write(
             importer.join("d2r_import/__main__.py"),
-            r#"import json, os, struct, sys
+            r#"import json, os, struct, sys, time
 from pathlib import Path
 
 game = Path(os.environ['D2R_GAME_DIR'])
@@ -1868,8 +2285,12 @@ elif stage == 'resolve':
     manifest('mapping.resolved.json', {'version': 2, 'entries': [
         {'model': 'hero', 'glb': 'hero.glb', 'clips': {'stand': 'idle'}}]})
 elif stage == 'env build':
+    if (game / 'pause-env').exists():
+        write('env/paused.marker', b'waiting for cancellation')
+        while (game / 'pause-env').exists():
+            time.sleep(0.01)
     if (game / 'fail-env').exists():
-        write('hero.glb', b'unpublished broken model')
+        write('env/interrupted.marker', b'unpublished environment')
         print('synthetic env error', flush=True)
         sys.exit(7)
     write('env/stone.png', b'source-free nonempty image fixture')
@@ -1887,6 +2308,8 @@ elif stage == 'vfx town_portal':
     write('vfx/town_portal/field.png', b'source-free nonempty image fixture')
     keys = ['t_fx_noise_cells_conviction', 't_fx_noise_cells_conviction_glow_02_hilights',
             't_fx_noise_goopy_03_meshdissolve', 't_fx_portal_gradient_03']
+    if (game / 'fail-portal').exists():
+        keys.remove('t_fx_portal_gradient_03')
     manifest('vfx/town_portal/portal.resolved.json', {'version': 1,
         'textures': {key: {'png': 'vfx/town_portal/field.png'} for key in keys}})
 else:
@@ -1962,6 +2385,11 @@ else:
                 .collect()
         };
         let accepted = snapshot(&destination);
+        // Start a fresh conversion, then fail after the models have completed.
+        let work = cache.join(".import-work");
+        if work.exists() {
+            fs::remove_dir_all(&work).unwrap();
+        }
         fs::write(game.join("invocations.txt"), "").unwrap();
         fs::write(game.join("fail-env"), "stop at env").unwrap();
         let error = import_d2r(&request, &reporter()).unwrap_err();
@@ -1974,6 +2402,11 @@ else:
             ["setup", "mapping", "resolve", "env build"]
         );
         assert_eq!(snapshot(&destination), accepted);
+        assert!(
+            work.join("content/glb/hero.glb").is_file(),
+            "failed import discarded completed models"
+        );
+        assert!(work.join("content/raw/new-extract.marker").is_file());
         assert_eq!(
             fs::read(cache.join("raw/keep.marker")).unwrap(),
             b"original raw"
@@ -1990,6 +2423,102 @@ else:
             fs::remove_file(legacy).unwrap();
             assert_eq!(snapshot(&destination), accepted);
         }
+        // Cached import: the first run records the result, an unchanged repeat
+        // starts no importer step, and a missing output imports again.
+        fs::remove_file(game.join("fail-env")).unwrap();
+        let invocations = || fs::read_to_string(game.join("invocations.txt")).unwrap();
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        let (path, reused) = import_d2r_cached(&request, &reporter()).unwrap();
+        assert_eq!((path, reused), (destination.clone(), false));
+        assert_eq!(
+            invocations().lines().collect::<Vec<_>>(),
+            ["setup", "env build", "ui", "vfx town_portal"]
+        );
+        assert!(cache.join(d2r_cache::ART_STAMP).is_file());
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        assert!(import_d2r_cached(&request, &reporter()).unwrap().1);
+        assert_eq!(invocations(), "");
+        fs::remove_file(destination.join("ui/interface.png")).unwrap();
+        assert!(!import_d2r_cached(&request, &reporter()).unwrap().1);
+        assert_eq!(invocations().lines().collect::<Vec<_>>(), ["setup", "ui"]);
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        assert!(import_d2r_cached(&request, &reporter()).unwrap().1);
+        assert_eq!(invocations(), "");
+
+        // Reproduce the original late portal validation failure. A portal-only
+        // recipe update must not make models, environments or UI run again.
+        let model = fs::read(destination.join("hero.glb")).unwrap();
+        fs::write(
+            request.importer_dir.join("d2r_import/vfx.py"),
+            "# portal revision 1",
+        )
+        .unwrap();
+        fs::write(game.join("fail-portal"), "missing required gradient").unwrap();
+        let accepted = snapshot(&destination);
+        let error = import_d2r_cached(&request, &reporter()).unwrap_err();
+        assert!(
+            error.contains("Portal is missing t_fx_portal_gradient_03"),
+            "{error}"
+        );
+        assert_eq!(snapshot(&destination), accepted);
+        assert_eq!(
+            invocations().lines().collect::<Vec<_>>(),
+            ["setup", "vfx town_portal"]
+        );
+        fs::remove_file(game.join("fail-portal")).unwrap();
+        fs::write(
+            request.importer_dir.join("d2r_import/vfx.py"),
+            "# fixed portal revision 2",
+        )
+        .unwrap();
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        import_d2r_cached(&request, &reporter()).unwrap();
+        assert_eq!(
+            invocations().lines().collect::<Vec<_>>(),
+            ["setup", "vfx town_portal"]
+        );
+        assert_eq!(fs::read(destination.join("hero.glb")).unwrap(), model);
+
+        // Real child-process cancellation also retains the finished models.
+        fs::write(
+            request.importer_dir.join("d2r_import/env.py"),
+            "# environment revision 2",
+        )
+        .unwrap();
+        fs::write(game.join("pause-env"), "wait").unwrap();
+        let worker_reporter = reporter();
+        let cancel = worker_reporter.cancel.clone();
+        let worker_request = request.clone();
+        let worker = thread::spawn(move || import_d2r_cached(&worker_request, &worker_reporter));
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while !work.join("content/glb/env/paused.marker").exists() {
+            assert!(
+                !worker.is_finished(),
+                "importer exited before cancellation probe"
+            );
+            assert!(
+                Instant::now() < deadline,
+                "importer never reached cancellation probe"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        cancel.store(true, Ordering::Release);
+        assert!(worker.join().unwrap().unwrap_err().contains("Cancelled"));
+        assert_eq!(fs::read(work.join("content/glb/hero.glb")).unwrap(), model);
+        assert_eq!(snapshot(&destination), accepted);
+        fs::remove_file(game.join("pause-env")).unwrap();
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        import_d2r_cached(&request, &reporter()).unwrap();
+        assert!(!invocations().contains("mapping"));
+        assert!(!invocations().contains("resolve"));
+
+        // A changed owned game build invalidates raw extracts and all phases.
+        fs::write(work.join("content/raw/obsolete.marker"), "old build").unwrap();
+        fs::write(game.join(".build.info"), "new synthetic D2R build").unwrap();
+        fs::write(game.join("invocations.txt"), "").unwrap();
+        import_d2r_cached(&request, &reporter()).unwrap();
+        assert_eq!(invocations().lines().count(), 6);
+        assert!(!work.join("content/raw/obsolete.marker").exists());
     }
     #[test]
     fn process_child_fixture() {

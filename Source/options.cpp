@@ -239,6 +239,9 @@ constexpr bool HybridLightingDefault()
 constexpr std::string_view HybridLightingDefaultAppliedKey = "Hybrid Lighting Default Applied";
 #endif
 
+/** Ini marker: the switch of the walking sound to off-by-default has been applied to this ini. */
+constexpr std::string_view WalkingSoundDefaultAppliedKey = "Walking Sound Default Applied";
+
 } // namespace
 
 Options &GetOptions()
@@ -319,6 +322,13 @@ void LoadOptions()
 	if (!ini->getBool("Graphics", HybridLightingDefaultAppliedKey, false))
 		options.Graphics.hybridLighting.SetValue(true);
 #endif
+	// The original game has no footsteps. An ini written while the walking sound was on by default stores
+	// "Walking Sound=1" for every player who never opened the setting: switch it off once (marker as above), unless a
+	// launcher --set asks for it.
+	const bool walkingSoundSet = std::any_of(IniOverrides.begin(), IniOverrides.end(),
+	    [](const auto &o) { return o[0] == "Audio" && o[1] == "Walking Sound"; });
+	if (!walkingSoundSet && !ini->getBool("Audio", WalkingSoundDefaultAppliedKey, false))
+		options.Audio.walkingSound.SetValue(false);
 }
 
 void SaveOptions()
@@ -352,6 +362,7 @@ void SaveOptions()
 #if DEVILUTIONX_WEBGPU
 	ini->set("Graphics", HybridLightingDefaultAppliedKey, true);
 #endif
+	ini->set("Audio", WalkingSoundDefaultAppliedKey, true);
 
 	SaveIni();
 }
@@ -610,7 +621,7 @@ AudioOptions::AudioOptions()
     , soundVolume("Sound Volume", OptionEntryFlags::Invisible, "Sound Volume", "Movie and SFX volume.", VOLUME_DEFAULT)
     , audioCuesVolume("Audio Cues Volume", OptionEntryFlags::Invisible, "Audio Cues Volume", "Navigation audio cues volume.", VOLUME_DEFAULT)
     , musicVolume("Music Volume", OptionEntryFlags::Invisible, "Music Volume", "Music Volume.", VOLUME_DEFAULT)
-    , walkingSound("Walking Sound", OptionEntryFlags::None, N_("Walking Sound"), N_("Player emits sound when walking."), true)
+    , walkingSound("Walking Sound", OptionEntryFlags::None, N_("Walking Sound"), N_("Player emits sound when walking."), false)
     , autoEquipSound("Auto Equip Sound", OptionEntryFlags::None, N_("Auto Equip Sound"), N_("Automatically equipping items on pickup emits the equipment sound."), false)
     , itemPickupSound("Item Pickup Sound", OptionEntryFlags::None, N_("Item Pickup Sound"), N_("Picking up items emits the items pickup sound."), false)
     , sampleRate("Sample Rate", OptionEntryFlags::CantChangeInGame, N_("Sample Rate"), N_("Output sample rate (Hz)."), DEFAULT_AUDIO_SAMPLE_RATE, { 22050, 44100, 48000 })

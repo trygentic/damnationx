@@ -5,6 +5,9 @@
  * its TRN into one RGBA atlas (the same decoding as the game's own 3D billboards, render3d/world_sprites.cpp), so a
  * host can draw entities it has no model for as billboards of the real art; and the clip choice for the pack's
  * skinned characters (the rules of render3d/skinned_renderer.cpp, without loading the model).
+ *
+ * HostEntityHdArtSnapshot: where the HD pack has 2D art for an entity (towners, monsters, player bodies), the clip frame
+ * the Hd2D view would draw instead (engine/render/hd_sprites.hpp HdSpritePose), so the host's billboards can show it.
  */
 #include "host/host_internal.hpp"
 
@@ -15,9 +18,14 @@
 #include <unordered_map>
 
 #include "engine/palette.h"
+#include "engine/render/hd_graphics.hpp"
+#include "engine/render/hd_sprites.hpp"
+#include "engine/render/hd_sprites_monsters.hpp"
 #include "levels/gendung.h"
 #include "nthread.h"
+#include "monster.h"
 #include "player.h"
+#include "towners.h"
 #include "utils/clx_decode.hpp"
 #include "utils/str_cat.hpp"
 
@@ -95,6 +103,10 @@ std::vector<HostEntitySprite> Sprites;
 std::vector<HostModelClip> Clips;
 std::deque<std::string> ClipNames;
 HostEntityArt Art {};
+std::vector<HostEntityHdSprite> HdSprites;
+HostEntityHdArt HdArt {};
+/** Sheet file of each clip (index of hd/sprites.txt), resolved once; the strings stay put for the run. */
+std::unordered_map<int, std::string> HdSheetPaths;
 
 uint64_t LogicalPaletteHash()
 {
@@ -260,7 +272,76 @@ void AddClip(const HostEntity &entity, const Player &player)
 	Clips.push_back(clip);
 }
 
+/** The HD clip frame the Hd2D view draws for `entity`, if the pack has one. */
+bool HdPoseOf(const HostEntity &entity, HdSpritePose &pose)
+{
+	const uint32_t index = (entity.id & 0xFFFFFF) - 1;
+	switch (entity.kind) {
+	case HostEntityKind::Towner:
+		return index < Towners.size() && HdSpritesTownerPose(Towners[index], pose);
+	case HostEntityKind::Monster:
+		return index < MaxMonsters && HdSpritesMonsterPose(Monsters[index], pose);
+	case HostEntityKind::Player:
+		return index < Players.size() && HdSpritesPlayerPose(Players[index], pose);
+	default:
+		return false;
+	}
+}
+
 } // namespace
+
+const HostEntityHdArt &BuildEntityHdArt(bool inGame)
+{
+	HdSprites.clear();
+	if (inGame && (InstalledPacks() & kPackHd2D) != 0 && HdGraphicsEnabled()) {
+		const hd_sprites::SpriteIndex &index = HdSpritesIndex();
+		for (const HostEntity &entity : SnapshotEntities()) {
+			if ((entity.flags & kEntityReplacedByMesh) != 0)
+				continue;
+			HdSpritePose pose;
+			if (!HdPoseOf(entity, pose) || pose.clip < 0 || static_cast<size_t>(pose.clip) >= index.clips.size())
+				continue;
+			const hd_sprites::ClipInfo &clip = index.clips[static_cast<size_t>(pose.clip)];
+			if (clip.cols <= 0 || clip.frames <= 0 || clip.png.empty())
+				continue;
+			auto path = HdSheetPaths.find(pose.clip);
+			if (path == HdSheetPaths.end()) {
+				std::string asset = clip.png;
+				std::replace(asset.begin(), asset.end(), '\\', '/');
+				if (!asset.starts_with("hd/"))
+					asset.insert(0, "hd/");
+				path = HdSheetPaths.emplace(pose.clip, ResolvePackPath(asset)).first;
+			}
+			constexpr float Scale = 4.0F; // hd/sprites.txt sizes are 4x classic pixels (CONTRACT.md v1)
+			// HostEntitySprite puts the ground 16 classic pixels above the frame's bottom row; the clip pivot (the feet) sits
+			// HdSpritesPivotAboveClassicBottom above it, as in the Hd2D view.
+			constexpr float GroundAbovePivot = (16 - HdSpritesPivotAboveClassicBottom) * Scale;
+			const int frame = std::clamp(pose.frame, 0, clip.frames - 1);
+			HostEntityHdSprite sprite {};
+			sprite.entityId = entity.id;
+			sprite.clip = static_cast<uint32_t>(pose.clip);
+			sprite.srcX = static_cast<float>((frame % clip.cols) * clip.cellWidth);
+			sprite.srcY = static_cast<float>((frame / clip.cols) * clip.cellHeight);
+			sprite.srcW = static_cast<float>(clip.cellWidth);
+			sprite.srcH = static_cast<float>(clip.cellHeight);
+			sprite.sheetWidth = static_cast<uint32_t>(clip.sheetWidth());
+			sprite.sheetHeight = static_cast<uint32_t>(clip.sheetHeight());
+			sprite.anchorX = static_cast<float>(clip.pivotX);
+			sprite.anchorY = static_cast<float>(clip.pivotY) - GroundAbovePivot;
+			sprite.scale = Scale;
+			sprite.tint[0] = pose.tint.rgb[0];
+			sprite.tint[1] = pose.tint.rgb[1];
+			sprite.tint[2] = pose.tint.rgb[2];
+			sprite.saturation = pose.tint.saturation;
+			sprite.flags = pose.selfLit ? kHdSelfLit : 0;
+			sprite.path = path->second.c_str();
+			HdSprites.push_back(sprite);
+		}
+	}
+	HdArt.sprites = HdSprites.empty() ? nullptr : HdSprites.data();
+	HdArt.spriteCount = static_cast<uint32_t>(HdSprites.size());
+	return HdArt;
+}
 
 const HostEntityArt &BuildEntityArt(bool inGame)
 {

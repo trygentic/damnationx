@@ -8,6 +8,7 @@
 #endif
 
 #ifdef USE_SDL3
+#include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_error.h>
 #include <SDL3/SDL_timer.h>
 #else
@@ -15,9 +16,12 @@
 #endif
 
 #include "config.h"
+#include "host/host_hooks.hpp"
 #include "multi.h"
 #include "player.h"
 #include "storm/storm_net.hpp"
+#include "utils/log.hpp"
+#include "utils/sdl_compat.h"
 
 namespace devilution::net {
 namespace {
@@ -178,7 +182,16 @@ int relay_net::create(std::string_view name)
 		SDL_SetError("%s", error.c_str());
 		return -1;
 	}
-	return base_protocol<protocol_relay>::create(created.id);
+	const int player = base_protocol<protocol_relay>::create(created.id);
+	if (player >= 0) {
+		const std::string invite = lobby::InviteUrl();
+		LogInfo("Lobby invite: {}", invite);
+		if (host::IsActive())
+			host::RequestClipboard(invite); // the core has no SDL video under the host
+		else
+			SDLC_SetClipboardText(invite.c_str());
+	}
+	return player;
 }
 
 int relay_net::join(std::string_view id)

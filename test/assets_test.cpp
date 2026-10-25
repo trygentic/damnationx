@@ -208,6 +208,51 @@ TEST_F(HasLooseLogicAssetsTest, NonCanonicalAndTraversalLikeNamesAreInert)
 	EXPECT_FALSE(HasLooseLogicAssets());
 	EXPECT_TRUE(FileExists((paths::AssetsPath() + "txtdata" DIRECTORY_SEPARATOR_STR "towners" DIRECTORY_SEPARATOR_STR "towners.tsv").c_str()));
 }
+
+#ifdef _WIN32
+TEST(AssetsPathTest, ExtendedWindowsPathUsesNativeSeparators)
+{
+	const std::string previous = paths::AssetsPath();
+	paths::SetAssetsPath(R"(\\?\C:\Game Folder/assets)");
+	EXPECT_EQ(paths::AssetsPath(), R"(\\?\C:\Game Folder\assets\)");
+	paths::SetAssetsPath(previous);
+}
+#endif
+
+TEST(Diablo2HeroVoiceTest, OnlyHeroVoicesOfDiablo2SoundPacks)
+{
+	EXPECT_TRUE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-classic/", "sfx\\sorceror\\mage13.wav"));
+	EXPECT_TRUE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-advanced/", "sfx/warrior/warior13.wav"));
+	EXPECT_TRUE(IsDiablo2HeroVoiceOverride("C:\\pref\\mods\\d2sounds\\", "SFX\\Rogue\\rogue13.wav"));
+	EXPECT_TRUE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-classic/", "sfx\\monk\\monk13.mp3"));
+	// Other imported sounds keep coming from the pack.
+	EXPECT_FALSE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-classic/", "sfx\\misc\\walk1.wav"));
+	EXPECT_FALSE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-classic/", "sfx\\towners\\storytell1.wav"));
+	EXPECT_FALSE(IsDiablo2HeroVoiceOverride("/pref/mods/d2r-sounds-classic/", "monsters\\zombie\\zombiea1.wav"));
+	// Other mods and the pref folder itself may still replace hero voices.
+	EXPECT_FALSE(IsDiablo2HeroVoiceOverride("/pref/mods/my-voices/", "sfx\\sorceror\\mage13.wav"));
+	EXPECT_FALSE(IsDiablo2HeroVoiceOverride("/pref/", "sfx\\sorceror\\mage13.wav"));
+}
+
+using Diablo2HeroVoiceLookupTest = HasLooseLogicAssetsTest;
+
+TEST_F(Diablo2HeroVoiceLookupTest, FindAssetSkipsPackVoicesUnlessEnabled)
+{
+	const std::string pack = "mods" DIRECTORY_SEPARATOR_STR "d2r-sounds-classic" DIRECTORY_SEPARATOR_STR;
+	CreateFile(pack + "sfx" DIRECTORY_SEPARATOR_STR "sorceror" DIRECTORY_SEPARATOR_STR "mage13.wav");
+	CreateFile(pack + "sfx" DIRECTORY_SEPARATOR_STR "misc" DIRECTORY_SEPARATOR_STR "walk1.wav");
+	OverridePaths.push_back(root_ + pack);
+	const bool saved = Diablo2HeroVoices();
+
+	SetDiablo2HeroVoices(false);
+	EXPECT_FALSE(FindAsset("sfx\\sorceror\\mage13.wav").ok());
+	EXPECT_TRUE(FindAsset("sfx\\misc\\walk1.wav").ok());
+
+	SetDiablo2HeroVoices(true);
+	EXPECT_TRUE(FindAsset("sfx\\sorceror\\mage13.wav").ok());
+
+	SetDiablo2HeroVoices(saved);
+}
 #endif // !UNPACKED_MPQS
 
 } // namespace

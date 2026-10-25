@@ -335,6 +335,24 @@ void KeepMonsterClipsLoaded()
  * the wanted clip, the best clip the pack has (the wanted one, or the first stand-in when the pack lacks it) is loaded
  * ahead of everything else while a stand-in draws (or nothing, while none is resident yet).
  */
+/** The frame of a monster body clip that follows the classic animation (`matched`: the animation is one of the type's). */
+int MonsterFrame(const Monster &monster, const hd_sprites::ClipInfo &clip, bool matched, bool animate)
+{
+	if (!matched || !animate)
+		return 0;
+	const AnimationInfo &anim = monster.animInfo;
+	// Frozen (no processAnimation this tick): stone curse, or a monster waiting in its special pose.
+	const bool frozen = anim.isPetrified || (monster.flags & MFLAG_ALLOW_SPECIAL) != 0;
+	if (anim.distributesFrames())
+		return hd_sprites::SelectFrameFromProgress(clip.frames, clip.loop, static_cast<float>(anim.getAnimationProgress()) / AnimationInfo::baseValueFraction);
+	if ((monster.flags & MFLAG_LOCK_ANIMATION) != 0) {
+		return hd_sprites::SelectFrameReversed(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
+		    HdSpritesSubtickProgress(frozen), anim.ticksPerFrame);
+	}
+	return hd_sprites::SelectFrame(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
+	    HdSpritesSubtickProgress(frozen), anim.ticksPerFrame);
+}
+
 hd_sprites::BodyClipChoice ChooseMonsterClip(const MonsterLook &look, std::string_view action, int direction)
 {
 	const hd_sprites::SpriteIndex &index = HdSpritesIndex();
@@ -384,21 +402,7 @@ bool HdSpritesDrawMonster(const Surface &out, const Monster &monster, Point targ
 	if (choice.clip < 0)
 		return choice.hide; // hide: HD art is on its way; otherwise every clip failed to load (classic)
 
-	const hd_sprites::ClipInfo &clip = HdSpritesIndex().clips[choice.clip];
-	// Frozen (no processAnimation this tick): stone curse, or a monster waiting in its special pose.
-	const bool frozen = anim.isPetrified || (monster.flags & MFLAG_ALLOW_SPECIAL) != 0;
-	int frame = 0;
-	if (matched && choice.animate) {
-		if (anim.distributesFrames()) {
-			frame = hd_sprites::SelectFrameFromProgress(clip.frames, clip.loop, static_cast<float>(anim.getAnimationProgress()) / AnimationInfo::baseValueFraction);
-		} else if ((monster.flags & MFLAG_LOCK_ANIMATION) != 0) {
-			frame = hd_sprites::SelectFrameReversed(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
-			    HdSpritesSubtickProgress(frozen), anim.ticksPerFrame);
-		} else {
-			frame = hd_sprites::SelectFrame(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
-			    HdSpritesSubtickProgress(frozen), anim.ticksPerFrame);
-		}
-	}
+	const int frame = MonsterFrame(monster, HdSpritesIndex().clips[choice.clip], matched, choice.animate);
 
 	// The classic TRN draws (stone curse, infravision) are unlit: so are their HD stand-ins.
 	HdSpriteTint tint = look.tint;
@@ -416,6 +420,33 @@ bool HdSpritesDrawMonster(const Surface &out, const Monster &monster, Point targ
 	pivot += monster.position.GetDrawnScreenOffset(monster.isWalking(), monster.direction, anim);
 	// A body whose quad lies entirely outside the viewport records nothing; it is still an HD body (nothing to show).
 	HdSpritesRecordInstance(out, choice.clip, frame, pivot, selfLit ? 0 : lightTableIndex, tint, selfLit);
+	return true;
+}
+
+bool HdSpritesMonsterPose(const Monster &monster, HdSpritePose &pose)
+{
+	if (!monster.animInfo.sprites || !HdSpritesIndexReady())
+		return false;
+	const MonsterLook &look = LookFor(monster.levelType, &monster);
+	if (look.prefix.empty())
+		return false;
+	int graphic = StandGraphic;
+	int direction = static_cast<int>(monster.direction);
+	const bool matched = FindMonsterAnimation(monster.type(), monster.animInfo.sprites->data(), monster.direction, graphic, direction);
+	// The host loads every clip itself: the first candidate the index has is drawable.
+	const std::vector<hd_sprites::BodyClipCandidate> candidates = hd_sprites::MonsterClipCandidates(hd_sprites::MonsterAnimName(graphic), direction);
+	const hd_sprites::BodyClipChoice choice = hd_sprites::ChooseClip(HdSpritesIndex(), look.prefix, candidates,
+	    [](int) { return hd_sprites::ClipStatus::Resident; });
+	if (choice.clip < 0)
+		return false;
+	pose = {};
+	pose.clip = choice.clip;
+	pose.frame = MonsterFrame(monster, HdSpritesIndex().clips[choice.clip], matched, choice.animate);
+	pose.tint = look.tint;
+	if (monster.mode == MonsterMode::Petrified) {
+		pose.tint = StoneTint;
+		pose.selfLit = true;
+	}
 	return true;
 }
 

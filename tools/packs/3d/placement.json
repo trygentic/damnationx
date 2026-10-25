@@ -13,9 +13,6 @@
     {"model": "cottage_thatched_b", "levels": ["town"], "anchor": "tile", "at": [51.0, 77.5], "scale": [10, 4.45, 7], "replaces": "town_house", "note": "south house: house cells 46..55 x 74..80"},
     {"model": "hut_thatched_a", "levels": ["town"], "anchor": "tile", "at": [70.5, 80.5], "scale": [5, 3.35, 5], "replaces": "town_house", "note": "south-east small hut: house cells 68..72 x 78..82"},
     {"model": "church_stone", "levels": ["town"], "anchor": "tile", "at": [24.5, 20.5], "scale": [20.053, 10, 17], "replaces": "town_house", "note": "Tristram cathedral: house cells 17..31 x 12..28"},
-    {"model": "chest_treasure", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST1", "OBJ_TCHEST1"], "facing": "open_side", "show": "unopened"},
-    {"model": "chest_wooden", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST2", "OBJ_TCHEST2"], "facing": "open_side", "show": "unopened"},
-    {"model": "chest_stone", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST3", "OBJ_TCHEST3"], "facing": "open_side", "show": "unopened"},
     {"model": "brazier_metal", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_L1LIGHT"]},
     {"model": "door_arch_wooden", "levels": ["cathedral"], "anchor": "door", "objects": ["OBJ_L1LDOOR", "OBJ_L1RDOOR"], "show": "closed"},
     {"model": "arch_stone", "levels": ["cathedral"], "anchor": "arch"}

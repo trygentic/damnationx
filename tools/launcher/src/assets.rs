@@ -229,7 +229,7 @@ fn regular_file(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn contained_file(root: &Path, name: &str) -> Result<PathBuf, String> {
+pub(crate) fn contained_file(root: &Path, name: &str) -> Result<PathBuf, String> {
     contained_file_with_policy(root, name, false)
 }
 
@@ -856,6 +856,23 @@ pub fn detect() -> AssetCandidates {
             found.importers.push(path);
         }
     }
+    found.pythons = python_candidates();
+    for list in [
+        &mut found.data_dirs,
+        &mut found.hd_dirs,
+        &mut found.d2r_dirs,
+        &mut found.d2r_installs,
+        &mut found.importers,
+    ] {
+        list.sort();
+        list.dedup();
+    }
+    found
+}
+
+/// Candidates only; the import worker probes their version before using them.
+pub fn python_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
     if let Some(paths) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&paths) {
             // Windows Store execution aliases are not installed interpreters.
@@ -873,23 +890,29 @@ pub fn detect() -> AssetCandidates {
             } {
                 let path = directory.join(name);
                 if path.is_file() {
-                    found.pythons.push(path);
+                    candidates.push(path);
                 }
             }
         }
     }
-    for list in [
-        &mut found.data_dirs,
-        &mut found.hd_dirs,
-        &mut found.d2r_dirs,
-        &mut found.d2r_installs,
-        &mut found.importers,
-        &mut found.pythons,
-    ] {
-        list.sort();
-        list.dedup();
+    // The python.org installer need not add Python to PATH. Search its usual
+    // per-user install location as well, including after a version upgrade.
+    if cfg!(windows) {
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            if let Ok(entries) = fs::read_dir(PathBuf::from(local).join("Programs/Python")) {
+                for entry in entries.flatten() {
+                    let executable = entry.path().join("python.exe");
+                    if executable.is_file() {
+                        candidates.push(executable);
+                    }
+                }
+            }
+        }
+        candidates.push(PathBuf::from("py.exe"));
     }
-    found
+    candidates.sort();
+    candidates.dedup();
+    candidates
 }
 
 #[cfg(test)]

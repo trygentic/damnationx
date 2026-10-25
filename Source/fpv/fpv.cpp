@@ -1480,6 +1480,10 @@ void ClearWorldArea(const Surface &out, int viewportHeight)
 	render3d::BeginUiCoverage(out, rows); // every UI pixel drawn from here on is recorded (black UI stays black)
 
 	// Ground item labels (Alt / "show item labels"): project the visible items into the view.
+	if (!S.active && host::DrawsWorld3D()) {
+		host::QueueWorldItemLabels(out.w(), rows); // embedded World3D: the host's camera, not this one
+		return;
+	}
 	if (!IsHighlightingLabelsEnabled() || !S.cameraValid)
 		return;
 	for (uint8_t i = 0; i < ActiveItemCount; ++i) {

@@ -12,6 +12,10 @@ use eframe::egui;
 #[cfg(not(target_arch = "wasm32"))]
 mod assets;
 #[cfg(not(target_arch = "wasm32"))]
+mod d2r_cache;
+#[cfg(not(target_arch = "wasm32"))]
+mod d2r_resume;
+#[cfg(not(target_arch = "wasm32"))]
 mod jobs;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;

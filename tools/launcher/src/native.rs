@@ -1,5 +1,6 @@
 //! Native launcher. Asset work runs outside egui; the web frontend stays independent.
 use crate::assets::{self, AssetCandidates, AssetPaths, AssetReadiness, AssetStatus, CachePaths};
+use crate::d2r_cache;
 use crate::jobs::{
     D2rImportRequest, D2rSoundImportRequest, JobEvent, JobHandle, JobOutcome, JobRequest,
 };
@@ -66,6 +67,9 @@ struct Settings {
     python: PathBuf,
     managed_python: bool,
     use_hd: bool,
+    /// Master switch for everything imported from D2R (art, interface, sounds).
+    /// Off restores original visuals and audio without touching the import.
+    use_d2r: bool,
     use_models: bool,
     use_environment: bool,
     resolution: [u32; 2],
@@ -95,6 +99,7 @@ impl Default for Settings {
             }),
             managed_python: true,
             use_hd: true,
+            use_d2r: true,
             use_models: true,
             use_environment: true,
             resolution: [1280, 720],
@@ -285,7 +290,8 @@ fn write_settings(path: &Path, text: &str) -> Result<(), String> {
     })
 }
 
-/// The unattended import changes only the authorized sound selection. Preserve
+/// The unattended import changes only the authorized sound selection (and the
+/// D2R switch, so the selection is heard). Preserve
 /// every other JSON value, including legacy aliases and newer unknown fields.
 fn write_sound_selection(path: &Path, fallback: &Settings) -> Result<(), String> {
     let mut value: serde_json::Value = match std::fs::read_to_string(path) {
@@ -296,13 +302,17 @@ fn write_sound_selection(path: &Path, fallback: &Settings) -> Result<(), String>
         }
         Err(e) => return Err(e.to_string()),
     };
-    value
+    let object = value
         .as_object_mut()
-        .ok_or("Launcher settings must be a JSON object")?
-        .insert(
-            "sound_pack".into(),
-            serde_json::to_value(SoundPack::D2rRemastered).map_err(|e| e.to_string())?,
-        );
+        .ok_or("Launcher settings must be a JSON object")?;
+    object.insert(
+        "sound_pack".into(),
+        serde_json::to_value(SoundPack::D2rRemastered).map_err(|e| e.to_string())?,
+    );
+    // Absent means on; only a stored "off" needs rewriting.
+    if let Some(switch) = object.get_mut("use_d2r") {
+        *switch = serde_json::Value::Bool(true);
+    }
     write_settings(
         path,
         &serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?,
@@ -324,6 +334,7 @@ fn sound_import_request(
         destination: paths.sound_mods.clone(),
         classic_runtime: settings.runtime == Runtime::Classic,
         data_dir: settings.data_dir.clone(),
+        stamp: Some(paths.d2r_cache.join(d2r_cache::SOUND_STAMP)),
     })
 }
 
@@ -340,7 +351,7 @@ fn import_sounds_without_window(request: D2rSoundImportRequest) -> Result<(), St
                         println!("{phase}");
                     }
                 }
-                JobEvent::Finished(Ok(JobOutcome::ImportedD2rSounds(path))) => {
+                JobEvent::Finished(Ok(JobOutcome::ImportedD2rSounds(path, _))) => {
                     println!("Validated sound packs: {}", path.display());
                     return Ok(());
                 }
@@ -376,7 +387,13 @@ fn launch_plan(
     if !ready.base.ready {
         return Err("Select your Diablo game data before playing".into());
     }
-    let selected_sound = match settings.sound_pack {
+    // The D2R master switch only changes flags and mod enables, never files.
+    let sound_pack = if settings.use_d2r {
+        settings.sound_pack
+    } else {
+        SoundPack::Original
+    };
+    let selected_sound = match sound_pack {
         SoundPack::Original => None,
         SoundPack::D2rClassic => Some(&ready.d2r_sounds_classic),
         SoundPack::D2rRemastered => Some(&ready.d2r_sounds_remastered),
@@ -391,7 +408,7 @@ fn launch_plan(
             "The selected HD pack needs attention; import it again or switch HD art off".into(),
         );
     }
-    if settings.runtime == Runtime::Toxoid && settings.d2r_dir.is_some() {
+    if settings.runtime == Runtime::Toxoid && settings.use_d2r && settings.d2r_dir.is_some() {
         if settings.use_models && !ready.d2r_mapping.ready {
             return Err(
                 "D2R characters are incomplete; import them or switch characters off".into(),
@@ -436,26 +453,34 @@ fn launch_plan(
         );
         push(
             "--d2r-models",
-            OsStr::new(if settings.use_models && ready.d2r_mapping.ready {
-                "on"
-            } else {
-                "off"
-            }),
+            OsStr::new(
+                if settings.use_d2r && settings.use_models && ready.d2r_mapping.ready {
+                    "on"
+                } else {
+                    "off"
+                },
+            ),
         );
         push(
             "--d2r-env",
-            OsStr::new(if settings.use_environment && ready.d2r_environment.ready {
-                "on"
-            } else {
-                "off"
-            }),
+            OsStr::new(
+                if settings.use_d2r && settings.use_environment && ready.d2r_environment.ready {
+                    "on"
+                } else {
+                    "off"
+                },
+            ),
         );
         let d2r = ready
             .d2r_mapping
             .path
             .as_ref()
             .or(ready.d2r_environment.path.as_ref());
-        if let Some(dir) = d2r {
+        if !settings.use_d2r {
+            // The host finds the managed import by default; --d2r off makes it ignore all of it.
+            push("--d2r", OsStr::new("off"));
+            push("--ui-theme", OsStr::new("classic"));
+        } else if let Some(dir) = d2r {
             push("--d2r-dir", dir.as_os_str());
         }
         if settings.use_hd {
@@ -502,15 +527,15 @@ fn launch_plan(
     // Native sound selection and actual enabled mods stay in sync, including
     // explicitly returning to original audio after using either imported pack.
     for value in [
-        format!("Audio.Sound Pack={}", settings.sound_pack.native_value()),
+        format!("Audio.Sound Pack={}", sound_pack.native_value()),
         "Mods.d2sounds=0".into(),
         format!(
             "Mods.d2r-sounds-classic={}",
-            u8::from(settings.sound_pack == SoundPack::D2rClassic)
+            u8::from(sound_pack == SoundPack::D2rClassic)
         ),
         format!(
             "Mods.d2r-sounds-advanced={}",
-            u8::from(settings.sound_pack == SoundPack::D2rRemastered)
+            u8::from(sound_pack == SoundPack::D2rRemastered)
         ),
     ] {
         args.extend([OsString::from("--set"), value.into()]);
@@ -548,6 +573,7 @@ struct DesktopLauncher {
     page: usize,
     cancelling: bool,
     close_after_job: bool,
+    confirm_clear: bool,
     #[cfg(feature = "trainer")]
     trainer: Option<PathBuf>,
 }
@@ -585,6 +611,7 @@ impl DesktopLauncher {
             page: 0,
             cancelling: false,
             close_after_job: false,
+            confirm_clear: false,
             #[cfg(feature = "trainer")]
             trainer: _trainer,
         };
@@ -697,23 +724,58 @@ impl DesktopLauncher {
                             ));
                             self.refresh_pending = true;
                         }
-                        Ok(JobOutcome::ImportedD2r(path)) => {
+                        Ok(JobOutcome::ImportedD2r(path, reused)) => {
                             self.settings.d2r_dir = Some(path);
+                            self.settings.use_d2r = true;
                             self.settings.use_models = true;
                             self.settings.use_environment = true;
                             self.notice = Some((
                                 false,
-                                "D2R characters, world, interface and portal imported.".into(),
+                                if reused {
+                                    "D2R art is already imported and unchanged; nothing was converted."
+                                } else {
+                                    "D2R characters, world, interface and portal imported."
+                                }
+                                .into(),
                             ));
                             self.refresh_pending = true;
                         }
-                        Ok(JobOutcome::ImportedD2rSounds(path)) => {
+                        Ok(JobOutcome::ImportedD2rSounds(path, reused)) => {
                             self.log(format!("Sound library: {}", path.display()));
+                            self.settings.use_d2r = true;
                             self.settings.sound_pack = SoundPack::D2rRemastered;
                             self.notice = Some((
                                 false,
-                                "D2R classic and remastered sounds imported. Remastered selected."
-                                    .into(),
+                                if reused {
+                                    "D2R sounds are already imported and unchanged. Remastered selected."
+                                } else {
+                                    "D2R classic and remastered sounds imported. Remastered selected."
+                                }
+                                .into(),
+                            ));
+                            self.refresh_pending = true;
+                        }
+                        Ok(JobOutcome::ClearedD2r(removed)) => {
+                            if self
+                                .settings
+                                .d2r_dir
+                                .as_ref()
+                                .is_some_and(|dir| dir.starts_with(&self.paths.d2r_cache))
+                            {
+                                self.settings.d2r_dir = None;
+                            }
+                            self.settings.sound_pack = SoundPack::Original;
+                            self.notice = Some((
+                                false,
+                                if removed.is_empty() {
+                                    "Nothing to clear; no D2R import was found.".into()
+                                } else {
+                                    format!(
+                                        "Cleared the D2R import ({} folder{}). Your D2R installation, saves and other mods were not touched.",
+                                        removed.len(),
+                                        if removed.len() == 1 { "" } else { "s" }
+                                    )
+                                },
                             ));
                             self.refresh_pending = true;
                         }
@@ -864,6 +926,24 @@ impl DesktopLauncher {
         }
     }
 
+    fn clear_d2r(&mut self) {
+        // Never inside the owned install, the game data or the HD library.
+        let protected = [
+            self.settings.d2r_install.clone(),
+            self.settings.data_dir.clone(),
+            Some(self.paths.hd_dir.clone()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        self.notice = None;
+        self.start(JobRequest::ClearD2r {
+            cache_dir: self.paths.d2r_cache.clone(),
+            sound_mods: self.paths.sound_mods.clone(),
+            protected,
+        });
+    }
+
     fn persist(&mut self) {
         self.settings.legacy_options = self.legacy.text();
         let Ok(text) = serde_json::to_string_pretty(&self.settings) else {
@@ -945,6 +1025,7 @@ impl DesktopLauncher {
         });
         ui.add_space(10.0);
         card(ui, "02", "HD art pack", &ready.hd, |ui| {
+            ui.label("HD art is optional and supplied separately by the DamnationX team. You can play with classic art or import D2R without this pack.");
             ui.label("Use an existing pack, or import a ZIP/folder into your library. Further imports add to the managed pack.");
             path_label(ui, self.settings.hd_dir.as_deref());
             ui.horizontal_wrapped(|ui| {
@@ -984,6 +1065,7 @@ impl DesktopLauncher {
         };
         card(ui, "03", "Diablo II: Resurrected", &d2r, |ui| {
             ui.label("Bring D2R characters, scenery and interface into Tristram.");
+            ui.small("Imports need Python 3.11+. Without a prebuilt d2rtool helper, they also need CMake 3.20+ and a C/C++17 compiler. Python can be selected under Launch options.");
             path_label(ui, self.settings.d2r_dir.as_deref());
             ui.horizontal_wrapped(|ui| {
                 if ui
@@ -1008,14 +1090,44 @@ impl DesktopLauncher {
                     self.page = 2;
                 }
             });
+            let imported = ready.d2r_mapping.ready
+                || ready.d2r_environment.ready
+                || ready.d2r_ui.ready
+                || ready.d2r_sounds_classic.ready
+                || ready.d2r_sounds_remastered.ready;
+            ui.add_space(4.0);
+            ui.add_enabled(
+                idle && imported,
+                egui::Checkbox::new(
+                    &mut self.settings.use_d2r,
+                    egui::RichText::new("Use Diablo II: Resurrected assets").color(IVORY),
+                ),
+            )
+            .on_hover_text("Switch between D2R and original art, interface and sounds instantly. Nothing is re-imported.")
+            .on_disabled_hover_text("Import from your D2R installation first.");
+            if !imported {
+                ui.label(
+                    egui::RichText::new("Nothing imported yet. Imports are cached: repeating one only converts what is missing or changed.")
+                        .small()
+                        .color(MUTED),
+                );
+            } else if !self.settings.use_d2r {
+                ui.label(
+                    egui::RichText::new(
+                        "Original Diablo art, interface and sounds. Your import stays cached.",
+                    )
+                    .small()
+                    .color(MUTED),
+                );
+            }
             if self.settings.d2r_dir.is_some() {
                 ui.horizontal_wrapped(|ui| {
                     ui.add_enabled(
-                        idle,
+                        idle && self.settings.use_d2r,
                         egui::Checkbox::new(&mut self.settings.use_models, "Characters"),
                     );
                     ui.add_enabled(
-                        idle,
+                        idle && self.settings.use_d2r,
                         egui::Checkbox::new(&mut self.settings.use_environment, "World"),
                     );
                     for (label, status) in [
@@ -1040,6 +1152,39 @@ impl DesktopLauncher {
                     }
                 });
             }
+            let managed = self.paths.d2r_cache.exists()
+                || assets::D2R_SOUND_PACKS
+                    .iter()
+                    .any(|name| self.paths.sound_mods.join(name).exists());
+            ui.add_space(4.0);
+            if self.confirm_clear && idle {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        egui::RichText::new("Delete the imported D2R art and sounds? You can import again afterwards.")
+                            .color(ERROR),
+                    );
+                    if ui.button("Delete import").clicked() {
+                        self.confirm_clear = false;
+                        self.clear_d2r();
+                    }
+                    if ui.button("Cancel").clicked() {
+                        self.confirm_clear = false;
+                    }
+                });
+            } else if ui
+                .add_enabled(idle && managed, egui::Button::new("Clear D2R import…"))
+                .on_hover_text(format!(
+                    "Removes only what the launcher imported:\n{}\n{}\nNever your D2R installation, saves, other mods or a converted folder you selected yourself.",
+                    self.paths.d2r_cache.display(),
+                    assets::D2R_SOUND_PACKS
+                        .map(|name| self.paths.sound_mods.join(name).display().to_string())
+                        .join("\n")
+                ))
+                .on_disabled_hover_text("No launcher-imported D2R assets were found.")
+                .clicked()
+            {
+                self.confirm_clear = true;
+            }
         });
         ui.add_space(10.0);
         ui.horizontal(|ui| {
@@ -1058,6 +1203,14 @@ impl DesktopLauncher {
         let ready = self.ready.clone().unwrap_or_default();
         ui.heading("Diablo II: Resurrected sounds");
         ui.label("Bring the sounds of your own D2R installation into DamnationX.");
+        if !self.settings.use_d2r {
+            ui.label(
+                egui::RichText::new(
+                    "D2R assets are switched off in Library; original Diablo sounds will play.",
+                )
+                .color(GOLD),
+            );
+        }
         ui.add_space(12.0);
         let status = AssetStatus {
             ready: ready.d2r_sounds_classic.ready && ready.d2r_sounds_remastered.ready,
@@ -1553,6 +1706,59 @@ mod tests {
     }
 
     #[test]
+    fn d2r_switch_flips_art_interface_and_sounds_without_import() {
+        let temp = tempfile::tempdir().unwrap();
+        let game = temp.path().join("host");
+        std::fs::write(&game, b"fixture").unwrap();
+        let mut settings = Settings {
+            game,
+            data_dir: Some(temp.path().into()),
+            d2r_dir: Some(temp.path().into()),
+            sound_pack: SoundPack::D2rRemastered,
+            ..Default::default()
+        };
+        let mut status = ready(&settings, temp.path());
+        let args = |settings: &Settings, status: &AssetReadiness| -> Vec<String> {
+            launch_plan(settings, &Launcher::defaults(), status)
+                .unwrap()
+                .args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect()
+        };
+        let has = |args: &[String], pair: [&str; 2]| args.windows(2).any(|w| w == pair);
+        let on = args(&settings, &status);
+        assert!(has(&on, ["--d2r-models", "on"]) && has(&on, ["--d2r-env", "on"]));
+        assert!(on.iter().any(|a| a == "--d2r-dir"));
+        assert!(on.iter().any(|a| a == "Mods.d2r-sounds-advanced=1"));
+        settings.use_d2r = false;
+        let off = args(&settings, &status);
+        assert!(has(&off, ["--d2r-models", "off"]) && has(&off, ["--d2r-env", "off"]));
+        assert!(has(&off, ["--ui-theme", "classic"]) && has(&off, ["--d2r", "off"]));
+        assert!(!off.iter().any(|a| a == "--d2r-dir"));
+        for value in [
+            "Audio.Sound Pack=0",
+            "Mods.d2r-sounds-classic=0",
+            "Mods.d2r-sounds-advanced=0",
+        ] {
+            assert!(off.iter().any(|a| a == value), "{value}");
+        }
+        // Remembered sub-choices survive the switch.
+        assert_eq!(settings.sound_pack, SoundPack::D2rRemastered);
+        assert!(settings.use_models && settings.use_environment);
+        // Switched off, missing or cleared imports never block Play.
+        status.d2r_mapping.ready = false;
+        status.d2r_environment.ready = false;
+        status.d2r_sounds_remastered.ready = false;
+        assert!(launch_plan(&settings, &Launcher::defaults(), &status).is_ok());
+        settings.use_d2r = true;
+        assert!(launch_plan(&settings, &Launcher::defaults(), &status).is_err());
+        // Older settings files without the switch keep D2R on.
+        let old: Settings = serde_json::from_str(r#"{"use_models": false}"#).unwrap();
+        assert!(old.use_d2r && !old.use_models);
+    }
+
+    #[test]
     fn classic_arguments_do_not_receive_toxoid_options() {
         let temp = tempfile::tempdir().unwrap();
         let game = temp.path().join("devilutionx");
@@ -1764,6 +1970,10 @@ mod tests {
         assert_eq!(settings.sound_pack, SoundPack::D2rRemastered);
         let migrated: Settings = serde_json::from_str("{\"runtime\":\"Bevy\"}").unwrap();
         assert_eq!(migrated.sound_pack, SoundPack::Original);
+        std::fs::write(&path, br#"{"use_d2r": false}"#).unwrap();
+        write_sound_selection(&path, &Settings::default()).unwrap();
+        let switched: Settings = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(switched.use_d2r);
         std::fs::write(&path, b"{malformed").unwrap();
         assert!(write_sound_selection(&path, &Settings::default()).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"{malformed");

@@ -1,17 +1,30 @@
-# 3D asset packs: FREE and HD tiers
+# DamnationX art pack
 
-DamnationX draws 3D models in the WebGPU 3D world (first person and the other 3D camera modes) from two separately
-distributed packs. **No model or texture bytes are ever committed**: the models are Blizzard-derived or third-party
-art, built into zips locally and shared on Discord.
+Players download one archive, `damnationx-art-pack-<version>.zip`, containing the
+2D HD artwork, 3D characters and props, and FREE 3D models. Import it through
+**Asset library > HD art pack > Import ZIP**, or extract it and choose its `hd`
+folder. There are no separate FREE and HD downloads to install. D2R game data
+and converted D2R artwork are excluded; those remain an optional local import.
 
-| Pack | Contents | License | Installs to |
+The internal directories preserve component overrides and their existing terms:
+
+| Component | Contents | License | Internal path |
 | --- | --- | --- | --- |
-| FREE (`damnationx-3d-free-<date>.zip`) | Douglas Opan's diablo-3d models: Tristram cottages, huts, the church, chests, arches, a door, a brazier | Sustainable Use License 1.0, free of charge only (NOTICE.md, LICENSE.md in the pack) | `hd/3d/free/` |
-| HD (`damnationx-3d-hd-<date>.zip`, Patreon) | the 3D warrior (`hd/3d/warrior/`), HD props (retextures, new models) | DamnationX HD pack terms | `hd/3d/hd/`, `hd/3d/warrior/` |
+| FREE 3D | Douglas Opan's diablo-3d models: cottages, huts, church, chest resources, arches, door and brazier | Sustainable Use License 1.0; full NOTICE.md and LICENSE.md retained; free of charge only | `hd/3d/free/` |
+| HD 3D | Characters and HD props | Existing DamnationX HD pack terms, retained in its manifest | `hd/3d/hd/`, `hd/3d/warrior/`, `hd/3d/rogue/` |
+| 2D HD | Sprites, UI, items and tiles from the existing export | Existing HD art terms | `hd/` |
 
-Both zips hold `hd/...` paths: players unzip them where their HD art goes (next to DIABDAT.MPQ, see building.md), or
-into an empty `hd` folder there. A folder with only the FREE pack is recognised as well; it does not turn the 2D HD art
-on. In the browser the files are served from `hd/` next to the page or the player's chosen HD folder.
+The combined archive preserves each component's permissions; it does not
+relicense the art. In particular, the FREE component's notice prohibits selling
+it, putting it behind a paywall, or bundling it with something sold. The archive
+contains a root README and `ART-PACK.json` identifying its component manifests.
+Art and model bytes stay in ignored local folders and are never committed.
+
+Use the existing WebP export for a smaller complete download. The builder copies
+its images and indexes unchanged; it does not recompress or generate 2D artwork.
+Back up and replace an existing manually installed `hd` folder instead of merging
+PNG and WebP exports. The browser reads `hd/` beside the page or from the selected
+local HD folder.
 
 ## What the game does
 
@@ -53,7 +66,7 @@ The pack builder turns these rules into the placement files (damnationx.placemen
 
 ```json
 { "model": "church_stone", "levels": ["town"], "anchor": "tile", "at": [24.5, 20.5], "scale": [20.05, 10, 17], "replaces": "town_house" }
-{ "model": "chest_wooden", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_CHEST2", "OBJ_TCHEST2"], "facing": "open_side", "show": "unopened" }
+{ "model": "brazier_metal", "levels": ["cathedral"], "anchor": "object", "objects": ["OBJ_L1LIGHT"] }
 { "model": "door_arch_wooden", "levels": ["cathedral"], "anchor": "door", "objects": ["OBJ_L1LDOOR", "OBJ_L1RDOOR"], "show": "closed" }
 { "model": "arch_stone", "levels": ["cathedral"], "anchor": "arch" }
 ```
@@ -66,19 +79,38 @@ The pack builder turns these rules into the placement files (damnationx.placemen
 * The final `scale` is the model's manifest scale times the rule's (`x,y,z` when not uniform).
 * The HD pack writes only `[mesh.*]` sections, for the models it redefines.
 
-## Building the packs
+Chest meshes remain in the combined archive but are not placed automatically.
+The old `show = unopened` rules removed the pack chest on interaction and
+revealed a differently oriented native or D2R fallback, making it appear to
+rotate. Chests now use the same native sprite or D2R model for both states.
+Static pack chest replacements can return once matching open variants are
+authored; a closed mesh must not conceal the game's opened state.
+
+## Building the combined pack
 
 ```bash
 pip install pillow
-tools/build_3d_packs.py                    # both packs into assets/packs/ (gitignored)
-tools/build_3d_packs.py --pack free --install /path/to/folder-with-hd   # also unpack for testing
+tools/build_3d_packs.py --hd-art /path/to/existing/webp/hd
+# One damnationx-art-pack-<version>.zip in assets/packs/ (gitignored).
+# --install /path/to/folder-with-hd also unpacks the complete archive for testing.
+# --pack free, --pack hd and --pack all retain legacy component build modes.
 ```
 
 Sources: `assets/downloaded/free/` (FREE), `assets/downloaded/hd/props/` (HD props) and the local
 `assets/3d/warrior/*.glb` (the warrior); definitions in `tools/packs/3d/{free,hd}.pack.json` (ids, source files,
 scale, yaw, footprint overrides). Textures are re-encoded as PNG, at most `--max-texture` (1024) pixels, because the
 browser and native builds decode PNG but not JPEG; the FREE NOTICE.md states this modification as the license requires.
-`--hd-art DIR` merges an HD art folder into the HD zip. `SHA256SUMS` is written next to the zips.
+The default combined build requires `--hd-art DIR` and merges the folder's
+**2D art only** (sprites, UI, items and other art) with both current 3D tiers.
+Directory symlinks in an installed library are followed and their files are packed under the linked names;
+broken links and directory cycles stop the build with an error. The existing top-level `3d/` tree is excluded:
+models, character manifests and placements always come from the current pack definitions and source models.
+This keeps an older combined installation from overwriting new models or restoring obsolete placement rules.
+The default writes one combined archive and `SHA256SUMS`; legacy `--pack all`
+writes two component archives for developer use. Player distribution uses the
+combined archive. A missing 2D sprite/UI index or FREE license notice stops the
+combined build. Model source failures stop all builds unless the explicit
+`--allow-missing` development option is used.
 
 ## Keeping art out of git
 

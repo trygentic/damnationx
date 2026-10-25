@@ -200,7 +200,8 @@ option(WIN_NSIS "Generate an NSIS installer" OFF)
 # Network options
 cmake_dependent_option(DISABLE_TCP "Disable TCP multiplayer option" OFF "NOT NONET" ON)
 cmake_dependent_option(DISABLE_ZERO_TIER "Disable ZeroTier multiplayer option" OFF "NOT NONET" ON)
-if(EMSCRIPTEN)
+if(EMSCRIPTEN OR DAMNATIONX_HOST_LIB)
+  # Desktop downloads are host builds; they need the lobby for public and private games.
   set(_lobby_default ON)
 else()
   set(_lobby_default OFF)

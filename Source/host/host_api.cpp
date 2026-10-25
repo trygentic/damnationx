@@ -53,6 +53,8 @@ uint32_t ApiVersionInUse = kHostApiVersion;
 std::vector<std::string> GameArgs;
 std::vector<char *> GameArgPointers;
 std::string SoundPathBuffer;
+/** Set by RequestClipboard on the game thread, taken between ticks by HostTakeClipboardText. */
+std::string PendingClipboard;
 
 /** Splits the host's own options off argv (host_api.hpp lists them). */
 void ParseArgs(int argc, const char *const *argv)
@@ -157,10 +159,7 @@ bool HostInit(const HostInitParams &params)
 	ApiVersionInUse = params.apiVersion;
 	ParseArgs(params.argc, params.argv);
 	if (!Options.assetsDir.empty()) {
-		std::string dir = Options.assetsDir;
-		if (dir.back() != '/' && dir.back() != '\\')
-			dir += '/';
-		paths::SetAssetsPath(dir);
+		paths::SetAssetsPath(Options.assetsDir);
 	}
 	forceResolution = { static_cast<int>(params.uiWidth != 0 ? params.uiWidth : 640), static_cast<int>(params.uiHeight != 0 ? params.uiHeight : 480) };
 
@@ -348,6 +347,11 @@ uint32_t HostReadAsset(const char *path, uint8_t *buffer, uint32_t capacity)
 	return static_cast<uint32_t>(std::min<size_t>(size, UINT32_MAX));
 }
 
+void HostSetHeroVoiceD2(bool d2)
+{
+	SetDiablo2HeroVoices(d2);
+}
+
 uint32_t HostApiVersionInUse()
 {
 	return ApiVersionInUse;
@@ -392,6 +396,11 @@ const HostEntityArt &HostEntityArtSnapshot()
 	return BuildEntityArt(Active && InGame());
 }
 
+const HostEntityHdArt &HostEntityHdArtSnapshot()
+{
+	return BuildEntityHdArt(Active && InGame());
+}
+
 const HostWorldFrame &HostWorldSnapshot()
 {
 	return BuildWorldSnapshot(Active && InGame(), SnapshotEntities());
@@ -422,6 +431,18 @@ uint32_t HostSaveState(uint8_t *buffer, uint32_t capacity)
 bool HostLoadState(const uint8_t *data, uint32_t size)
 {
 	return LoadState(data, size);
+}
+
+void RequestClipboard(std::string text)
+{
+	PendingClipboard = std::move(text);
+}
+
+const char *HostTakeClipboardText()
+{
+	static std::string text;
+	text = std::exchange(PendingClipboard, {});
+	return text.c_str();
 }
 
 const char *HostHeroName()

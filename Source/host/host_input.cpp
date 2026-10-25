@@ -24,6 +24,7 @@
 #include "controls/control_mode.hpp"
 #include "cursor.h"
 #include "engine/render/ui_scale.hpp"
+#include "fpv/fpv.hpp"
 #include "gmenu.h"
 #include "items.h"
 #include "levels/gendung.h"
@@ -310,6 +311,48 @@ constexpr struct {
 	{ HostButton::Middle, SDL_BUTTON_MIDDLE },
 };
 
+/**
+ * Selects an interactive object on the picked floor tile or just in front of it. The 3D camera looks from +x/+y, so the
+ * floor point under a pointer on a tall object lands 1-2 tiles behind it; like classic TrySelectObject, try the tiles
+ * toward the camera too.
+ */
+bool SelectObjectNear(Point tile)
+{
+	constexpr Displacement Offsets[] = { { 0, 0 }, { 1, 1 }, { 1, 0 }, { 0, 1 }, { 2, 2 } };
+	for (const Displacement offset : Offsets) {
+		Object *object = FindObjectAtPosition(tile + offset);
+		if (object == nullptr || !object->canInteractWith())
+			continue;
+		ObjectUnderCursor = object;
+		cursPosition = object->position;
+		return true;
+	}
+	return false;
+}
+
+/**
+ * In town, selects a towner standing on the picked floor tile or just in front of it, like classic TrySelectTowner's
+ * generous tile area: the floor point under a pointer on a towner's body lands behind the towner's own tile.
+ */
+bool SelectTownerNear(Point tile)
+{
+	if (leveltype != DTYPE_TOWN)
+		return false;
+	constexpr Displacement Offsets[] = { { 0, 0 }, { 1, 1 }, { 1, 0 }, { 0, 1 }, { 2, 2 } };
+	for (const Displacement offset : Offsets) {
+		const Point position = tile + offset;
+		if (!InDungeonBounds(position) || dMonster[position.x][position.y] == 0)
+			continue;
+		const size_t index = static_cast<size_t>(std::abs(dMonster[position.x][position.y]) - 1);
+		if (index >= Towners.size())
+			continue;
+		pcursmonst = static_cast<int>(index);
+		cursPosition = Towners[index].position;
+		return true;
+	}
+	return false;
+}
+
 } // namespace
 
 void ApplyInput(const HostInputFrame &input)
@@ -332,6 +375,8 @@ void ApplyInput(const HostInputFrame &input)
 	NoWorldPick = HostApiVersionInUse() >= 4 && (input.inputFlags & kInputNoWorldPick) != 0;
 	if (HostApiVersionInUse() >= 5 && (input.inputFlags & kInputToggleRun) != 0)
 		HostToggleRun();
+	if (HostApiVersionInUse() >= 5 && (input.inputFlags & kInputToggleFirstPerson) != 0 && InGame())
+		fpv::ToggleFirstPerson();
 
 	if (input.pointerX != LastPointerX || input.pointerY != LastPointerY) {
 		PushMouseMotion(input.pointerX, input.pointerY);
@@ -421,17 +466,13 @@ bool ApplyPickToCursor()
 {
 	if (pcurs == CURSOR_IDENTIFY)
 		return false;
-	if (Pick.entityId == 0) {
+	// No usable entity under the pointer: fall back to a towner or an object at or in front of the picked tile.
+	const auto nearbyObject = []() {
 		Point tile;
-		if (!PickedTile(tile))
-			return false;
-		Object *object = FindObjectAtPosition(tile);
-		if (object == nullptr || !object->canInteractWith())
-			return false;
-		ObjectUnderCursor = object;
-		cursPosition = object->position;
-		return true;
-	}
+		return PickedTile(tile) && (SelectTownerNear(tile) || SelectObjectNear(tile));
+	};
+	if (Pick.entityId == 0)
+		return nearbyObject();
 	const auto kind = static_cast<HostEntityKind>(Pick.entityId >> 24);
 	const uint32_t index = (Pick.entityId & 0xFFFFFF) - 1;
 	switch (kind) {
@@ -471,13 +512,13 @@ bool ApplyPickToCursor()
 			return false;
 		Object &object = Objects[index];
 		if (!object.canInteractWith())
-			return false;
+			return nearbyObject();
 		ObjectUnderCursor = &object;
 		cursPosition = object.position;
 		return true;
 	}
 	default:
-		return false; // missiles cannot be targeted
+		return nearbyObject(); // missiles cannot be targeted
 	}
 }
 

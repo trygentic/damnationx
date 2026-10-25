@@ -33,6 +33,11 @@ bool HdSpritesDrawMonster(const Surface &out, const Monster &monster, Point targ
 /** Called at the start of every world pass that draws HD sprites: keeps the level's monster clips loaded. */
 void HdSpritesMonstersBeginPass();
 
+struct HdSpritePose;
+
+/** HdSpritesTownerPose (hd_sprites.hpp) for a monster body: its look's clip, frame and recolour, outside a world pass. */
+bool HdSpritesMonsterPose(const Monster &monster, HdSpritePose &pose);
+
 /** Corpse variant: the last frame of the monster type's HD death clip in `direction`. */
 bool HdSpritesDrawCorpse(const Surface &out, const Corpse &corpse, Direction direction, Point targetBufferPosition, int lightTableIndex);
 

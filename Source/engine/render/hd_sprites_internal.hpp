@@ -18,6 +18,8 @@ struct Surface;
 
 /** True during a world pass that may record HD instances (flag on, presenter ready, index loaded). */
 [[nodiscard]] bool HdSpritesWorldPassEnabled();
+/** Loads hd/sprites.txt on first use outside a world pass (HdSpritePose queries); true once the index is usable. */
+[[nodiscard]] bool HdSpritesIndexReady();
 /**
  * True while hd/sprites.txt is still being fetched in a pass that will draw HD sprites once it arrives (the first
  * frames in game): entities about to be drawn in HD are hidden rather than flashed classic.

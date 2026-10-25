@@ -390,9 +390,8 @@ void CheckPanelInfo()
 		MainPanelFlag = true;
 }
 
-void DrawInfoBox(const Surface &out)
+void UpdateInfoBox()
 {
-	DrawPanelBox(out, MakeSdlRect(InfoBoxRect.position.x, InfoBoxRect.position.y + PanelPaddingHeight, InfoBoxRect.size.width, InfoBoxRect.size.height), GetMainPanel().position + Displacement { InfoBoxRect.position.x, InfoBoxRect.position.y });
 	if (!MainPanelFlag && !trigflag && pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1 && !SpellSelectFlag && pcurs != CURSOR_HOURGLASS) {
 		InfoString = StringOrView {};
 		InfoColor = UiFlags::ColorWhite;
@@ -444,6 +443,12 @@ void DrawInfoBox(const Surface &out)
 			AddInfoBoxString(_("Right click to inspect"));
 		}
 	}
+}
+
+void DrawInfoBox(const Surface &out)
+{
+	DrawPanelBox(out, MakeSdlRect(InfoBoxRect.position.x, InfoBoxRect.position.y + PanelPaddingHeight, InfoBoxRect.size.width, InfoBoxRect.size.height), GetMainPanel().position + Displacement { InfoBoxRect.position.x, InfoBoxRect.position.y });
+	UpdateInfoBox();
 	if (!InfoString.empty())
 		PrintInfo(out);
 }

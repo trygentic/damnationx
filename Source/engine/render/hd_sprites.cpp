@@ -25,7 +25,7 @@ namespace {
 
 constexpr char IndexAsset[] = "hd\\sprites.txt";
 /** Ground point of classic player/towner art relative to the tile draw position (measured: feet sit ~11 px above the diamond bottom). */
-constexpr Displacement TileCentre { 32, -11 };
+constexpr Displacement TileCentre { 32, -HdSpritesPivotAboveClassicBottom };
 
 enum class IndexState : uint8_t { Unloaded, Loading, Loaded, Failed };
 
@@ -201,6 +201,22 @@ std::string_view TownerKey(const Towner &towner)
 float SubtickProgress(bool frozen)
 {
 	return frozen ? 0.0F : static_cast<float>(ProgressToNextGameTick) / AnimationInfo::baseValueFraction;
+}
+
+/** Towner clips hold frames x delay x 3 HD frames indexed by the displayed frame (after animOrder). */
+int TownerFrame(const Towner &towner, const hd_sprites::ClipInfo &clip)
+{
+	return hd_sprites::SelectFrame(clip.frames, clip.loop, towner._tAnimFrame, towner._tAnimLen, towner._tAnimCnt, SubtickProgress(false),
+	    towner._tAnimDelay);
+}
+
+/** The frame of a player body clip that follows the classic animation. */
+int PlayerFrame(const AnimationInfo &anim, const hd_sprites::ClipInfo &clip)
+{
+	return anim.distributesFrames()
+	    ? hd_sprites::SelectFrameFromProgress(clip.frames, clip.loop, static_cast<float>(anim.getAnimationProgress()) / AnimationInfo::baseValueFraction)
+	    : hd_sprites::SelectFrame(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
+	          SubtickProgress(anim.isPetrified), anim.ticksPerFrame);
 }
 
 /** Common tail: places the clip cell on the pivot, snapshots the occlusion rectangle and records the instance. */
@@ -412,15 +428,8 @@ bool HdSpritesDrawPlayer(const Surface &out, const Player &player, Point targetB
 	if (choice.clip < 0)
 		return choice.hide; // hide: HD art is on its way, draw no body this frame rather than the classic one
 
-	const hd_sprites::ClipInfo &clip = Index.clips[choice.clip];
 	const AnimationInfo &anim = player.AnimInfo;
-	int frame = 0;
-	if (choice.animate) {
-		frame = anim.distributesFrames()
-		    ? hd_sprites::SelectFrameFromProgress(clip.frames, clip.loop, static_cast<float>(anim.getAnimationProgress()) / AnimationInfo::baseValueFraction)
-		    : hd_sprites::SelectFrame(clip.frames, clip.loop, anim.currentFrame, anim.numberOfFrames, anim.tickCounterOfCurrentFrame,
-		          SubtickProgress(anim.isPetrified), anim.ticksPerFrame);
-	}
+	const int frame = choice.animate ? PlayerFrame(anim, Index.clips[choice.clip]) : 0;
 
 	Point pivot = targetBufferPosition + TileCentre;
 	// Same drawn (free-form, sub-tile) offset as the classic body; it also applies while standing.
@@ -440,11 +449,44 @@ bool HdSpritesDrawTowner(const Surface &out, const Towner &towner, Point targetB
 	const int clipIndex = Index.find(key);
 	if (clipIndex < 0 || !HdSpritesGpuRequestClip(clipIndex))
 		return false;
-	const hd_sprites::ClipInfo &clip = Index.clips[clipIndex];
-	// Towner clips hold frames x delay x 3 HD frames indexed by the displayed frame (after animOrder).
-	const int frame = hd_sprites::SelectFrame(clip.frames, clip.loop, towner._tAnimFrame, towner._tAnimLen, towner._tAnimCnt,
-	    SubtickProgress(false), towner._tAnimDelay);
-	return RecordInstance(out, clipIndex, frame, targetBufferPosition + TileCentre, 0);
+	return RecordInstance(out, clipIndex, TownerFrame(towner, Index.clips[clipIndex]), targetBufferPosition + TileCentre, 0);
+}
+
+bool HdSpritesTownerPose(const Towner &towner, HdSpritePose &pose)
+{
+	const std::string_view key = TownerKey(towner);
+	if (key.empty() || !EnsureIndex())
+		return false;
+	const int clipIndex = Index.find(key);
+	if (clipIndex < 0)
+		return false;
+	pose = {};
+	pose.clip = clipIndex;
+	pose.frame = TownerFrame(towner, Index.clips[clipIndex]);
+	return true;
+}
+
+bool HdSpritesPlayerPose(const Player &player, HdSpritePose &pose)
+{
+	const std::string_view className = PlayerClassName(player._pClass);
+	if (className.empty() || !EnsureIndex())
+		return false;
+	const bool inTown = leveltype == DTYPE_TOWN;
+	const std::string_view baseAction = PlayerClipName(player.getGraphic(), inTown);
+	const std::string prefix = hd_sprites::ResolvePlayerClipPrefix(Index, className, player._pgfxnum, baseAction, inTown);
+	if (prefix.empty())
+		return false;
+	const int direction = static_cast<int>(player.getSpriteDirection());
+	const std::string_view action = hd_sprites::PlayerActionForLocation(Index, prefix, baseAction, direction, inTown);
+	// The host loads every clip itself: the first candidate the index has is drawable.
+	const hd_sprites::BodyClipChoice choice = hd_sprites::ChooseBodyClip(Index, prefix, action, direction, inTown,
+	    [](int) { return hd_sprites::ClipStatus::Resident; }, /*allowNeighbourDirections=*/prefix == "warrior/");
+	if (choice.clip < 0)
+		return false;
+	pose = {};
+	pose.clip = choice.clip;
+	pose.frame = choice.animate ? PlayerFrame(player.AnimInfo, Index.clips[choice.clip]) : 0;
+	return true;
 }
 
 void HdSpritesMarkTranslucent(const Surface &out, Point bottomLeft, int width, int height)
@@ -510,6 +552,11 @@ float HdSpritesSubtickProgress(bool frozen)
 Point HdSpritesGroundPoint(Point targetBufferPosition)
 {
 	return targetBufferPosition + TileCentre;
+}
+
+bool HdSpritesIndexReady()
+{
+	return EnsureIndex();
 }
 
 bool HdSpritesIndexLoading()

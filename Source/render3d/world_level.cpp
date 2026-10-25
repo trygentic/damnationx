@@ -18,6 +18,7 @@
 #include "render3d/world_level.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -113,8 +114,9 @@ struct PieceImage {
 };
 
 std::vector<PieceImage> PieceImages;
+std::vector<PieceImage> PieceCardImages; // floor pieces without their ground triangles: only the foliage over them
 
-void RenderPieceInto(const Surface &out, uint16_t piece, int height)
+void RenderPieceInto(const Surface &out, uint16_t piece, int height, bool withoutGround = false)
 {
 	std::vector<uint8_t> lightmapBuffer(static_cast<size_t>(out.pitch()) * height, 0);
 	const Lightmap lightmap(out.at(0, 0), std::span<const uint8_t>(lightmapBuffer), out.pitch(), LightTables, FullyLitLightTable, FullyDarkLightTable);
@@ -129,8 +131,10 @@ void RenderPieceInto(const Surface &out, uint16_t piece, int height)
 			continue;
 		const Point position { static_cast<int>((block & 1) * DunFrameWidth), static_cast<int>(height - 1 - (block / 2) * DunFrameHeight) };
 		if (block < 2 && floorPiece) {
-			RenderTileFrame(out, lightmap, position, block == 0 ? TileType::LeftTriangle : TileType::RightTriangle,
-			    GetDunFrame(pDungeonCels.get(), levelCelBlock.frame()), DunFrameTriangleHeight, MaskType::Solid, FullyLitLightTable);
+			if (!withoutGround) {
+				RenderTileFrame(out, lightmap, position, block == 0 ? TileType::LeftTriangle : TileType::RightTriangle,
+				    GetDunFrame(pDungeonCels.get(), levelCelBlock.frame()), DunFrameTriangleHeight, MaskType::Solid, FullyLitLightTable);
+			}
 			if (levelCelBlock.type() == TileType::TransparentSquare)
 				RenderTileFoliage(out, lightmap, position, pDungeonCels.get(), levelCelBlock, FullyLitLightTable);
 			continue;
@@ -140,11 +144,13 @@ void RenderPieceInto(const Surface &out, uint16_t piece, int height)
 	FlushTileRenderCommands();
 }
 
-const PieceImage &GetPieceImage(uint16_t piece)
+/** The piece as the classic renderer draws it; `withoutGround`: a floor piece's ground triangles left out. */
+const PieceImage &GetPieceImage(uint16_t piece, bool withoutGround = false)
 {
-	if (PieceImages.size() < MAXTILES)
-		PieceImages.resize(MAXTILES);
-	PieceImage &image = PieceImages[std::min<size_t>(piece, MAXTILES - 1)];
+	std::vector<PieceImage> &images = withoutGround ? PieceCardImages : PieceImages;
+	if (images.size() < MAXTILES)
+		images.resize(MAXTILES);
+	PieceImage &image = images[std::min<size_t>(piece, MAXTILES - 1)];
 	if (image.built)
 		return image;
 	image.built = true;
@@ -166,8 +172,8 @@ const PieceImage &GetPieceImage(uint16_t piece)
 	SDLSurfaceUniquePtr surfaceB = SDLWrap::CreateRGBSurfaceWithFormatFrom(bufferB.data(), bufferWidth, bufferHeight, 8, bufferWidth, SDL_PIXELFORMAT_INDEX8);
 	const Surface a(surfaceA.get(), SDL_Rect { Margin, Margin, 64, height });
 	const Surface b(surfaceB.get(), SDL_Rect { Margin, Margin, 64, height });
-	RenderPieceInto(a, piece, height);
-	RenderPieceInto(b, piece, height);
+	RenderPieceInto(a, piece, height, withoutGround);
+	RenderPieceInto(b, piece, height, withoutGround);
 	for (int y = 0; y < height; ++y) {
 		const uint8_t *rowA = a.at(0, y);
 		const uint8_t *rowB = b.at(0, y);
@@ -505,13 +511,21 @@ int RoofSlot(uint16_t piece)
 	return result;
 }
 
-/** Card slot: the piece image above the front half of its floor diamond, bottom-aligned in a 64 x slot-height slot. */
-int CardSlot(uint16_t piece, int &contentRows)
+// A card stands on the cell centre, which the iso art puts on the centre line of the piece's floor diamond, 16 rows above
+// the image bottom. The diamond (the bottom 32 rows) is ground art: cards show it only where a trunk or post runs down
+// through it (PlaceCards), elsewhere only the foliage a floor piece draws over its ground.
+constexpr int kCardGround = 16;
+constexpr int kCardFloorTop = 32;
+
+/**
+ * Card slot: the piece image, bottom-aligned in a 64 x slot-height slot. Without ground a floor piece leaves its ground
+ * triangles out; `withGround` keeps them (a trunk's foot is often painted into the ground under it).
+ */
+int CardSlot(uint16_t piece, int &contentRows, bool withGround = false)
 {
-	const int cut = 30; // image rows below the card's ground line (the floor diamond)
-	const auto it = Atlas.cardSlotOfPiece.find(piece);
-	const PieceImage &image = GetPieceImage(piece);
-	contentRows = std::min(Atlas.wallSlotHeight, image.height - cut);
+	const auto it = Atlas.cardSlotOfPiece.find(static_cast<uint32_t>(piece) * 2 + (withGround ? 1 : 0));
+	const PieceImage &image = GetPieceImage(piece, /*withoutGround=*/!withGround);
+	contentRows = std::min(Atlas.wallSlotHeight, image.height);
 	if (it != Atlas.cardSlotOfPiece.end())
 		return it->second;
 	const int slotHeight = Atlas.wallSlotHeight;
@@ -520,7 +534,7 @@ int CardSlot(uint16_t piece, int &contentRows)
 	slot.textureHeight = contentRows;
 	slot.rgba.assign(static_cast<size_t>(64) * slotHeight * 4, 0);
 	for (int r = 0; r < contentRows; ++r) {
-		const int row = image.height - 1 - cut - r;
+		const int row = image.height - 1 - r;
 		if (row < 0)
 			break;
 		for (int x = 0; x < 64; ++x) {
@@ -531,7 +545,7 @@ int CardSlot(uint16_t piece, int &contentRows)
 	}
 	Atlas.cards.push_back(std::move(slot));
 	const int result = static_cast<int>(Atlas.cards.size()) - 1;
-	Atlas.cardSlotOfPiece[piece] = result;
+	Atlas.cardSlotOfPiece[static_cast<uint32_t>(piece) * 2 + (withGround ? 1 : 0)] = result;
 	return result;
 }
 
@@ -829,7 +843,11 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 			const uint8_t archFacing = tile_geometry::ArchFacing(leveltype, dSpecial[x][y]);
 			const DoorInfo &doorInfo = door(x, y);
 			if (archFacing != 0 || doorInfo.present) {
-				constexpr float LintelBottom = 0.80F;
+				// Open archways clear about twice the hero's height (kWarriorMetersToWorld); doors keep their shorter panels and
+				// the lintel comes down to meet them.
+				constexpr float ArchLintelBottom = 1.35F;
+				constexpr float DoorTop = 0.80F;
+				const float lintelBottom = doorInfo.present ? DoorTop : ArchLintelBottom;
 				const bool alongY = doorInfo.present ? doorInfo.left : archFacing == static_cast<uint8_t>(tile_geometry::Face::SE);
 				// The wall the doorway is cut into runs along y (plane x = const) for SE arches and left doors.
 				const int wallSide = alongY ? 0 : 1;
@@ -847,8 +865,8 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 				// its own frame.
 				const bool doorReplaced = doorInfo.present && !doorInfo.open && PlacementHidesObject(doorObject[static_cast<size_t>(y) * kGridSize + x]);
 				if (!PlacementHidesLintel(x, y) && !doorReplaced)
-					AddBox(mesh, { fx, LintelBottom, fz }, { fx + 1.0F, wallHeight, fz + 1.0F }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
-				occluder = PackOccluder(LintelBottom, wallHeight);
+					AddBox(mesh, { fx, lintelBottom, fz }, { fx + 1.0F, wallHeight, fz + 1.0F }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
+				occluder = PackOccluder(lintelBottom, wallHeight);
 
 				if (doorInfo.present) {
 					const int objectIndex = doorObject[static_cast<size_t>(y) * kGridSize + x];
@@ -861,7 +879,7 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 					}
 					if (doorSlot < 0)
 						doorSlot = slot;
-					const float panelTop = LintelBottom;
+					const float panelTop = DoorTop;
 					if (!doorInfo.open) {
 						occluder = PackOccluder(0.0F, wallHeight);
 						if (PlacementHidesObject(objectIndex)) {
@@ -965,7 +983,7 @@ void DumpTownCells(const char *path)
 constexpr float kTownPixelsPerUnit = 118.0F;
 constexpr float kTownEave = 1.05F;
 constexpr float kFacadePixelsPerUnit = 80.0F; // facade art up to the eave (the iso walls are ~80 px tall)
-constexpr float kWaterLevel = -0.09F;
+constexpr float kWaterLevel = 0.0F; // the creek is flat: its art carries the channel and the banks
 
 struct TownGroup {
 	std::vector<std::pair<int, int>> cells;
@@ -1015,30 +1033,448 @@ std::vector<TownGroup> FindGroups(const Fn &member, std::vector<int> &groupOf)
 	return groups;
 }
 
-/** Two crossed upright cards with a piece image, standing on the cell centre. */
-void AddCrossedCard(MeshBuilder &mesh, int x, int y, uint16_t piece, float albedo)
+/** A tall town piece shown as a cut-out card. */
+struct TownCard {
+	int x, y;
+	uint16_t piece;
+};
+
+/** A card of an object laid out in the object's plane. */
+struct PlacedCard {
+	int slot = -1;       // the art without ground (a solid piece's ground band is not shown from it)
+	int groundSlot = -1; // the art with ground: the ground band shows it where `groundMask` is set
+	int rows = 0;        // card rows, from the bottom of the piece image up
+	int across = 0;      // classic screen columns from the anchor, in 32 px steps
+	int back = 0;        // steps behind the anchor in x + y: 16 rows up each
+	std::array<uint64_t, kCardFloorTop> groundMask {}; // per ground band row (card rows below kCardFloorTop), bit = column
+};
+
+bool CardTexelOpaque(int slot, int x, int r)
 {
-	int rows = 0;
-	const int slot = CardSlot(piece, rows);
-	if (rows <= 0)
-		return;
-	const float cx = static_cast<float>(x) + 0.5F;
-	const float cz = static_cast<float>(y) + 0.5F;
-	const float half = 0.66F; // 64 px across: the tile diagonal of the iso art, slightly widened
-	const float height = static_cast<float>(rows) / kTownPixelsPerUnit;
-	const float slotHeight = static_cast<float>(Atlas.wallSlotHeight);
-	const float tTop = slotHeight - static_cast<float>(rows) + kInset;
-	const float tBottom = slotHeight - kInset;
-	const uint32_t flags = PackVertexFlags(kVertexBillboard, albedo);
+	return Atlas.cards[static_cast<size_t>(slot)].rgba[(static_cast<size_t>(Atlas.wallSlotHeight - 1 - r) * 64 + x) * 4 + 3] != 0;
+}
+
+/** Adds the bare ground colours (the ground triangles) of a floor piece to a palette histogram. */
+void CountGroundColors(uint16_t piece, std::array<uint32_t, 256> &count, uint32_t &total)
+{
+	const PieceImage &full = GetPieceImage(piece);
+	const PieceImage &foliage = GetPieceImage(piece, /*withoutGround=*/true);
+	for (int r = 0; r < kCardFloorTop && r < full.height; ++r) {
+		for (int c = 0; c < 64; ++c) {
+			const size_t i = static_cast<size_t>(full.height - 1 - r) * 64 + c;
+			if (full.opaque[i] != 0 && foliage.opaque[i] == 0) {
+				++count[full.index[i]];
+				++total;
+			}
+		}
+	}
+}
+
+/**
+ * Lays out the cards of one object around its anchor. The classic art paints the foot of an object into the ground band
+ * of its pieces (their floor diamonds): the foot of a trunk, the lower slope of a boulder, the base of the well. Above
+ * the band everything opaque is the object, and so is the foliage a floor piece draws over its ground; band pixels join
+ * it top down when they touch the object right above them and their palette colour is more typical of the object (its
+ * pixels outside the ground) than of the bare ground around it (the floor pieces within two tiles), then gaps of up to
+ * three pixels between joined ones close. So the object reaches the ground with its own outline while the grass and
+ * paving around it stay on the floor. Pieces further back go first: their band is the "above" of the pieces in front.
+ */
+std::vector<PlacedCard> PlaceCards(const std::vector<TownCard> &cards, int anchorX, int anchorY)
+{
+	constexpr int Band = kCardFloorTop;
+	std::vector<PlacedCard> placed(cards.size());
+	int minAcross = 0, maxAcross = 0, top = 1;
+	for (size_t i = 0; i < cards.size(); ++i) {
+		PlacedCard &card = placed[i];
+		card.slot = CardSlot(cards[i].piece, card.rows);
+		int groundRows = 0;
+		card.groundSlot = CardSlot(cards[i].piece, groundRows, /*withGround=*/true);
+		card.across = (cards[i].x - cards[i].y) - (anchorX - anchorY);
+		card.back = (anchorX + anchorY) - (cards[i].x + cards[i].y);
+		minAcross = std::min(minAcross, card.across);
+		maxAcross = std::max(maxAcross, card.across);
+		top = std::max(top, card.back * 16 + card.rows + 1);
+	}
+	const int width = (maxAcross - minAcross) * 32 + 64;
+	std::vector<uint8_t> composite(static_cast<size_t>(width) * top, 0);
+	const auto at = [&](const PlacedCard &card, int x, int r) -> uint8_t & {
+		return composite[static_cast<size_t>(card.back * 16 + r) * width + (card.across - minAcross) * 32 + x];
+	};
+	std::array<uint32_t, 256> objectCount {};
+	uint32_t objectTotal = 0;
+	for (size_t i = 0; i < cards.size(); ++i) {
+		const PlacedCard &card = placed[i];
+		const PieceImage &foliage = GetPieceImage(cards[i].piece, /*withoutGround=*/true);
+		const bool solid = TileHasAny({ cards[i].x, cards[i].y }, TileProperties::Solid);
+		for (int r = solid ? Band : 0; r < card.rows; ++r) {
+			for (int x = 0; x < 64; ++x) {
+				const size_t p = static_cast<size_t>(foliage.height - 1 - r) * 64 + x;
+				if (foliage.opaque[p] == 0)
+					continue;
+				at(card, x, r) = 1;
+				++objectCount[foliage.index[p]];
+				++objectTotal;
+				if (r < Band)
+					placed[i].groundMask[r] |= uint64_t { 1 } << x;
+			}
+		}
+	}
+	std::array<uint32_t, 256> groundCount {};
+	uint32_t groundTotal = 0;
+	{
+		std::vector<std::pair<int, int>> counted;
+		for (const TownCard &card : cards) {
+			for (int dy = -2; dy <= 2; ++dy) {
+				for (int dx = -2; dx <= 2; ++dx) {
+					const int x = card.x + dx;
+					const int y = card.y + dy;
+					if (x < 0 || y < 0 || x >= kGridSize || y >= kGridSize || TileHasAny({ x, y }, TileProperties::Solid)
+					    || std::find(counted.begin(), counted.end(), std::make_pair(x, y)) != counted.end()
+					    || std::any_of(cards.begin(), cards.end(), [&](const TownCard &c) { return c.x == x && c.y == y; }))
+						continue;
+					counted.emplace_back(x, y);
+					CountGroundColors(dPiece[x][y], groundCount, groundTotal);
+				}
+			}
+		}
+	}
+	const auto objectLike = [&](uint8_t index) {
+		// Laplace-smoothed likelihoods of the colour under "object" and under "bare ground".
+		const double object = (objectCount[index] + 1.0) / (objectTotal + 256.0);
+		const double ground = (groundCount[index] + 1.0) / (groundTotal + 256.0);
+		return object > ground;
+	};
+	std::vector<size_t> order(cards.size());
+	for (size_t i = 0; i < order.size(); ++i)
+		order[i] = i;
+	std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return placed[a].back > placed[b].back; });
+	for (const size_t i : order) {
+		PlacedCard &card = placed[i];
+		const PieceImage &full = GetPieceImage(cards[i].piece);
+		const int column0 = (card.across - minAcross) * 32;
+		for (int r = std::min(Band, card.rows) - 1; r >= 0; --r) {
+			const int above = card.back * 16 + r + 1;
+			for (int x = 0; x < 64; ++x) {
+				if ((card.groundMask[r] >> x & 1) != 0)
+					continue;
+				const size_t p = static_cast<size_t>(full.height - 1 - r) * 64 + x;
+				if (full.opaque[p] == 0 || !objectLike(full.index[p]))
+					continue;
+				bool touches = false;
+				for (int dx = -1; dx <= 1 && !touches; ++dx) {
+					const int cx = column0 + x + dx;
+					touches = cx >= 0 && cx < width && above < top && composite[static_cast<size_t>(above) * width + cx] != 0;
+				}
+				if (!touches)
+					continue;
+				card.groundMask[r] |= uint64_t { 1 } << x;
+				at(card, x, r) = 1;
+			}
+		}
+		// Close gaps of up to three pixels between joined ones, across and down (speckle of shared colours).
+		const auto opaqueAt = [&](int x, int r) { return full.opaque[static_cast<size_t>(full.height - 1 - r) * 64 + x] != 0; };
+		for (int pass = 0; pass < 2; ++pass) {
+			for (int r = 0; r < std::min(Band, card.rows); ++r) {
+				for (int x = 0; x < 64; ++x) {
+					if ((card.groundMask[r] >> x & 1) != 0 || !opaqueAt(x, r))
+						continue;
+					const auto joined = [&](int cx, int cr) { return cx >= 0 && cx < 64 && cr >= 0 && cr < Band && (card.groundMask[cr] >> cx & 1) != 0; };
+					bool left = false, right = false, below = false, up = false;
+					for (int d = 1; d <= 3; ++d) {
+						left = left || joined(x - d, r);
+						right = right || joined(x + d, r);
+						below = below || joined(x, r - d);
+						up = up || joined(x, r + d) || (r + d >= Band && at(card, x, std::min(r + d, card.rows - 1)) != 0);
+					}
+					if ((left && right) || (below && up)) {
+						card.groundMask[r] |= uint64_t { 1 } << x;
+						at(card, x, r) = 1;
+					}
+				}
+			}
+		}
+	}
+	return placed;
+}
+
+/**
+ * The cut-out cards of one object (a tree, the well, a sign) in a single upright plane: the iso screen plane (along
+ * tile (1, -1)) through the anchor cell. A crown spills over several pieces; each piece keeps its classic screen offset
+ * from the anchor (32 px across per step of x - y, 16 rows up per step back in x + y), so the slices rejoin as in the
+ * iso art instead of standing as separate slabs on their own cells. Pieces further back sit a hair behind the ones in
+ * front (no z-fighting where slices overlap). Every card is emitted as 8 x 8 texel cells without the empty ones, so
+ * shadows (the ray tracer treats all geometry as opaque) follow the silhouette rather than the quad.
+ */
+void AddCardGroup(MeshBuilder &mesh, const std::vector<TownCard> &cards, int anchorX, int anchorY, float albedo)
+{
 	constexpr float InvSqrt2 = 0.70710678F;
-	// Card A lies in the iso screen plane (along tile (1, -1)), card B across it.
-	const Vec3 axes[2] = { { InvSqrt2, 0.0F, -InvSqrt2 }, { InvSqrt2, 0.0F, InvSqrt2 } };
-	const Vec3 normals[2] = { { InvSqrt2, 0.0F, InvSqrt2 }, { -InvSqrt2, 0.0F, InvSqrt2 } };
-	for (int k = 0; k < 2; ++k) {
-		const Vec3 a = Vec3 { cx, 0.0F, cz } - axes[k] * half;
-		const Vec3 b = Vec3 { cx, 0.0F, cz } + axes[k] * half;
-		mesh.Quad({ a.x, height, a.z }, { b.x, height, b.z }, { b.x, 0.0F, b.z }, { a.x, 0.0F, a.z }, kInset, tTop, 64.0F - kInset, tBottom,
-		    normals[k], SlotKind::Card, slot, flags);
+	// The iso art is the 2:1 projection: 64 px across a tile diagonal (sqrt 2 units), and an upright unit seen from the
+	// 30 degree camera pitch of that projection spans cos 30 of the screen length a unit across does. Texel rows per
+	// world unit up are therefore (64 / sqrt 2) * cos 30, so the card shows the same width:height as the 2D sprite.
+	constexpr float UnitsPerTexel = 1.41421356F / 64.0F;
+	constexpr float RowsPerUnit = 64.0F / 1.41421356F * 0.8660254F;
+	constexpr int Cell = 8;
+	constexpr int Band = kCardFloorTop;
+	constexpr float DepthBias = 0.004F;
+	const Vec3 axis { InvSqrt2, 0.0F, -InvSqrt2 };  // screen right
+	const Vec3 normal { InvSqrt2, 0.0F, InvSqrt2 }; // toward the iso camera
+	const Vec3 anchor { static_cast<float>(anchorX) + 0.5F, 0.0F, static_cast<float>(anchorY) + 0.5F };
+	const uint32_t flags = PackVertexFlags(kVertexBillboard, albedo);
+	const int slotHeight = Atlas.wallSlotHeight;
+	for (const PlacedCard &card : PlaceCards(cards, anchorX, anchorY)) {
+		if (card.rows <= 0)
+			continue;
+		const std::vector<uint8_t> &rgba = Atlas.cards[static_cast<size_t>(card.slot)].rgba;
+		const Vec3 left = anchor + axis * ((static_cast<float>(card.across) * 32.0F - 32.0F) * UnitsPerTexel) - normal * (static_cast<float>(card.back) * DepthBias);
+		// Rows above the anchor's ground line: 16 per step back, less the piece's own ground line.
+		const int lift = card.back * 16 - kCardGround;
+		const auto shown = [&](int s, int r) {
+			return rgba[(static_cast<size_t>(slotHeight - 1 - r) * 64 + s) * 4 + 3] != 0;
+		};
+		const auto quad = [&](int s0, int s1, int r0, int r1, int slot) {
+			const Vec3 a = left + axis * (static_cast<float>(s0) * UnitsPerTexel);
+			const Vec3 b = left + axis * (static_cast<float>(s1) * UnitsPerTexel);
+			const float y0 = static_cast<float>(lift + r0) / RowsPerUnit;
+			const float y1 = static_cast<float>(lift + r1) / RowsPerUnit;
+			mesh.Quad({ a.x, y1, a.z }, { b.x, y1, b.z }, { b.x, y0, b.z }, { a.x, y0, a.z }, static_cast<float>(s0) + kInset,
+			    static_cast<float>(slotHeight - r1) + kInset, static_cast<float>(s1) - kInset, static_cast<float>(slotHeight - r0) - kInset, normal,
+			    SlotKind::Card, slot, flags);
+		};
+		for (int r0 = 0; r0 < card.rows; r0 += Cell) {
+			const int r1 = std::min(card.rows, r0 + Cell);
+			if (lift + r1 <= 0)
+				continue; // below the ground (rows are 8-aligned, the ground line 16-aligned)
+			if (r1 <= Band) {
+				// The ground band: runs of the masked texels of the art with ground, rows with the same runs merged.
+				for (int r = std::max(r0, -lift); r < r1;) {
+					const uint64_t mask = card.groundMask[r];
+					int e = r + 1;
+					while (e < r1 && card.groundMask[e] == mask)
+						++e;
+					for (int s = 0; s < 64;) {
+						if ((mask >> s & 1) == 0) {
+							++s;
+							continue;
+						}
+						int t = s + 1;
+						while (t < 64 && (mask >> t & 1) != 0)
+							++t;
+						quad(s, t, r, e, card.groundSlot);
+						s = t;
+					}
+					r = e;
+				}
+				continue;
+			}
+			for (int s0 = 0; s0 < 64; s0 += Cell) {
+				const int s1 = s0 + Cell;
+				bool any = false;
+				for (int r = r0; r < r1 && !any; ++r) {
+					for (int s = s0; s < s1 && !any; ++s)
+						any = shown(s, r);
+				}
+				if (any)
+					quad(s0, s1, r0, r1, card.slot);
+			}
+		}
+	}
+}
+
+/**
+ * DVL_W3D_DUMP_TREES=dir: one PPM per card object, the classic layout of its pieces (back to front, the 2D renderer's
+ * picture of the object) on the left and the card layer the 3D view stands up on the right; magenta is empty.
+ */
+void DumpCardGroup(const char *dir, const std::vector<TownCard> &cards, int anchorX, int anchorY)
+{
+	int minAcross = 0, maxAcross = 0, top = 0;
+	for (const TownCard &card : cards) {
+		const int across = (card.x - card.y) - (anchorX - anchorY);
+		const int back = (anchorX + anchorY) - (card.x + card.y);
+		minAcross = std::min(minAcross, across);
+		maxAcross = std::max(maxAcross, across);
+		top = std::max(top, GetPieceImage(card.piece).height + back * 16);
+		Log("render3d: tree {},{} piece {},{} #{} across {} back {} solid {} height {}", anchorX, anchorY, card.x, card.y, card.piece, across, back,
+		    TileHasAny({ card.x, card.y }, TileProperties::Solid) ? 1 : 0, GetPieceImage(card.piece).height);
+	}
+	const int width = (maxAcross - minAcross) * 32 + 64;
+	std::vector<uint8_t> rgb(static_cast<size_t>(width) * 2 * top * 3, 0);
+	for (size_t o = 0; o < rgb.size(); o += 3) {
+		rgb[o] = 255;
+		rgb[o + 2] = 255;
+	}
+	const std::vector<PlacedCard> placed = PlaceCards(cards, anchorX, anchorY);
+	std::vector<size_t> order(cards.size());
+	for (size_t i = 0; i < order.size(); ++i)
+		order[i] = i;
+	std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return cards[a].x + cards[a].y < cards[b].x + cards[b].y; });
+	for (int half = 0; half < 2; ++half) {
+		for (const size_t cardIndex : order) {
+			const TownCard &card = cards[cardIndex];
+			const PieceImage &image = GetPieceImage(card.piece);
+			int rows = 0;
+			const int slot = CardSlot(card.piece, rows);
+			const int across = (card.x - card.y) - (anchorX - anchorY);
+			const int back = (anchorX + anchorY) - (card.x + card.y);
+			for (int r = 0; r < image.height; ++r) { // r: rows up from the image bottom
+				const int y = top - 1 - (r + back * 16);
+				if (y < 0)
+					continue;
+				for (int x = 0; x < 64; ++x) {
+					const int cx = half * width + (across - minAcross) * 32 + x;
+					uint8_t index = 0;
+					if (half == 0) {
+						const size_t i = static_cast<size_t>(image.height - 1 - r) * 64 + x;
+						if (image.opaque[i] == 0)
+							continue;
+						index = image.index[i];
+					} else {
+						const int cr = r;
+						const PlacedCard &laid = placed[cardIndex];
+						int from = slot;
+						if (cr < kCardFloorTop)
+							from = (laid.groundMask[cr] >> x & 1) != 0 ? laid.groundSlot : -1;
+						if (cr >= rows || from < 0 || cr + back * 16 < kCardGround)
+							continue;
+						const uint8_t *px = &Atlas.cards[static_cast<size_t>(from)].rgba[(static_cast<size_t>(Atlas.wallSlotHeight - 1 - cr) * 64 + x) * 4];
+						if (px[3] == 0)
+							continue;
+						const size_t o = (static_cast<size_t>(y) * 2 * width + cx) * 3;
+						rgb[o] = px[0];
+						rgb[o + 1] = px[1];
+						rgb[o + 2] = px[2];
+						continue;
+					}
+					const size_t o = (static_cast<size_t>(y) * 2 * width + cx) * 3;
+					rgb[o] = ArtPalette[index][0];
+					rgb[o + 1] = ArtPalette[index][1];
+					rgb[o + 2] = ArtPalette[index][2];
+				}
+			}
+		}
+	}
+	const std::string path = std::string(dir) + "/tree_" + std::to_string(anchorX) + "_" + std::to_string(anchorY) + ".ppm";
+	if (FILE *file = std::fopen(path.c_str(), "wb"); file != nullptr) {
+		std::fprintf(file, "P6\n%d %d\n255\n", width * 2, top);
+		std::fwrite(rgb.data(), 1, rgb.size(), file);
+		std::fclose(file);
+	}
+}
+
+/**
+ * Cut-out cards for the tall town pieces flagged in `cardCell`. 8-connected pieces form objects; every solid piece (a
+ * trunk, a post) anchors one, and the other pieces join the nearest anchor at most two steps in front of them and six
+ * across (a crown spans up to six pieces). Pieces no solid anchor takes anchor on the front-most, tallest of them.
+ */
+void AddTownCards(MeshBuilder &mesh, const std::vector<uint8_t> &cardCell, const std::vector<int> &pieceHeight, const std::vector<int> &smallObjectOf)
+{
+	const auto index = [](int x, int y) { return static_cast<size_t>(y) * kGridSize + x; };
+	std::vector<int> groupOf(static_cast<size_t>(kGridSize) * kGridSize, -1);
+	std::vector<std::pair<int, int>> stack;
+	std::vector<std::pair<int, int>> group;
+	for (int y0 = 0; y0 < kGridSize; ++y0) {
+		for (int x0 = 0; x0 < kGridSize; ++x0) {
+			if (cardCell[index(x0, y0)] == 0 || groupOf[index(x0, y0)] >= 0)
+				continue;
+			group.clear();
+			stack.assign(1, { x0, y0 });
+			groupOf[index(x0, y0)] = 1;
+			while (!stack.empty()) {
+				const auto [x, y] = stack.back();
+				stack.pop_back();
+				group.emplace_back(x, y);
+				for (int dy = -1; dy <= 1; ++dy) {
+					for (int dx = -1; dx <= 1; ++dx) {
+						const int nx = x + dx;
+						const int ny = y + dy;
+						if (nx < 0 || ny < 0 || nx >= kGridSize || ny >= kGridSize || cardCell[index(nx, ny)] == 0 || groupOf[index(nx, ny)] >= 0)
+							continue;
+						groupOf[index(nx, ny)] = 1;
+						stack.emplace_back(nx, ny);
+					}
+				}
+			}
+			// Anchors: a small solid object (the well, a boulder of a few pieces) stands as one on its front-most,
+			// tallest piece; then every other solid piece; then (for the pieces none of them takes, such as a crown behind a
+			// fence post it touches) the front-most, tallest piece left, until every piece has one.
+			std::vector<size_t> anchors;
+			std::vector<int> anchorOf(group.size(), -1);
+			const auto frontTallest = [&](size_t a, size_t b) {
+				const auto &[ax, ay] = group[a];
+				const auto &[bx, by] = group[b];
+				return ax + ay > bx + by || (ax + ay == bx + by && pieceHeight[index(ax, ay)] > pieceHeight[index(bx, by)]);
+			};
+			for (size_t i = 0; i < group.size(); ++i) {
+				const int object = smallObjectOf[index(group[i].first, group[i].second)];
+				if (object < 0 || anchorOf[i] >= 0)
+					continue;
+				size_t best = i;
+				for (size_t j = i + 1; j < group.size(); ++j) {
+					if (smallObjectOf[index(group[j].first, group[j].second)] == object && frontTallest(j, best))
+						best = j;
+				}
+				anchors.push_back(best);
+				for (size_t j = i; j < group.size(); ++j) {
+					if (smallObjectOf[index(group[j].first, group[j].second)] == object)
+						anchorOf[j] = static_cast<int>(best);
+				}
+			}
+			for (size_t i = 0; i < group.size(); ++i) {
+				if (anchorOf[i] < 0 && TileHasAny({ group[i].first, group[i].second }, TileProperties::Solid)) {
+					anchors.push_back(i);
+					anchorOf[i] = static_cast<int>(i);
+				}
+			}
+			while (true) {
+				bool unassigned = false;
+				for (size_t i = 0; i < group.size(); ++i) {
+					if (anchorOf[i] >= 0)
+						continue;
+					const auto &[x, y] = group[i];
+					int bestScore = 1 << 30;
+					for (const size_t a : anchors) {
+						const auto &[ax, ay] = group[a];
+						const int back = (ax + ay) - (x + y);
+						const int across = std::abs((ax - ay) - (x - y));
+						if (back < 0 || back > 2 || across > 6)
+							continue;
+						const int score = across + 2 * back;
+						if (score < bestScore) {
+							bestScore = score;
+							anchorOf[i] = static_cast<int>(a);
+						}
+					}
+					unassigned = unassigned || anchorOf[i] < 0;
+				}
+				if (!unassigned)
+					break;
+				size_t best = group.size();
+				for (size_t i = 0; i < group.size(); ++i) {
+					if (anchorOf[i] >= 0)
+						continue;
+					const auto &[x, y] = group[i];
+					if (best == group.size())
+						best = i;
+					const auto &[bx, by] = group[best];
+					if (x + y > bx + by || (x + y == bx + by && pieceHeight[index(x, y)] > pieceHeight[index(bx, by)]))
+						best = i;
+				}
+				anchors.push_back(best);
+				anchorOf[best] = static_cast<int>(best);
+			}
+			std::vector<TownCard> cards;
+			for (size_t a = 0; a < group.size(); ++a) {
+				if (anchorOf[a] != static_cast<int>(a))
+					continue;
+				cards.clear();
+				for (size_t i = 0; i < group.size(); ++i) {
+					if (anchorOf[i] == static_cast<int>(a))
+						cards.push_back({ group[i].first, group[i].second, dPiece[group[i].first][group[i].second] });
+				}
+				AddCardGroup(mesh, cards, group[a].first, group[a].second, 1.0F);
+				if (const char *dir = std::getenv("DVL_W3D_DUMP_TREES"); dir != nullptr && dir[0] != '\0')
+					DumpCardGroup(dir, cards, group[a].first, group[a].second);
+			}
+		}
 	}
 }
 
@@ -1318,6 +1754,17 @@ void BuildTown(LevelGeometry &geometry, MeshBuilder &mesh)
 		}
 	}
 
+	std::vector<uint8_t> cardCell(static_cast<size_t>(kGridSize) * kGridSize, 0);
+	// Small solid objects: compact solid groups (at most eight pieces within 4 x 4; not houses, not the creek) with art
+	// above the floor: the well, boulders and their clusters, gravestones.
+	std::vector<uint8_t> smallObject(groups.size(), 0);
+	for (size_t i = 0; i < groups.size(); ++i) {
+		if (isHouse[i] != 0 || groups[i].cells.size() > 8 || groups[i].maxX - groups[i].minX >= 4 || groups[i].maxY - groups[i].minY >= 4)
+			continue;
+		for (const auto &[x, y] : groups[i].cells)
+			smallObject[i] = smallObject[i] != 0 || pieceHeight[index(x, y)] > 32 ? 1 : 0;
+	}
+	std::vector<int> smallObjectOf(static_cast<size_t>(kGridSize) * kGridSize, -1);
 	for (int y = 0; y < kGridSize; ++y) {
 		for (int x = 0; x < kGridSize; ++x) {
 			const uint16_t piece = dPiece[x][y];
@@ -1328,30 +1775,30 @@ void BuildTown(LevelGeometry &geometry, MeshBuilder &mesh)
 			if (group >= 0 && isHouse[static_cast<size_t>(group)] != 0)
 				continue;
 			if (water[index(x, y)] != 0) {
-				AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, kWaterLevel, true, FloorSlot(piece), 0.8F, kVertexWater);
-				// Banks down to the water where the neighbour is dry ground.
-				for (const auto &[dx, dy] : kStairDirs) {
-					const int nx = x + dx;
-					const int ny = y + dy;
-					if (nx < 0 || ny < 0 || nx >= kGridSize || ny >= kGridSize || water[index(nx, ny)] != 0)
-						continue;
-					const Vec3 n { static_cast<float>(-dx), 0.0F, static_cast<float>(-dy) };
-					if (dx != 0)
-						AddWallFace(mesh, 0, dx > 0 ? fx + 1.0F : fx, fz, fz + 1.0F, kWaterLevel, 0.0F, 1.0F, n, -1, Atlas.wallSlotHeight, 0.4F);
-					else
-						AddWallFace(mesh, 1, dy > 0 ? fz + 1.0F : fz, fx, fx + 1.0F, kWaterLevel, 0.0F, 1.0F, n, -1, Atlas.wallSlotHeight, 0.4F);
-				}
+				// Level with the ground: the creek cells include the painted banks, so lowering whole cells cut a per-cell
+				// staircase (with dark bank faces) across the smooth painted channel.
+				AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, kWaterLevel, true, FloorSlot(piece), 1.0F, kVertexWater);
 				continue;
 			}
 			AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, 0.0F, true, FloorSlot(piece), 1.0F);
-			// Cards for trees, the well, signs and fences; dense facade pieces left outside a house stay flat.
-			if (pieceHeight[index(x, y)] >= 56 && !PlacementHidesTile(x, y)) {
+			// Cards for trees, the well, signs and fences; dense facade pieces left outside a house stay flat. A house a
+			// placed mesh replaces spills its porch and awning art one row past its front (+x / +y) edge: as a card that
+			// art stood next to the mesh as a dark wedge (the smithy's forge beside Griswold).
+			const bool frontOfPlacedHouse = PlacementHidesTile(x - 1, y) || PlacementHidesTile(x, y - 1);
+			if (pieceHeight[index(x, y)] >= 56 && !PlacementHidesTile(x, y) && !frontOfPlacedHouse) {
 				const PieceStats &stats = CachedPieceStats(piece);
 				if (tile_geometry::GetPieceGeometry(piece).faces == 0 || stats.density < 0.6F)
-					AddCrossedCard(mesh, x, y, piece, 1.0F);
+					cardCell[index(x, y)] = 1;
+			}
+			// Small solid objects (the well, boulders, stones) stand up as one card object, all their pieces.
+			if (group >= 0 && smallObject[static_cast<size_t>(group)] != 0 && !PlacementHidesTile(x, y) && !frontOfPlacedHouse) {
+				cardCell[index(x, y)] = 1;
+				smallObjectOf[index(x, y)] = group;
 			}
 		}
 	}
+	if (std::getenv("DVL_W3D_NO_TOWN_CARDS") == nullptr) // debugging: the town without its cut-out objects
+		AddTownCards(mesh, cardCell, pieceHeight, smallObjectOf);
 	for (size_t i = 0; i < groups.size(); ++i) {
 		if (isHouse[i] == 0)
 			continue;
@@ -1614,6 +2061,7 @@ bool UpdateLevelGeometry(LevelGeometry &geometry)
 	const uint64_t piecesKey = Mix(Mix(Mix(0, reinterpret_cast<uintptr_t>(pDungeonCels.get())), static_cast<uint64_t>(leveltype)), ArtPaletteHash);
 	if (piecesKey != PieceImagesKey || levelChanged) {
 		PieceImages.clear();
+		PieceCardImages.clear();
 		PieceImagesKey = piecesKey;
 	}
 	static uint64_t DoorLevelKey = 0;

@@ -1,6 +1,7 @@
 #include "engine/assets.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -18,6 +19,7 @@
 #endif
 
 #include "appfat.h"
+#include "d2sound/d2sound_core.hpp"
 #include "game_mode.hpp"
 #include "mods/mod_identity.h"
 #include "utils/file_util.h"
@@ -41,6 +43,7 @@ namespace devilution {
 
 std::vector<std::string> OverridePaths;
 std::string HdAssetDirectory;
+std::atomic<bool> UseDiablo2HeroVoices = false;
 std::map<int, MpqArchiveT, std::greater<>> MpqArchives;
 bool HasHellfireMpq;
 bool IsAssetIntegrityViolated = false;
@@ -158,6 +161,35 @@ const std::string &GetHdAssetDirectory()
 	return HdAssetDirectory;
 }
 
+void SetDiablo2HeroVoices(bool enabled)
+{
+	UseDiablo2HeroVoices = enabled;
+}
+
+bool Diablo2HeroVoices()
+{
+	return UseDiablo2HeroVoices;
+}
+
+bool IsDiablo2HeroVoiceOverride(std::string_view overridePath, std::string_view relativePath)
+{
+	// A loose mod's override path is `.../mods/<name>/`: its last folder names the mod.
+	std::string_view mod = overridePath;
+	while (!mod.empty() && (mod.back() == '/' || mod.back() == '\\'))
+		mod.remove_suffix(1);
+	if (const size_t slash = mod.find_last_of("/\\"); slash != std::string_view::npos)
+		mod.remove_prefix(slash + 1);
+	if (mod != Diablo2SoundsModName && mod != Diablo2ResurrectedClassicSoundsModName && mod != Diablo2ResurrectedAdvancedSoundsModName)
+		return false;
+	std::string path = AsciiStrToLower(relativePath);
+	std::replace(path.begin(), path.end(), '/', '\\');
+	for (const std::string_view voices : { "sfx\\warrior\\", "sfx\\rogue\\", "sfx\\sorceror\\", "sfx\\monk\\" }) {
+		if (path.starts_with(voices))
+			return true;
+	}
+	return false;
+}
+
 #ifdef UNPACKED_MPQS
 AssetRef FindAsset(std::string_view filename)
 {
@@ -226,7 +258,10 @@ AssetRef FindAsset(std::string_view filename)
 
 	// Files in the `PrefPath()` directory can override MPQ contents.
 	{
+		const bool d2HeroVoices = UseDiablo2HeroVoices;
 		for (const auto &overridePath : OverridePaths) {
+			if (!d2HeroVoices && IsDiablo2HeroVoiceOverride(overridePath, relativePath))
+				continue;
 			const std::string path = overridePath + relativePath;
 			result.directHandle = OpenOptionalRWops(path);
 			if (result.directHandle != nullptr) {

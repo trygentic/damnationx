@@ -827,7 +827,12 @@ bool UiSelectGame(GameData *gameData, int *playerId)
 		CopyUtf8(selgame_Ip, deepLink, sizeof(selgame_Ip));
 		selgame_selectedGame = 2;
 		selgame_enteringGame = true;
+#ifdef PACKET_ENCRYPTION
+		// Private games need their password; the prompt allows it empty for public ones.
+		selgame_Password_Init(0);
+#else
 		selgame_Password_Select(0);
+#endif
 	} else
 #endif
 		selgame_GameSelection_Init();

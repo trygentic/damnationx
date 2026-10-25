@@ -42,6 +42,8 @@ bool NativeInventoryPanel();
 bool NativeStorePanel();
 inline bool NativeGameMenu() { return Active && HideGameMenu; }
 inline bool IsActive() { return Active; }
+/** Puts text on the OS clipboard through the host (HostTakeClipboardText). */
+void RequestClipboard(std::string text);
 
 /** ApplicationInit: SDL events and timers only, the back buffer and palette without a window (diablo.cpp). */
 void InitVideo();
@@ -82,6 +84,9 @@ bool PollEvent(SDL_Event &event);
 
 /** fpv::SkipIsometricWorld: the World3D render mode, where the host draws the world and the game only its UI. */
 bool DrawsWorld3D();
+/** fpv::ClearWorldArea in World3D: queues the ground item labels (Alt) at the items' places in the host's 3D view
+ * (HostSetWorldView); `width` x `height` is the screen area they may anchor in. */
+void QueueWorldItemLabels(int width, int height);
 
 // ---- The HD pack without WebGPU (host_hd.cpp): the stubs of hd_*_webgpu.cpp ask the host ----
 
@@ -108,6 +113,7 @@ inline void OnGameQuit(int) { }
 inline bool ShowFatalDialogs() { return true; }
 inline bool PickedTile(Point &) { return false; }
 inline bool ApplyPickToCursor() { return false; }
+inline void RequestClipboard(std::string) { }
 inline bool PickedTarget() { return false; }
 inline void QueueSfx(int16_t, bool, Point) { }
 inline void QueueMonsterSfx(int, int, int, Point) { }
@@ -118,6 +124,7 @@ inline int SfxLengthMs(int16_t) { return 1; }
 inline bool TakeAutoStart() { return false; }
 inline bool SelectAutoStartHero(GameData *) { return false; }
 constexpr bool DrawsWorld3D() { return false; }
+inline void QueueWorldItemLabels(int, int) { }
 inline bool PollEvent(SDL_Event &) { return false; }
 inline bool HdSpritesAvailable() { return false; }
 inline bool HdTilesAvailable() { return false; }

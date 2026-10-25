@@ -1,5 +1,6 @@
 #include "utils/paths.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -206,6 +207,11 @@ void SetConfigPath(const std::string &path)
 void SetAssetsPath(const std::string &path)
 {
 	assetsPath = path;
+#ifdef _WIN32
+	// Rust canonicalize() returns extended Windows paths, where forward
+	// slashes are literal characters rather than directory separators.
+	std::replace(assetsPath->begin(), assetsPath->end(), '/', '\\');
+#endif
 	AddTrailingSlash(*assetsPath);
 }
 

@@ -48,6 +48,7 @@
 #include "engine/dx.h"
 #include "engine/render/ui_scale.hpp"
 #include "headless_mode.hpp"
+#include "host/host_hooks.hpp"
 #include "options.h"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
@@ -842,6 +843,8 @@ void ReinitializeRenderer()
 
 void SetFullscreenMode()
 {
+	if (host::IsActive())
+		return; // The host owns the window and handles Alt+Enter itself.
 #ifdef USE_SDL1
 	Uint32 flags = ghMainWnd->flags ^ SDL_FULLSCREEN;
 	if (*GetOptions().Graphics.fullscreen) {

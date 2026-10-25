@@ -45,6 +45,8 @@
 #include "engine/sound.h"
 #include "engine/assets.hpp"
 #include "engine/sound_defs.hpp"
+#include "engine/render/ui_scale.hpp"
+#include "engine/render/ui_scale_core.hpp"
 #include "monster.h"
 #include "options.h"
 #include "objects.h"
@@ -316,6 +318,41 @@ void CheckSnapshotLightOwnership()
 	expectLight(7, missileIds[1], 255, 140, 50);
 }
 
+/** Chest sprite frames contain two art variants, but both must export the same closed/open model state. */
+void CheckChestSnapshotState()
+{
+	ASSERT_GT(ActiveObjectCount, 0);
+	const int index = ActiveObjects[0];
+	struct RestoreObject {
+		int index;
+		Object original;
+		~RestoreObject() { Objects[index] = original; }
+	} restore { index, Objects[index] };
+	Object &chest = Objects[index];
+	chest = {};
+	chest.position = restore.original.position;
+	chest._oAnimLen = 6;
+	const uint32_t id = (static_cast<uint32_t>(HostEntityKind::Object) << 24) | static_cast<uint32_t>(index + 1);
+	for (const _object_id type : { OBJ_CHEST1, OBJ_CHEST2, OBJ_CHEST3, OBJ_TCHEST1, OBJ_TCHEST2, OBJ_TCHEST3 }) {
+		chest._otype = type;
+		for (const uint32_t spriteFrame : { 1U, 4U, 3U, 6U }) {
+			const bool open = spriteFrame == 3 || spriteFrame == 6;
+			chest._oAnimFrame = spriteFrame;
+			chest.selectionRegion = open ? SelectionRegion::None : SelectionRegion::Middle;
+			const HostFrame &snapshot = HostSnapshot();
+			const HostEntity *found = nullptr;
+			for (uint32_t i = 0; i < snapshot.entityCount; ++i) {
+				if (snapshot.entities[i].id == id)
+					found = &snapshot.entities[i];
+			}
+			ASSERT_NE(found, nullptr);
+			EXPECT_EQ(found->anim, open ? 2 : 0);
+			EXPECT_EQ(found->frame, spriteFrame);
+			EXPECT_EQ(found->facing, 0);
+		}
+	}
+}
+
 } // namespace
 
 TEST(HostApi, OpenedObjectsAreNotBroken)
@@ -484,6 +521,11 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		EXPECT_FALSE(dxp_menu_action(2));
 		EXPECT_FALSE(dxp_menu_audio(0, 50));
 		EXPECT_FALSE(dxp_menu_gameplay(2, false));
+		EXPECT_FALSE(dxp_menu_set_ui_scale(8));
+		int32_t originalUiScale = 0;
+		int32_t effectiveUiScale = 0;
+		EXPECT_FALSE(dxp_menu_ui_scale(nullptr, &effectiveUiScale));
+		ASSERT_TRUE(dxp_menu_ui_scale(&originalUiScale, &effectiveUiScale));
 		const DxpMenuSnapshot original = menu;
 		dxp_menu_enable(true);
 		HostInputFrame input = EmptyInput(nullptr);
@@ -516,6 +558,21 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		}, 20, soundEvents));
 		EXPECT_EQ(freePortalCount(), 1);
 		EXPECT_TRUE(dxp_menu_gameplay(2, (original.flags & DxpMenuFreePortal) != 0));
+		// UI Scale is the native Graphics option (quarters, clamped to 1x .. 4x) and applies on the game thread.
+		EXPECT_TRUE(dxp_menu_set_ui_scale(99));
+		int32_t chosenUiScale = 0;
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			dxp_menu_ui_scale(&chosenUiScale, &effectiveUiScale);
+			return chosenUiScale == OptionEntryQuarterScale::MaxQuarters;
+		}, 20, soundEvents));
+		EXPECT_EQ(*GetOptions().Graphics.uiScale, OptionEntryQuarterScale::MaxQuarters);
+		EXPECT_EQ(effectiveUiScale, EffectiveUiScaleQuarters(chosenUiScale, gnScreenWidth, gnScreenHeight));
+		EXPECT_EQ(effectiveUiScale, GetUiScaleQuarters());
+		EXPECT_TRUE(dxp_menu_set_ui_scale(originalUiScale));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			dxp_menu_ui_scale(&chosenUiScale, &effectiveUiScale);
+			return chosenUiScale == originalUiScale;
+		}, 20, soundEvents));
 		EXPECT_TRUE(dxp_menu_audio(0, -50));
 		EXPECT_TRUE(dxp_menu_audio(1, 300));
 		EXPECT_TRUE(dxp_menu_gameplay(0, false));
@@ -839,6 +896,7 @@ TEST(HostApi, HundredTicksInTheCathedral)
 	const uint32_t dungeonRevision = dungeon.level.revision;
 	EXPECT_NE(dungeonRevision, townRevision);
 	CheckSnapshotLightOwnership();
+	CheckChestSnapshotState();
 	HostSnapshot(); // Refresh presentation after the synthetic source inputs have been restored.
 	for (uint32_t i = 0; i < dungeon.level.indexCount; ++i)
 		ASSERT_LT(dungeon.level.indices[i], dungeon.level.vertexCount);

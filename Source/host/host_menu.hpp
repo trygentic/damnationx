@@ -35,6 +35,10 @@ bool dxp_menu_action(uint32_t action);
 bool dxp_menu_audio(uint32_t channel, int32_t percent);
 /** 0 enables native singleplayer running, 2 enables the free town portal. */
 bool dxp_menu_gameplay(uint32_t setting, bool enabled);
+/** Graphics "UI Scale" in quarters (4 = 1x): the chosen one and the one the screen fits (EffectiveUiScaleQuarters). */
+bool dxp_menu_ui_scale(int32_t *chosen, int32_t *effective);
+/** Sets Graphics "UI Scale" (clamped to 4..16 quarters); saved with the options like the classic Options menu. */
+bool dxp_menu_set_ui_scale(int32_t quarters);
 }
 
 static_assert(sizeof(DxpMenuSnapshot) == 16);

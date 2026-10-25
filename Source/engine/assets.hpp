@@ -283,6 +283,18 @@ AssetRef FindAsset(std::string_view filename);
 void SetHdAssetDirectory(std::string_view directory);
 const std::string &GetHdAssetDirectory();
 
+/**
+ * @brief Whether the hero voices (`sfx\warrior\`, `sfx\rogue\`, `sfx\sorceror\`, `sfx\monk\`) may come from the
+ * imported Diablo II sound packs (`d2sounds`, `d2r-sounds-*`). Off by default: a Diablo II class voice only fits a hero
+ * drawn with a Diablo II model, which only the desktop host knows (`HostSetHeroVoiceD2`). Every other imported sound
+ * is used either way.
+ */
+void SetDiablo2HeroVoices(bool enabled);
+bool Diablo2HeroVoices();
+
+/** True when `relativePath` is a hero voice file and `overridePath` is the loose folder of a Diablo II sound pack. */
+DVL_API_FOR_TEST bool IsDiablo2HeroVoiceOverride(std::string_view overridePath, std::string_view relativePath);
+
 /** True when the HD art folder `directory` (with a trailing separator) holds the 2D HD art (sprites.txt or ui.txt). */
 bool HdArtDirectoryHas2dArt(const std::string &directory);
 

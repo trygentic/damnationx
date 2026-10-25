@@ -63,14 +63,25 @@ worker. The launcher checks these components separately and publishes the staged
 `cache/glb` tree after its required manifests and referenced files are ready. Its
 progress/log view and cancellation action are available during setup.
 
-Existing raw extracts and helper binaries stay in their cache. New raw extracts
-needed for an import are isolated in staging and discarded afterward; only
-converted playable outputs replace the previous `glb` tree. A working packaged
-or cached helper is reused, and a newly built helper can be retained separately.
+Conversion work, raw extracts and helper binaries are retained under
+`d2r-models/.import-work` after an error or cancellation. Retry the import to
+resume: completed models, environments, interface and portal phases are checked
+against their manifests, file contents and relevant importer recipes, then reused.
+A portal-only recipe fix does not reconvert models or environments. Interrupted
+model files without complete sidecars are rebuilt individually.
+
+Only a fully validated `glb` tree replaces the previous playable installation.
+Selecting another owned installation or D2R build discards incompatible work;
+recipe changes rebuild their affected phases. Clear D2R import also removes this
+retained work. A working packaged or cached helper is reused.
 
 Import from an owned installation requires:
 
-- Python 3.11 or newer. Select the Python executable if discovery does not find it.
+- Python 3.11 or newer. The importer checks the saved interpreter and searches
+  installed alternatives if it was removed or is too old. Windows Store aliases
+  are skipped. Select an executable under Launch options > Python if needed.
+  Managed environments are keyed by runtime identity and rebuilt if broken;
+  upgrading Python does not require deleting launcher settings in AppData.
 - NumPy `>=1.24,<3` and Pillow `>=10,<13`. The managed virtual-environment option
   creates an isolated Python environment and installs these requirements. That
   dependency installation requires internet access; an existing prepared Python
@@ -148,7 +159,7 @@ Managed HD and D2R output locations follow the platform:
 Linux defaults are `~/.local/share` and `~/.cache` when those XDG variables are
 unset. Existing external packs/caches can be selected without moving them.
 The importer recognizes `D2R_GAME_DIR`, `D2R_IMPORT_CACHE` and `D2RTOOL`; the
-launcher passes the selected install, staged cache and optional helper to its
+launcher passes the selected install, private work cache and optional helper to its
 worker environment.
 
 ## Build the launcher

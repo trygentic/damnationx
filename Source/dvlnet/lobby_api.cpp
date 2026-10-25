@@ -290,6 +290,9 @@ std::string HostCharacter() { return HostCharacterName; }
 void SetHostTransport(Transport transport) { HostTransportChoice = transport; }
 Transport HostTransport() { return HostTransportChoice; }
 
+// Private games are not listed, so the ID only reaches friends through this link.
+static std::string LastInviteUrl;
+
 bool Create(const std::string &name, const std::string &host, bool isPublic, Created &created, std::string &error)
 {
 	const std::string body = "{\"public\":" + std::string(isPublic ? "true" : "false") +
@@ -299,7 +302,13 @@ bool Create(const std::string &name, const std::string &host, bool isPublic, Cre
 	if (reply.status != 201) { error = Error(reply); return false; }
 	created = { Field(reply.body, "gameId"), Field(reply.body, "hostToken"), Field(reply.body, "roomToken") };
 	if (created.id.empty() || created.hostToken.empty() || created.roomToken.empty()) { error = "Invalid lobby response."; return false; }
+	LastInviteUrl = Origin() + "/open/" + created.id;
 	return true;
+}
+
+std::string InviteUrl()
+{
+	return LastInviteUrl;
 }
 
 bool Join(const std::string &id, std::string &roomToken, Transport &transport, std::string &error)

@@ -146,6 +146,8 @@ const std::vector<EntitySpriteSource> &SnapshotSprites();
 // ---- host_art.cpp ----
 
 const HostEntityArt &BuildEntityArt(bool inGame);
+/** The HD 2D frames of the entities of the last BuildSnapshot that the pack has art for (World3D billboards). */
+const HostEntityHdArt &BuildEntityHdArt(bool inGame);
 /** True when the pack has a skinned model for this hero class (host_world.cpp). */
 bool HasCharacterModel(int heroClass);
 void ResetSnapshot();

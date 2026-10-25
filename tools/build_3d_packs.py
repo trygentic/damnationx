@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
-"""Builds the DamnationX 3D pack zips for Discord distribution (docs/3d-asset-packs.md).
+"""Build the single DamnationX art-pack download (docs/3d-asset-packs.md).
 
-Two separate packs, each from a source definition in tools/packs/3d/:
+The combined archive contains 2D HD art and both internal 3D tiers, preserving
+component manifests, model hashes and license notices. No D2R import is included.
+Use the existing WebP export as --hd-art for the smaller complete download.
 
-  free  Douglas Opan's diablo-3d models (Sustainable Use License, NOTICE.md)  -> hd/3d/free/
-  hd    the HD pack's 3D content (Patreon): props and the 3D warrior        -> hd/3d/hd/, hd/3d/warrior/
+  tools/build_3d_packs.py --hd-art /path/to/webp/hd
+  tools/build_3d_packs.py --pack free       # legacy component-only output
+  tools/build_3d_packs.py --pack hd         # legacy component-only output
+  tools/build_3d_packs.py --pack all        # legacy two-archive output
 
-The models come from assets/downloaded/ (never committed). Each embedded texture is re-encoded as PNG, downscaled to
---max-texture if larger, because every game build decodes PNG but not all decode JPEG. Each pack gets a manifest.json
-(ids, source file, scale, pivot, collision footprint, tier, bounds) and the placement files the game reads
-(hd/3d/<tier>/placements/<level type>.ini, docs/design/static-mesh-placement.md), generated from tools/packs/3d/placement.json.
-Output goes to assets/packs/ (gitignored):
-
-  assets/packs/damnationx-3d-free-<version>.zip
-  assets/packs/damnationx-3d-hd-<version>.zip
-  assets/packs/SHA256SUMS
-
-Players unzip a pack next to DIABDAT.MPQ (or wherever their hd folder is); the zips hold the hd/... paths.
-
-Usage:
-  tools/build_3d_packs.py                      build both packs
-  tools/build_3d_packs.py --pack free          only the FREE pack
-  tools/build_3d_packs.py --install DIR        also copy the packs into DIR (a folder holding hd/, or a browser build)
-  tools/build_3d_packs.py --hd-art DIR         merge an HD art folder (sprites.txt, ui.txt, ...) into the HD zip
-
-Needs Pillow (pip install pillow).
+Model source definitions are in tools/packs/3d/. --source selects the downloaded
+model source root; output defaults to ignored assets/packs/. Requires Pillow.
 """
 
 import argparse
@@ -280,6 +267,45 @@ def placement_files(placement: dict, models: dict, install_dir: str, mesh_only: 
     return files
 
 
+def hd_art_files(root: pathlib.Path):
+    """Yield 2D source files under their logical paths, materializing directory links.
+
+    Installed HD libraries may link sprites, UI and other directories to a local
+    art collection. Follow those links, including targets outside the library,
+    but reject cycles rather than silently leaving referenced images out.
+    Existing 3d/ trees belong to old pack versions and are never merged.
+    """
+    try:
+        root = root.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError(f'Cannot read HD art source {root}: {error}') from error
+    if not root.is_dir():
+        raise ValueError(f'HD art source is not a directory: {root}')
+
+    def walk(directory, relative, ancestors):
+        try:
+            resolved = directory.resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise ValueError(f'Broken or cyclic HD art link at {directory}: {error}') from error
+        if resolved in ancestors:
+            raise ValueError(f'HD art directory link cycle at {directory} -> {resolved}')
+        if len(relative.parts) > 128:
+            raise ValueError(f'HD art directory nesting exceeds 128 levels at {directory}')
+        ancestors = ancestors | {resolved}
+        for path in sorted(directory.iterdir()):
+            if path.name == '.DS_Store' or (not relative.parts and path.name.casefold() == '3d'):
+                continue
+            logical = relative / path.name
+            if path.is_dir():
+                yield from walk(path, logical, ancestors)
+            elif path.is_file():
+                yield logical, path
+            else:
+                raise ValueError(f'HD art source has a broken link or unsupported file: {path}')
+
+    yield from walk(root, pathlib.Path(), set())
+
+
 def build_pack(definition_path: pathlib.Path, source_root: pathlib.Path, max_texture: int, version: str, hd_art: pathlib.Path | None):
     definition = json.loads(definition_path.read_text(encoding='utf-8'))
     tier = definition['tier']
@@ -374,9 +400,13 @@ def build_pack(definition_path: pathlib.Path, source_root: pathlib.Path, max_tex
             missing.append(str(source))
 
     if hd_art is not None:
-        for path in sorted(hd_art.rglob('*')):
-            if path.is_file() and path.name != '.DS_Store':
-                files[f'hd/{path.relative_to(hd_art).as_posix()}'] = path.read_bytes()
+        for relative, path in hd_art_files(hd_art):
+            # Current generated content is authoritative. In particular, old
+            # model bytes must never replace files whose new SHA is recorded
+            # in the manifests, and old placements must not reintroduce rules.
+            name = f'hd/{relative.as_posix()}'
+            if name not in files:
+                files[name] = path.read_bytes()
 
     placement_source = definition.get('placement')
     if placement_source and manifest_models:
@@ -401,18 +431,84 @@ def build_pack(definition_path: pathlib.Path, source_root: pathlib.Path, max_tex
     return definition['pack'], files, missing
 
 
+
+def build_combined(source_root: pathlib.Path, max_texture: int, version: str, hd_art: pathlib.Path):
+    """One installable download, keeping FREE/HD as internal rendering tiers."""
+    files = {}
+    missing = []
+    for tier in ('free', 'hd'):
+        _, component, unavailable = build_pack(
+            PACK_SOURCES / f'{tier}.pack.json', source_root, max_texture, version, None)
+        for name, data in component.items():
+            if name in files and files[name] != data:
+                raise ValueError(f'Conflicting combined-pack component: {name}')
+            files[name] = data
+        missing.extend(unavailable)
+    for relative, path in hd_art_files(hd_art):
+        files[f'hd/{relative.as_posix()}'] = path.read_bytes()
+    for required in ('hd/sprites.txt', 'hd/ui.txt',
+                     'hd/3d/free/NOTICE.md', 'hd/3d/free/LICENSE.md'):
+        if not files.get(required):
+            raise ValueError(f'Complete art pack requires {required}')
+    components = []
+    for tier in ('free', 'hd'):
+        name = f'hd/3d/{tier}/manifest.json'
+        manifest = json.loads(files[name])
+        components.append({'tier': tier, 'manifest': name,
+                           'attribution': manifest['attribution'], 'license': manifest['license']})
+    files['ART-PACK.json'] = (json.dumps({
+        'schema': 'damnationx.art-pack/1', 'version': version,
+        'install_root': 'hd', 'components': components,
+        'd2r_imported_data': 'excluded',
+    }, indent=2) + '\n').encode('utf-8')
+    files['README.txt'] = f"""DamnationX art pack {version}
+
+One download contains the 2D HD art, 3D characters and props, and FREE 3D models.
+You do not need separate FREE, HD, PNG or WebP packs.
+
+In the launcher, open Asset library > HD art pack > Import ZIP and select this
+archive. Or extract it and select its hd folder with Use folder. Back up an old
+manual installation before replacing its whole hd folder; do not merge PNG and
+WebP exports. The internal free and hd directories are automatic rendering tiers.
+
+Diablo game data and converted Diablo II: Resurrected assets are not included.
+D2R art is a separate optional import from your own installed game.
+
+Component licenses still apply. The FREE models retain their full notice and
+Sustainable Use License in hd/3d/free/NOTICE.md and LICENSE.md. This component
+must be supplied free of charge, without a paywall or sale bundle. HD attribution
+and license identifiers are retained in hd/3d/hd/manifest.json. This combined
+archive does not replace or expand any component's permissions.
+
+Chest visuals now remain with the native or D2R renderer when opened. Static
+pack chest resources are included for future authored open variants.
+""".encode('utf-8')
+    return 'damnationx-art-pack', files, missing
+
+
+def file_sha256(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with path.open('rb') as source:
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--pack', choices=['free', 'hd', 'all'], default='all')
+    parser.add_argument('--pack', choices=['combined', 'free', 'hd', 'all'], default='combined',
+                        help='one complete art download (default); free/hd/all retain legacy component builds')
     parser.add_argument('--source', type=pathlib.Path, default=DEFAULT_SOURCE, help='downloaded art (default assets/downloaded)')
     parser.add_argument('--out', type=pathlib.Path, default=DEFAULT_OUT, help='output folder (default assets/packs)')
     parser.add_argument('--max-texture', type=int, default=1024, help='longest texture side in the packs (default 1024)')
     parser.add_argument('--version', default=datetime.date.today().strftime('%Y%m%d'))
     parser.add_argument('--install', type=pathlib.Path, action='append', default=[],
                         help='also unpack into this folder (it gets hd/3d/...); may be repeated')
-    parser.add_argument('--hd-art', type=pathlib.Path, help='HD art folder merged into the HD zip as hd/')
+    parser.add_argument('--hd-art', type=pathlib.Path, help='2D HD art merged as hd/; follows directory links, excludes existing 3d/ content')
     parser.add_argument('--allow-missing', action='store_true', help='build even when listed models are missing')
     args = parser.parse_args()
+    if args.pack == 'combined' and args.hd_art is None:
+        parser.error('the complete art pack requires --hd-art DIR (prefer the existing WebP export)')
 
     try:
         import PIL  # noqa: F401
@@ -432,8 +528,17 @@ def main() -> int:
     sums = []
     for name in packs:
         print(f'{name} pack:')
-        pack_name, files, missing = build_pack(PACK_SOURCES / f'{name}.pack.json', args.source.resolve(), args.max_texture, args.version,
-                                               args.hd_art if name == 'hd' else None)
+        try:
+            if name == 'combined':
+                pack_name, files, missing = build_combined(
+                    args.source.resolve(), args.max_texture, args.version, args.hd_art)
+            else:
+                pack_name, files, missing = build_pack(
+                    PACK_SOURCES / f'{name}.pack.json', args.source.resolve(), args.max_texture, args.version,
+                    args.hd_art if name == 'hd' else None)
+        except (OSError, ValueError) as error:
+            print(f'  cannot build {name} pack: {error}', file=sys.stderr)
+            return 1
         if missing:
             print('  missing sources:\n    ' + '\n    '.join(missing), file=sys.stderr)
             if not args.allow_missing:
@@ -445,7 +550,7 @@ def main() -> int:
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o644 << 16
                 zf.writestr(info, files[path])
-        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        digest = file_sha256(archive)
         sums.append(f'{digest}  {archive.name}')
         print(f'  -> {archive.relative_to(ROOT) if ROOT in archive.parents else archive} ({archive.stat().st_size / 1e6:.1f} MB, {len(files)} files)')
         for target in args.install:

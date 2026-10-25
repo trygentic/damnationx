@@ -27,6 +27,10 @@
 #include "utils/ui_fwd.h"
 #include "utils/utf8.hpp"
 
+#ifdef DEVILUTIONX_LOBBY
+#include "dvlnet/lobby_api.h"
+#endif
+
 #ifdef _DEBUG
 #include "debug.h"
 #include "lighting.h"
@@ -1458,6 +1462,11 @@ void DrawAutomapText(const Surface &out)
 			description.append(GamePassword);
 		}
 		drawStringAndAdvanceLine(description);
+#ifdef DEVILUTIONX_LOBBY
+		// The creator is player 0; private lobby games are unlisted, so friends need the copied link.
+		if (!PublicGame && !IsLoopback && MyPlayerId == 0 && !net::lobby::InviteUrl().empty())
+			drawStringAndAdvanceLine(_("Invite link copied to clipboard"));
+#endif
 	}
 
 	if (setlevel) {

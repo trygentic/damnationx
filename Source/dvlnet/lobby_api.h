@@ -35,6 +35,8 @@ bool SetDeepLinkUrl(std::string_view url);
 void ListenForDeepLinkUrls();
 void SetHostCharacter(std::string name);
 std::string HostCharacter();
+// Invite link (<origin>/open/<gameId>) for the last game this client created, "" before any.
+std::string InviteUrl();
 bool Create(const std::string &name, const std::string &host, bool isPublic, Created &created, std::string &error);
 bool Join(const std::string &id, std::string &roomToken, Transport &transport, std::string &error);
 bool List(std::vector<Game> &games, std::string &error);
