@@ -34,9 +34,11 @@ extern const int PathDiagonalStepCost;
  * @param destinationPosition
  * @param path Resulting path represented as the step directions, which are indices in `PathDirs`. Must have room for `maxPathLength` steps.
  * @param maxPathLength The maximum allowed length of the resulting path.
+ * @param reachableDestination If supplied, forbid blocked destination steps and return the closest reachable
+ * explored tile when the exact destination cannot be reached. The search retains its usual node/length bounds.
  * @return The length of the resulting path, or 0 if there is no valid path.
  */
-int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool(Point)> posOk, Point startPosition, Point destinationPosition, int8_t *path, size_t maxPathLength);
+int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool(Point)> posOk, Point startPosition, Point destinationPosition, int8_t *path, size_t maxPathLength, Point *reachableDestination = nullptr);
 
 /** For iterating over the 8 possible movement directions */
 const Displacement PathDirs[8] = {

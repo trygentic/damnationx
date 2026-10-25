@@ -168,7 +168,7 @@ struct HostEntity {
 	uint32_t typeId;
 	uint32_t variant;   // player: armor/weapon class bits; monster: unique id + 1 or 0; item: unique/magic tier
 	float x, y, z;
-	uint16_t anim;      // player_graphic / MonsterGraphic / object frame set; chests: 0 closed, 2 open
+	uint16_t anim;      // player_graphic / MonsterGraphic / object frame set; chests/doors: 0 closed, 2 open
 	uint16_t frame;     // current frame within anim
 	uint16_t frameCount;
 	uint16_t lightRadius; // 0 for none
@@ -303,6 +303,9 @@ enum class HostRenderMode : uint32_t {
  * the game starts in (otherwise the saved setting decides).
  */
 void HostSetRenderMode(HostRenderMode mode);
+/** Loaded external door model mask (L1/L2/L3/L5 left/right); render panels only.
+ * Clear when models are disabled, unavailable, or the host leaves World3D. */
+void HostSetExternalDoorModels(uint32_t mask);
 HostRenderMode HostGetRenderMode();
 /** Called (on the game thread, inside HostTick) when the player changes the mode in the settings menu; nullptr removes. */
 using HostRenderModeCallback = void (*)(HostRenderMode mode, void *user);

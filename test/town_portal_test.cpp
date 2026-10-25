@@ -5,6 +5,9 @@
  */
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstring>
+
 #include "engine/assets.hpp"
 #include "engine/load_file.hpp"
 #include "headless_mode.hpp"
@@ -73,6 +76,140 @@ protected:
 private:
 	bool previousHeadless = false;
 };
+
+// Synthetic geometry keeps these regressions independent of proprietary game data.
+class PortalGeometryGuard {
+public:
+	PortalGeometryGuard()
+	{
+		std::memcpy(pieces.data(), dPiece, sizeof(dPiece));
+		std::memcpy(flags.data(), dFlags, sizeof(dFlags));
+		std::memset(dFlags, 0, sizeof(dFlags));
+		std::memcpy(players.data(), dPlayer, sizeof(dPlayer));
+		std::memcpy(monsters.data(), dMonster, sizeof(dMonster));
+		std::memcpy(objects.data(), dObject, sizeof(dObject));
+		std::memcpy(triggers.data(), trigs, sizeof(trigs));
+		std::memset(dPlayer, 0, sizeof(dPlayer));
+		std::memset(dMonster, 0, sizeof(dMonster));
+		std::memset(dObject, 0, sizeof(dObject));
+		SOLData[0] = TileProperties::Solid | TileProperties::BlockMissile;
+		SOLData[1] = {};
+	}
+	~PortalGeometryGuard()
+	{
+		std::memcpy(dPiece, pieces.data(), sizeof(dPiece));
+		std::memcpy(dFlags, flags.data(), sizeof(dFlags));
+		std::memcpy(dPlayer, players.data(), sizeof(dPlayer));
+		std::memcpy(dMonster, monsters.data(), sizeof(dMonster));
+		std::memcpy(dObject, objects.data(), sizeof(dObject));
+		std::memcpy(trigs, triggers.data(), sizeof(trigs));
+		numtrigs = triggerCount;
+		SOLData[0] = solid0;
+		SOLData[1] = solid1;
+	}
+private:
+	std::array<std::byte, sizeof(dPiece)> pieces;
+	std::array<std::byte, sizeof(dFlags)> flags;
+	std::array<std::byte, sizeof(dPlayer)> players;
+	std::array<std::byte, sizeof(dMonster)> monsters;
+	std::array<std::byte, sizeof(dObject)> objects;
+	std::array<std::byte, sizeof(trigs)> triggers;
+	int triggerCount = numtrigs;
+	TileProperties solid0 = SOLData[0];
+	TileProperties solid1 = SOLData[1];
+};
+
+TEST_F(TownPortalTest, DungeonEndpointAvoidsStairArrivalAndPrefersScreenLeft)
+{
+	PortalGeometryGuard geometry;
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 1;
+	for (const Point stairs : { Point { 30, 30 }, Point { 55, 72 }, Point { 80, 40 } }) {
+		SCOPED_TRACE(stairs.x);
+		for (auto &column : dPiece)
+			for (auto &tile : column)
+				tile = 1;
+		numtrigs = 1;
+		trigs[0].position = stairs;
+		trigs[0]._tmsg = WM_DIABPREVLVL;
+		ViewPosition = stairs + Displacement { 0, 2 };
+		const Point portal = CathedralPortalPosition();
+		EXPECT_EQ(portal, stairs + Displacement(-6, 6));
+		EXPECT_GE(portal.WalkingDistance(stairs), 6);
+		EXPECT_GE(portal.WalkingDistance(ViewPosition), 4);
+		// Neither player occupancy nor the current camera may move a shared endpoint.
+		dPlayer[portal.x][portal.y] = 1;
+		ViewPosition = { 20, 20 };
+		EXPECT_EQ(CathedralPortalPosition(), portal);
+		dPlayer[portal.x][portal.y] = 0;
+		SetCurrentPortal(CathedralPortalIndex);
+		GetPortalLvlPos();
+		EXPECT_GE(ViewPosition.WalkingDistance(portal), 2);
+		EXPECT_GE(ViewPosition.WalkingDistance(stairs), 4);
+	}
+}
+
+TEST_F(TownPortalTest, DungeonEndpointFindsReachableFloorWhenLeftSideIsBlocked)
+{
+	PortalGeometryGuard geometry;
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 1;
+	const Point stairs { 50, 50 };
+	numtrigs = 1;
+	trigs[0].position = stairs;
+	trigs[0]._tmsg = WM_DIABPREVLVL;
+	for (auto &column : dPiece)
+		for (auto &tile : column)
+			tile = 0;
+	// The only connected room runs to screen-right; an isolated left-hand room
+	// must not win just because it is closest to the preferred position.
+	for (int x = 50; x <= 68; ++x)
+		for (int y = 48; y <= 52; ++y)
+			dPiece[x][y] = 1;
+	for (int x = 41; x <= 45; ++x)
+		for (int y = 54; y <= 58; ++y)
+			dPiece[x][y] = 1;
+	ViewPosition = stairs + Displacement { 1, 0 };
+	const Point portal = CathedralPortalPosition();
+	EXPECT_GE(portal.x, 56);
+	EXPECT_GE(portal.WalkingDistance(stairs), 6);
+	EXPECT_FALSE(TileHasAny(portal, TileProperties::Solid | TileProperties::BlockMissile));
+}
+
+TEST_F(TownPortalTest, GeneratedCathedralEntrancesKeepPortalAwayAcrossSeeds)
+{
+	LoadCoreArchives();
+	LoadGameArchives();
+	if (!HaveMainData())
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	leveltype = DTYPE_CATHEDRAL;
+	currlevel = 1;
+	MyPlayer->pOriginalCathedral = true;
+	LoadQuestData();
+	InitQuests();
+	pMegaTiles = LoadFileInMem<MegaTile>("levels\\l1data\\l1.til");
+	ASSERT_NE(pMegaTiles, nullptr);
+	ASSERT_TRUE(LoadLevelSOLData().has_value());
+	for (uint32_t seed : { 2588U, 743271966U, 401921334U, 536340718U, 1U, 42U, 12345U, 0xDEADBEEFU }) {
+		SCOPED_TRACE(seed);
+		LevelSeeds[1] = std::nullopt;
+		CreateDungeon(seed, ENTRY_MAIN);
+		InitL1Triggers();
+		Freeupstairs();
+		const Point arrival = ViewPosition;
+		const Point portal = CathedralPortalPosition();
+		EXPECT_GE(portal.WalkingDistance(arrival), 3);
+		EXPECT_FALSE(TileHasAny(portal, TileProperties::Solid | TileProperties::BlockMissile));
+		EXPECT_FALSE(TileContainsSetPiece(portal));
+		for (int i = 0; i < numtrigs; ++i)
+			EXPECT_GE(portal.WalkingDistance(trigs[i].position), 6);
+		SetCurrentPortal(CathedralPortalIndex);
+		GetPortalLvlPos();
+		EXPECT_GE(ViewPosition.WalkingDistance(portal), 2);
+		EXPECT_FALSE(TileHasAny(ViewPosition, TileProperties::Solid));
+	}
+	pMegaTiles = nullptr;
+}
 
 TEST_F(TownPortalTest, GameplayOptionDefaultsOn)
 {

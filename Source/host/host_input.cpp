@@ -23,11 +23,13 @@
 
 #include "controls/control_mode.hpp"
 #include "cursor.h"
+#include "engine/path.h"
 #include "engine/render/ui_scale.hpp"
 #include "fpv/fpv.hpp"
 #include "gmenu.h"
 #include "items.h"
 #include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
@@ -61,6 +63,13 @@ std::deque<std::string> TextStore; // the strings SDL3 text events point at (the
 int32_t LastPointerX = -1;
 int32_t LastPointerY = -1;
 uint32_t LastButtonsDown = 0;
+
+struct HeldWalkTarget {
+	bool valid = false;
+	uint32_t level = 0;
+	Point tile;
+};
+HeldWalkTarget HeldWalk;
 
 } // namespace
 
@@ -373,6 +382,10 @@ void ApplyInput(const HostInputFrame &input)
 	Pick.tileY = input.hoverTileY;
 	Pick.entityId = input.hoverEntityId;
 	NoWorldPick = HostApiVersionInUse() >= 4 && (input.inputFlags & kInputNoWorldPick) != 0;
+	const uint32_t primary = static_cast<uint32_t>(HostButton::Primary);
+	if ((input.buttonsDown & primary) == 0 || (input.buttonsPressed & primary) != 0
+	    || input.pointerX != LastPointerX || input.pointerY != LastPointerY || NoWorldPick)
+		HeldWalk = {};
 	if (HostApiVersionInUse() >= 5 && (input.inputFlags & kInputToggleRun) != 0)
 		HostToggleRun();
 	if (HostApiVersionInUse() >= 5 && (input.inputFlags & kInputToggleFirstPerson) != 0 && InGame())
@@ -430,6 +443,7 @@ void ReleaseInput()
 	ReleaseGamepad();
 	Pick = {};
 	NoWorldPick = false;
+	HeldWalk = {};
 	{
 		const std::lock_guard<std::mutex> lock(QueueMutex);
 		EventQueue.clear();
@@ -454,6 +468,32 @@ bool PickedTile(Point &tile)
 	// The ray missed the dungeon: the player's own tile, so a click there does nothing.
 	tile = MyPlayer->position.tile;
 	return true;
+}
+
+Point WalkTarget(Point tile)
+{
+	Point picked;
+	if (!PickedTile(picked))
+		return tile;
+	int8_t path[MaxPathLengthPlayer];
+	const auto posOk = [](Point position) { return PosOkPlayer(*MyPlayer, position); };
+	const Point start = MyPlayer->position.future;
+	const uint32_t level = static_cast<uint32_t>(currlevel) | (static_cast<uint32_t>(leveltype) << 8)
+	    | (static_cast<uint32_t>(setlevel) << 16) | (static_cast<uint32_t>(setlvlnum) << 17);
+	const bool held = (LastButtonsDown & static_cast<uint32_t>(HostButton::Primary)) != 0;
+	// Camera follow can move a stationary pointer's hit between solid roof/wall
+	// tiles. Finish the same reachable approach instead of choosing a new side
+	// every step. Real pointer movement/release invalidates this in ApplyInput.
+	// Reachable floor/stair targets always win, so entrance hotspots stay live.
+	if (held && HeldWalk.valid && HeldWalk.level == level && !posOk(tile) && posOk(HeldWalk.tile)
+	    && (HeldWalk.tile == start || FindPath(CanStep, posOk, start, HeldWalk.tile, path, MaxPathLengthPlayer - 1) > 0))
+		return HeldWalk.tile;
+	HeldWalk = {};
+	Point reachable = start;
+	FindPath(CanStep, posOk, start, tile, path, MaxPathLengthPlayer - 1, &reachable);
+	if (held && reachable != tile && !posOk(tile))
+		HeldWalk = { true, level, reachable };
+	return reachable;
 }
 
 bool PickedTarget()

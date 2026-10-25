@@ -39,6 +39,13 @@ bool dxp_menu_gameplay(uint32_t setting, bool enabled);
 bool dxp_menu_ui_scale(int32_t *chosen, int32_t *effective);
 /** Sets Graphics "UI Scale" (clamped to 4..16 quarters); saved with the options like the classic Options menu. */
 bool dxp_menu_set_ui_scale(int32_t quarters);
+/** Saved hover outline enablement and width in quarter screen pixels (2..12 = 0.5..3 px). */
+bool dxp_menu_outlines(bool *enabled, int32_t *widthQuarters);
+/** Queues both saved values; requires the open in-game menu. */
+bool dxp_menu_set_outlines(bool enabled, int32_t widthQuarters);
+/** Saved application render FPS overlay (default on); setter requires the open game menu. */
+bool dxp_menu_fps(bool *enabled);
+bool dxp_menu_set_fps(bool enabled);
 }
 
 static_assert(sizeof(DxpMenuSnapshot) == 16);

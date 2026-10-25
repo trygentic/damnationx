@@ -74,6 +74,10 @@ struct LevelGeometry {
 	uint32_t generation = 0;
 };
 
+/** External loaded door models replace native panels only; bits follow the
+ * L1/L2/L3/L5 left/right families. Collision and closed-door occlusion stay native. */
+void SetExternalDoorModels(uint32_t mask);
+
 /** Rebuilds `geometry` when the level state hash changed (or after InvalidateLevel). Returns true when rebuilt. */
 bool UpdateLevelGeometry(LevelGeometry &geometry);
 

@@ -10,6 +10,7 @@
 #include "controls/plrctrls.h"
 #include "cursor.h"
 #include "engine/point.hpp"
+#include "host/host_hooks.hpp"
 #include "player.h"
 #include "stores.h"
 
@@ -26,10 +27,11 @@ void RepeatWalk(Player &player)
 		return;
 
 	const Point target = player.GetTargetPosition();
-	if (cursPosition == target)
+	const Point destination = host::WalkTarget(cursPosition);
+	if (destination == target)
 		return;
 
-	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, destination);
 }
 
 } // namespace

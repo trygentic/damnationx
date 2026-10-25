@@ -146,6 +146,8 @@ std::array<std::optional<int32_t>, 2> PendingMenuAudio;
 std::optional<bool> PendingRunEnabled;
 std::optional<bool> PendingFreePortalEnabled;
 std::optional<int32_t> PendingUiScale;
+std::optional<std::pair<bool, int32_t>> PendingOutlines;
+std::optional<bool> PendingHostFPS;
 
 DxpMenuSnapshot MenuSnapshot()
 {
@@ -240,6 +242,8 @@ void ResetHostMenu()
 	PendingRunEnabled.reset();
 	PendingFreePortalEnabled.reset();
 	PendingUiScale.reset();
+	PendingOutlines.reset();
+	PendingHostFPS.reset();
 }
 
 void ProcessMenuCommands()
@@ -253,6 +257,8 @@ void ProcessMenuCommands()
 	const auto runEnabled = std::exchange(PendingRunEnabled, std::nullopt);
 	const auto freePortalEnabled = std::exchange(PendingFreePortalEnabled, std::nullopt);
 	const auto uiScale = std::exchange(PendingUiScale, std::nullopt);
+	const auto outlines = std::exchange(PendingOutlines, std::nullopt);
+	const auto hostFPS = std::exchange(PendingHostFPS, std::nullopt);
 	if (!InGame() || !gmenu_is_active())
 		return;
 	for (size_t channel = 0; channel < audio.size(); ++channel) {
@@ -284,6 +290,12 @@ void ProcessMenuCommands()
 		SetFreeTownPortalEnabled(*freePortalEnabled);
 	if (uiScale.has_value())
 		GetOptions().Graphics.uiScale.SetValue(*uiScale); // relayouts and redraws on a change (ui_scale.cpp), saved with the options when the menu closes
+	if (outlines.has_value()) {
+		GetOptions().Graphics.hoverOutlines.SetValue(outlines->first);
+		GetOptions().Graphics.outlineWidth.SetValue(outlines->second);
+	}
+	if (hostFPS.has_value())
+		GetOptions().Graphics.hostFPS.SetValue(*hostFPS);
 	const uint32_t flags = MenuSnapshot().flags;
 	MenuActionInProgress = action != 0;
 	switch (action) {
@@ -655,5 +667,42 @@ extern "C" bool dxp_menu_set_ui_scale(int32_t quarters)
 	if ((host::MenuSnapshot().flags & DxpMenuOpen) == 0)
 		return false;
 	host::PendingUiScale = std::clamp<int32_t>(quarters, OptionEntryQuarterScale::MinQuarters, OptionEntryQuarterScale::MaxQuarters);
+	return true;
+}
+
+extern "C" bool dxp_menu_outlines(bool *enabled, int32_t *widthQuarters)
+{
+	using namespace devilution;
+	if (enabled == nullptr || widthQuarters == nullptr || !host::IsActive())
+		return false;
+	*enabled = *GetOptions().Graphics.hoverOutlines;
+	*widthQuarters = std::clamp<int32_t>(*GetOptions().Graphics.outlineWidth, 2, 12);
+	return true;
+}
+
+extern "C" bool dxp_menu_set_outlines(bool enabled, int32_t widthQuarters)
+{
+	using namespace devilution;
+	if ((host::MenuSnapshot().flags & DxpMenuOpen) == 0)
+		return false;
+	host::PendingOutlines = std::pair { enabled, std::clamp<int32_t>(widthQuarters, 2, 12) };
+	return true;
+}
+
+extern "C" bool dxp_menu_fps(bool *enabled)
+{
+	using namespace devilution;
+	if (enabled == nullptr || !host::IsActive())
+		return false;
+	*enabled = *GetOptions().Graphics.hostFPS;
+	return true;
+}
+
+extern "C" bool dxp_menu_set_fps(bool enabled)
+{
+	using namespace devilution;
+	if ((host::MenuSnapshot().flags & DxpMenuOpen) == 0)
+		return false;
+	host::PendingHostFPS = enabled;
 	return true;
 }

@@ -23,7 +23,7 @@ struct ActorPosition {
 	FreeformStep freeform;
 	/**
 	 * Drawn offset from the centre of the current tile, carried from one walk step to the next.
-	 * While not walking the actor is drawn at this offset and it eases back to zero (see SettleFreeformCarry).
+	 * While standing the actor stays at this offset; the next step starts here without idle drift.
 	 */
 	SubTileDisplacement freeformCarry;
 
@@ -47,8 +47,6 @@ struct ActorPosition {
 	[[nodiscard]] Displacement GetDrawnScreenOffset(bool walking, Direction dir, const AnimationInfo &animInfo) const;
 	/** @brief Drawn light offset (free-form aware replacement for CalculateWalkingOffset(...).screenToLight()). */
 	[[nodiscard]] Displacement GetDrawnLightOffset(bool walking, Direction dir, const AnimationInfo &animInfo) const;
-	/** @brief Eases freeformCarry back towards the tile centre. Call once per game tick while not walking. */
-	void SettleFreeformCarry();
 	/** @brief Forgets all free-form state, e.g. on teleport, level change or load. */
 	void ResetFreeform();
 };

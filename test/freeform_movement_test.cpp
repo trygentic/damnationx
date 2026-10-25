@@ -32,6 +32,18 @@ TEST(FreeformMovementTest, StraightStepMatchesClassicStep)
 	EXPECT_EQ(step.carryAfter(Direction::East), SubTileDisplacement(0, 0));
 }
 
+TEST(FreeformMovementTest, ResumeAndRerouteKeepTheRetainedFeetContinuous)
+{
+	const SubTileDisplacement stopped { 96, -64 };
+	const FreeformStep resumed = PlanFreeformStep(stopped, Direction::East, TileStep(Direction::East) * 5, 5);
+	EXPECT_EQ(resumed.at(0), stopped);
+	const SubTileDisplacement carried = resumed.carryAfter(Direction::East);
+	const FreeformStep reversed = PlanFreeformStep(carried, Direction::West, TileStep(Direction::West) * 3, 3);
+	EXPECT_EQ(reversed.at(0) + TileStep(Direction::East), resumed.at(AnimationInfo::baseValueFraction));
+	EXPECT_LE(std::abs(carried.deltaX), MaxFreeformDeviation);
+	EXPECT_LE(std::abs(carried.deltaY), MaxFreeformDeviation);
+}
+
 TEST(FreeformMovementTest, FacingQuantizesToEightSectors)
 {
 	for (int d = 0; d < 8; d++) {

@@ -17,6 +17,7 @@
 #include "cursor.h"
 #include "engine/freeform_movement.hpp"
 #include "engine/path.h"
+#include "utils/algorithm/container.hpp"
 #include "engine/render/ui_scale.hpp"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
@@ -229,6 +230,13 @@ void AddObjects()
 		// frame number also encodes an art variant, not opening animation time.
 		if (object.IsChest())
 			entity.anim = object.canInteractWith() ? 0 : 2;
+		if (object.isDoor()) {
+			entity.anim = object._oVar4 == 0 ? 0 : 2;
+			const bool left = IsAnyOf(object._otype, OBJ_L1LDOOR, OBJ_L2LDOOR, OBJ_L3LDOOR, OBJ_L5LDOOR);
+			// D2R closed leaves are authored in the YZ plane; their native
+			// passage normal is +X for left doors and +Z for right doors.
+			entity.facing = static_cast<uint8_t>(left ? Direction::SouthWest : Direction::SouthEast);
+		}
 		if (object.IsBroken())
 			entity.flags |= kEntityDead;
 		entity.frame = ClampU16(static_cast<int>(object._oAnimFrame));

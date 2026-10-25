@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,7 @@
 #include "missiles.h"
 #include "pfile.h"
 #include "engine/sound.h"
+#include "engine/path.h"
 #include "engine/assets.hpp"
 #include "engine/sound_defs.hpp"
 #include "engine/render/ui_scale.hpp"
@@ -56,6 +58,7 @@
 #include "player.h"
 #include "portal.h"
 #include "render3d/world_level.hpp"
+#include "render3d/fpv_contract.hpp"
 #include "utils/sdl_compat.h"
 
 using namespace devilution;
@@ -353,6 +356,74 @@ void CheckChestSnapshotState()
 	}
 }
 
+void CheckDoorArchitectureAndSnapshotState()
+{
+	ASSERT_GT(ActiveObjectCount, 0);
+	const int index = ActiveObjects[0];
+	const auto count = ActiveObjectCount;
+	const Object original = Objects[index];
+	struct RestoreDoor {
+		int index;
+		decltype(ActiveObjectCount) count;
+		Object original;
+		~RestoreDoor()
+		{
+			Objects[index] = original;
+			ActiveObjectCount = count;
+			HostSetExternalDoorModels(0);
+			render3d::InvalidateLevel();
+		}
+	} restore { index, count, original };
+	ActiveObjectCount = 1;
+	Object &door = Objects[index];
+	door = {};
+	door.position = MyPlayer->position.tile;
+	const uint32_t id = (static_cast<uint32_t>(HostEntityKind::Object) << 24) | static_cast<uint32_t>(index + 1);
+	const std::array<_object_id, 8> types { OBJ_L1LDOOR, OBJ_L1RDOOR, OBJ_L2LDOOR, OBJ_L2RDOOR, OBJ_L3LDOOR, OBJ_L3RDOOR, OBJ_L5LDOOR, OBJ_L5RDOOR };
+	for (size_t type = 0; type < types.size(); ++type) {
+		door._otype = types[type];
+		for (const int state : { 0, 1, 2 }) {
+			door._oVar4 = state;
+			const HostFrame &frame = HostSnapshot();
+			const HostEntity *found = nullptr;
+			for (uint32_t i = 0; i < frame.entityCount; ++i)
+				if (frame.entities[i].id == id)
+					found = &frame.entities[i];
+			ASSERT_NE(found, nullptr);
+			EXPECT_EQ(found->anim, state == 0 ? 0 : 2);
+			EXPECT_EQ(found->facing, static_cast<uint8_t>(type % 2 == 0 ? Direction::SouthWest : Direction::SouthEast));
+		}
+	}
+	door._otype = OBJ_L1LDOOR;
+	door._oVar4 = 0;
+	HostSetExternalDoorModels(0);
+	const HostFrame &closed = HostSnapshot();
+	const uint32_t nativeVertices = closed.level.vertexCount;
+	const uint32_t nativeIndices = closed.level.indexCount;
+	int panelVertices = 0;
+	float lowZ = 1000, highZ = -1000, top = 0;
+	for (uint32_t i = 0; i < closed.level.vertexCount; ++i) {
+		const HostWorldVertex &v = closed.level.vertices[i];
+		if ((std::abs(v.px - (door.position.x + 0.44F)) < 0.0001F || std::abs(v.px - (door.position.x + 0.56F)) < 0.0001F)
+		    && v.pz >= door.position.y - 0.301F && v.pz <= door.position.y + 1.301F) {
+			++panelVertices;
+			lowZ = std::min(lowZ, v.pz);
+			highZ = std::max(highZ, v.pz);
+			top = std::max(top, v.py);
+		}
+	}
+	EXPECT_EQ(panelVertices, 16);
+	EXPECT_NEAR(highZ - lowZ, 1.6F, 0.0001F);
+	EXPECT_NEAR(top, 3.2F, 0.0001F);
+	HostSetExternalDoorModels(1);
+	const HostFrame &external = HostSnapshot();
+	EXPECT_EQ(external.level.vertexCount + 16, nativeVertices);
+	EXPECT_EQ(external.level.indexCount + 24, nativeIndices);
+	EXPECT_TRUE(PosOkPlayer(*MyPlayer, MyPlayer->position.tile));
+	HostSetExternalDoorModels(0);
+	EXPECT_EQ(HostSnapshot().level.vertexCount, nativeVertices) << "disabling external models restores the fallback door";
+}
+
 } // namespace
 
 TEST(HostApi, OpenedObjectsAreNotBroken)
@@ -522,6 +593,17 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		EXPECT_FALSE(dxp_menu_audio(0, 50));
 		EXPECT_FALSE(dxp_menu_gameplay(2, false));
 		EXPECT_FALSE(dxp_menu_set_ui_scale(8));
+		EXPECT_FALSE(dxp_menu_set_outlines(false, 8));
+		EXPECT_FALSE(dxp_menu_set_fps(false));
+		EXPECT_FALSE(dxp_menu_fps(nullptr));
+		bool originalFPS = false;
+		ASSERT_TRUE(dxp_menu_fps(&originalFPS));
+		EXPECT_TRUE(originalFPS) << "the host application FPS overlay defaults on";
+		bool originalOutlines = true;
+		int32_t originalOutlineWidth = 0;
+		EXPECT_FALSE(dxp_menu_outlines(nullptr, &originalOutlineWidth));
+		EXPECT_FALSE(dxp_menu_outlines(&originalOutlines, nullptr));
+		ASSERT_TRUE(dxp_menu_outlines(&originalOutlines, &originalOutlineWidth));
 		int32_t originalUiScale = 0;
 		int32_t effectiveUiScale = 0;
 		EXPECT_FALSE(dxp_menu_ui_scale(nullptr, &effectiveUiScale));
@@ -573,6 +655,44 @@ TEST(HostApi, HundredTicksInTheCathedral)
 			dxp_menu_ui_scale(&chosenUiScale, &effectiveUiScale);
 			return chosenUiScale == originalUiScale;
 		}, 20, soundEvents));
+		// Host graphics controls update native options and persist through SaveOptions.
+		bool outlineEnabled = true;
+		int32_t outlineWidth = 0;
+		ASSERT_TRUE(dxp_menu_set_outlines(false, 99));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			dxp_menu_outlines(&outlineEnabled, &outlineWidth);
+			return !outlineEnabled && outlineWidth == 12;
+		}, 20, soundEvents));
+		EXPECT_FALSE(*GetOptions().Graphics.hoverOutlines);
+		EXPECT_EQ(*GetOptions().Graphics.outlineWidth, 12);
+		ASSERT_TRUE(dxp_menu_set_fps(false));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			bool enabled = true;
+			return dxp_menu_fps(&enabled) && !enabled;
+		}, 20, soundEvents));
+		SaveOptions();
+		std::ifstream savedOptions(saveDir / "diablo.ini");
+		std::string persisted((std::istreambuf_iterator<char>(savedOptions)), {});
+		std::erase_if(persisted, [](char c) { return c == ' ' || c == '\t' || c == '\r'; });
+		EXPECT_NE(persisted.find("HoverOutlines=0"), std::string::npos);
+		EXPECT_NE(persisted.find("OutlineWidth=12"), std::string::npos);
+		EXPECT_NE(persisted.find("HostFPS=0"), std::string::npos);
+		ASSERT_TRUE(dxp_menu_set_outlines(true, -99));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			dxp_menu_outlines(&outlineEnabled, &outlineWidth);
+			return outlineEnabled && outlineWidth == 2;
+		}, 20, soundEvents));
+		ASSERT_TRUE(dxp_menu_set_outlines(originalOutlines, originalOutlineWidth));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			dxp_menu_outlines(&outlineEnabled, &outlineWidth);
+			return outlineEnabled == originalOutlines && outlineWidth == originalOutlineWidth;
+		}, 20, soundEvents));
+		ASSERT_TRUE(dxp_menu_set_fps(originalFPS));
+		ASSERT_TRUE(TickUntil([&](const HostTickResult &, const HostFrame &) {
+			bool enabled = false;
+			return dxp_menu_fps(&enabled) && enabled == originalFPS;
+		}, 20, soundEvents));
+		SaveOptions();
 		EXPECT_TRUE(dxp_menu_audio(0, -50));
 		EXPECT_TRUE(dxp_menu_audio(1, 300));
 		EXPECT_TRUE(dxp_menu_gameplay(0, false));
@@ -877,6 +997,126 @@ TEST(HostApi, HundredTicksInTheCathedral)
 		EXPECT_EQ(HostHdSnapshot().drawCount, 0U);
 	}
 
+	// A smooth stop keeps its exact foot position instead of drifting toward the tile centre.
+	{
+		ASSERT_FALSE(MyPlayer->isWalking());
+		const bool smooth = *GetOptions().Gameplay.smoothMovement;
+		GetOptions().Gameplay.smoothMovement.SetValue(true);
+		const SubTileDisplacement retained { 96, -64 };
+		MyPlayer->position.freeformCarry = retained;
+		const auto feet = []() {
+			int count = 0;
+			const HostEntity *hero = FindLocalPlayer(HostSnapshot(), count);
+			return std::pair { hero->x, hero->z };
+		};
+		const auto stopped = feet();
+		for (int tick = 0; tick < 20; ++tick) {
+			HostSubmitInput(EmptyInput(nullptr));
+			HostTick(50);
+			EXPECT_EQ(MyPlayer->position.freeformCarry, retained);
+			EXPECT_EQ(feet(), stopped) << "idle feet must stop immediately, without a centering spring";
+		}
+		Point resume = MyPlayer->position.future;
+		for (const Displacement delta : { Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { -1, 0 }, Displacement { 0, -1 } }) {
+			const Point candidate = MyPlayer->position.future + delta;
+			if (PosOkPlayer(*MyPlayer, candidate) && CanStep(MyPlayer->position.future, candidate)) {
+				resume = candidate;
+				break;
+			}
+		}
+		ASSERT_NE(resume, MyPlayer->position.future);
+		MakePlrPath(*MyPlayer, resume, true);
+		HostSubmitInput(EmptyInput(nullptr));
+		HostTick(50);
+		ASSERT_TRUE(MyPlayer->position.freeform.active);
+		EXPECT_EQ(MyPlayer->position.freeform.start, retained) << "resuming must start at the retained feet, without snapping";
+		GetOptions().Gameplay.smoothMovement.SetValue(false);
+		EXPECT_EQ(MyPlayer->position.freeformCarry, SubTileDisplacement {});
+		EXPECT_FALSE(MyPlayer->position.freeform.active);
+		GetOptions().Gameplay.smoothMovement.SetValue(smooth);
+		for (int tick = 0; tick < 20; ++tick) {
+			HostSubmitInput(EmptyInput(nullptr));
+			HostTick(50);
+		}
+	}
+
+	// Actual town cathedral roof: a stationary held pointer may alternate solid hits as the camera follows.
+	// Keep the chosen reachable approach and make monotonically shorter paths, rather than swapping sides.
+	{
+		const Point initial = MyPlayer->position.future;
+		const auto posOk = [](Point p) { return PosOkPlayer(*MyPlayer, p); };
+		int8_t path[MaxPathLengthPlayer];
+		Point roof = initial;
+		Point approach = initial;
+		for (int y = 20; y <= 25 && roof == initial; ++y) {
+			for (int x = 20; x <= 26; ++x) {
+				const Point candidate { x, y };
+				if (posOk(candidate))
+					continue;
+				Point reached;
+				if (FindPath(CanStep, posOk, initial, candidate, path, MaxPathLengthPlayer - 1, &reached) > 0
+				    && reached.WalkingDistance(Point { 25, 29 }) < 12) {
+					roof = candidate;
+					approach = reached;
+					break;
+				}
+			}
+		}
+		ASSERT_NE(roof, initial);
+		Point alternate = roof;
+		for (const Displacement offset : { Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { -1, 0 }, Displacement { 0, -1 }, Displacement { 4, 0 }, Displacement { 0, 4 }, Displacement { 8, 0 }, Displacement { 0, 8 }, Displacement { 12, 0 }, Displacement { 0, 12 } }) {
+			const Point candidate = roof + offset;
+			Point reached;
+			if (!posOk(candidate) && FindPath(CanStep, posOk, initial, candidate, path, MaxPathLengthPlayer - 1, &reached) > 0 && reached != approach) {
+				alternate = candidate;
+				break;
+			}
+		}
+		ASSERT_NE(alternate, roof) << "fixture needs two solid roof hits with different independent endpoints";
+		const int initialDistance = FindPath(CanStep, posOk, initial, approach, path, MaxPathLengthPlayer - 1);
+		int previousDistance = initialDistance;
+		HostInputFrame begin = EmptyInput(nullptr);
+		begin.hoverTileX = roof.x;
+		begin.hoverTileY = roof.y;
+		begin.buttonsPressed = begin.buttonsDown = static_cast<uint32_t>(HostButton::Primary);
+		HostSubmitInput(begin);
+		EXPECT_EQ(WalkTarget(roof), approach);
+		HostInputFrame jitter = begin;
+		jitter.buttonsPressed = 0;
+		jitter.hoverTileX = alternate.x;
+		jitter.hoverTileY = alternate.y;
+		HostSubmitInput(jitter);
+		EXPECT_EQ(WalkTarget(alternate), approach) << "roof-hit jitter must not pick the independent alternate side";
+		// A canonicalized reachable entrance/floor must override a blocked hold.
+		EXPECT_EQ(WalkTarget(initial), initial);
+		EXPECT_EQ(WalkTarget(roof), approach);
+		jitter.pointerX += 4;
+		HostSubmitInput(jitter);
+		EXPECT_NE(WalkTarget(alternate), approach) << "actual pointer steering must release the blocked-target lock";
+		begin.buttonsPressed = 0;
+		HostSubmitInput(begin);
+		EXPECT_EQ(WalkTarget(roof), approach);
+		for (int tick = 0; tick < 140; ++tick) {
+			const Point request = tick % 2 == 0 ? roof : alternate;
+			HostInputFrame input = EmptyInput(nullptr);
+			input.hoverTileX = request.x;
+			input.hoverTileY = request.y;
+			input.buttonsDown = static_cast<uint32_t>(HostButton::Primary);
+			HostSubmitInput(input);
+			EXPECT_EQ(WalkTarget(request), approach) << "stationary-pointer roof jitter must not change the held destination";
+			ASSERT_EQ(HostTick(50).quitRequested, 0);
+			ASSERT_EQ(currlevel, 0);
+			const int remaining = FindPath(CanStep, posOk, MyPlayer->position.future, approach, path, MaxPathLengthPlayer - 1);
+			EXPECT_LE(remaining, previousDistance) << "held cathedral approach must not reverse its route";
+			previousDistance = remaining;
+		}
+		EXPECT_LT(previousDistance, initialDistance);
+		HostInputFrame release = EmptyInput(nullptr);
+		release.buttonsReleased = static_cast<uint32_t>(HostButton::Primary);
+		HostSubmitInput(release);
+		HostTick(50);
+	}
+
 	// Into the Cathedral, as taking the stairs does.
 	StartNewLvl(*MyPlayer, WM_DIABNEXTLVL, 1);
 	ASSERT_TRUE(TickUntil([](const HostTickResult &result, const HostFrame &frame) {
@@ -897,6 +1137,7 @@ TEST(HostApi, HundredTicksInTheCathedral)
 	EXPECT_NE(dungeonRevision, townRevision);
 	CheckSnapshotLightOwnership();
 	CheckChestSnapshotState();
+	CheckDoorArchitectureAndSnapshotState();
 	HostSnapshot(); // Refresh presentation after the synthetic source inputs have been restored.
 	for (uint32_t i = 0; i < dungeon.level.indexCount; ++i)
 		ASSERT_LT(dungeon.level.indices[i], dungeon.level.vertexCount);
@@ -1106,6 +1347,61 @@ TEST(HostApi, HundredTicksInTheCathedral)
 	// Sounds: music started on each level load at least; every event is reported once.
 	EXPECT_GT(soundEvents, 0U);
 
+	// Held World3D walking approaches a wall/building instead of retrying an unreachable solid tile.
+	{
+		const Point beforeWall = MyPlayer->position.future;
+		Point wall = beforeWall;
+		Point approach = beforeWall;
+		for (int radius = 4; radius <= 14 && wall == beforeWall; ++radius) {
+			for (const Displacement offset : { Displacement { radius, 0 }, Displacement { -radius, 0 }, Displacement { 0, radius }, Displacement { 0, -radius }, Displacement { radius, radius }, Displacement { -radius, -radius } }) {
+				const Point candidate = beforeWall + offset;
+				if (!InDungeonBounds(candidate) || PosOkPlayer(*MyPlayer, candidate) || hasNearbyObject(candidate))
+					continue;
+				int8_t path[MaxPathLengthPlayer];
+				if (FindPath(CanStep, [](Point position) { return PosOkPlayer(*MyPlayer, position); }, beforeWall, candidate, path, MaxPathLengthPlayer) != 0)
+					continue;
+				HostInputFrame input = EmptyInput(nullptr);
+				input.hoverTileX = candidate.x;
+				input.hoverTileY = candidate.y;
+				HostSubmitInput(input);
+				const Point reachable = WalkTarget(candidate);
+				if (reachable != beforeWall && PosOkPlayer(*MyPlayer, reachable)) {
+					wall = candidate;
+					approach = reachable;
+					break;
+				}
+			}
+		}
+		ASSERT_NE(wall, beforeWall) << "no unreachable solid wall target near the player";
+		for (int tick = 0; tick < 160; ++tick) {
+			HostInputFrame input = EmptyInput(nullptr);
+			input.hoverTileX = wall.x;
+			input.hoverTileY = wall.y;
+			input.buttonsDown = static_cast<uint32_t>(HostButton::Primary);
+			if (tick == 0)
+				input.buttonsPressed = input.buttonsDown;
+			HostSubmitInput(input);
+			ASSERT_EQ(HostTick(50).quitRequested, 0);
+			EXPECT_NE(MyPlayer->position.tile, wall) << "walking must never enter the solid target";
+		}
+		EXPECT_NE(MyPlayer->position.tile, beforeWall) << "holding the mouse over a wall must approach it";
+		EXPECT_LE(MyPlayer->position.tile.WalkingDistance(approach), 1);
+		// Steer away from the wall without releasing/repressing the mouse button.
+		for (int tick = 0; tick < 100; ++tick) {
+			HostInputFrame input = EmptyInput(nullptr);
+			input.hoverTileX = beforeWall.x;
+			input.hoverTileY = beforeWall.y;
+			input.buttonsDown = static_cast<uint32_t>(HostButton::Primary);
+			HostSubmitInput(input);
+			ASSERT_EQ(HostTick(50).quitRequested, 0);
+		}
+		EXPECT_LE(MyPlayer->position.tile.WalkingDistance(beforeWall), 1) << "held walking must resume when the pointer leaves the wall";
+		HostInputFrame release = EmptyInput(nullptr);
+		release.buttonsReleased = static_cast<uint32_t>(HostButton::Primary);
+		HostSubmitInput(release);
+		HostTick(50);
+	}
+
 	// ---- Classic: aim at a monster through HostView2DSnapshot and click (a 2D host's click: pointer and button in one
 	// frame, no 3D pick) until it dies; the hero's experience rises ----
 	{
@@ -1290,6 +1586,12 @@ TEST(HostApi, HundredTicksInTheCathedral)
 			EXPECT_EQ(leveltype, GetLevelType(section));
 			const Point endpoint = CathedralPortalPosition();
 			EXPECT_FALSE(TileHasAny(endpoint, TileProperties::Solid | TileProperties::BlockMissile));
+			EXPECT_GE(MyPlayer->position.tile.WalkingDistance(endpoint), 3);
+			for (int idle = 0; idle < 6; ++idle) {
+				HostSubmitInput(EmptyInput(nullptr));
+				EXPECT_NE(HostTick(50).inGame, 0);
+				EXPECT_EQ(currlevel, section) << "entering a section must not immediately return through its portal";
+			}
 			const auto dungeonState = checkpoint();
 			ASSERT_FALSE(dungeonState.empty());
 

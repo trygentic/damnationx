@@ -4466,12 +4466,6 @@ void ProcessMonsters()
 
 			GroupUnity(monster);
 		}
-		// Ease a stopped monster back to its tile centre. Chained walk steps never get here between steps,
-		// as the next step starts within the loop above.
-		if (!monster.isWalking() && monster.mode != MonsterMode::Petrified && monster.position.freeformCarry != SubTileDisplacement {}) {
-			monster.position.SettleFreeformCarry();
-			SyncLightPosition(monster);
-		}
 		if (monster.mode != MonsterMode::Petrified && (monster.flags & MFLAG_ALLOW_SPECIAL) == 0) {
 			monster.animInfo.processAnimation((monster.flags & MFLAG_LOCK_ANIMATION) != 0);
 			if (!gbIsMultiplayer && *GetOptions().Gameplay.enableRun && monster.isWalking()

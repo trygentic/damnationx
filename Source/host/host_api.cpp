@@ -36,6 +36,7 @@
 #include "game_mode.hpp"
 #include "minitext.h"
 #include "player.h"
+#include "render3d/world_level.hpp"
 #include "stores.h"
 #include "tables/monstdat.h"
 #include "utils/display.h"
@@ -358,6 +359,11 @@ uint32_t HostApiVersionInUse()
 }
 
 // ---- version 3 ----
+
+void HostSetExternalDoorModels(uint32_t mask)
+{
+	render3d::SetExternalDoorModels(mask);
+}
 
 void HostSetRenderMode(HostRenderMode mode)
 {

@@ -181,13 +181,16 @@ int8_t GetPathDirection(Point startPosition, Point destinationPosition)
 	return PathDirections[(3 * (destinationPosition.y - startPosition.y)) + 4 + destinationPosition.x - startPosition.x];
 }
 
-int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool(Point)> posOk, Point startPosition, Point destinationPosition, int8_t *path, size_t maxPathLength)
+int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool(Point)> posOk, Point startPosition, Point destinationPosition, int8_t *path, size_t maxPathLength, Point *reachableDestination)
 {
 	const PointT start { startPosition };
 	const PointT dest { destinationPosition };
 
+	PointT closest = start;
+	if (reachableDestination != nullptr)
+		*reachableDestination = startPosition;
 	const CostType initialHeuristicCost = GetHeuristicCost(start, dest);
-	if (initialHeuristicCost > PathDiagonalStepCost * maxPathLength) {
+	if (reachableDestination == nullptr && initialHeuristicCost > PathDiagonalStepCost * maxPathLength) {
 		// Heuristic cost never underestimates the true cost, so we can give up early.
 		return 0;
 	}
@@ -226,12 +229,21 @@ int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool
 		const FrontierNode cur = frontier.front(); // argmin(node.f) for node in openSet
 
 		if (cur.position == destinationPosition) {
-			return ReconstructPath(explored, cur.position, path, maxPathLength);
+			const int length = ReconstructPath(explored, cur.position, path, maxPathLength);
+			if (reachableDestination == nullptr)
+				return length;
+			if (length > 0 || start == dest) {
+				*reachableDestination = destinationPosition;
+				return length;
+			}
 		}
 
 		std::pop_heap(frontier.begin(), frontier.end(), frontierComparator);
 		frontier.pop_back();
 		const CostType curG = explored.find(cur.position)->second.g;
+		if (reachableDestination != nullptr && curG <= PathAxisAlignedStepCost * maxPathLength && (GetHeuristicCost(cur.position, dest) < GetHeuristicCost(closest, dest)
+		        || (GetHeuristicCost(cur.position, dest) == GetHeuristicCost(closest, dest) && curG < explored.find(closest)->second.g)))
+			closest = cur.position;
 
 		// Discard invalid nodes.
 
@@ -252,7 +264,7 @@ int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool
 				if (!canStep(cur.position, neighborPos)) continue;
 			} else {
 				// We allow targeting a non-walkable node if it is the destination.
-				if (neighborPos != dest) continue;
+				if (reachableDestination != nullptr || neighborPos != dest) continue;
 			}
 			const CostType g = curG + GetDistance(cur.position, neighborPos);
 			if (curG >= PathDiagonalStepCost * maxPathLength) continue;
@@ -279,6 +291,12 @@ int FindPath(tl::function_ref<bool(Point, Point)> canStep, tl::function_ref<bool
 		}
 	}
 
+	if (reachableDestination != nullptr) {
+		const int length = ReconstructPath(explored, closest, path, maxPathLength);
+		if (length > 0)
+			*reachableDestination = Point { closest };
+		return length;
+	}
 	return 0; // no path
 }
 

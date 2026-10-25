@@ -50,6 +50,7 @@ namespace {
 
 bool ForceRebuild = true;
 uint64_t LastStateHash = 0;
+uint32_t ExternalDoorModels = 0;
 
 std::array<std::array<uint8_t, 4>, 256> ArtPalette {};
 uint64_t ArtPaletteHash = 0;
@@ -83,6 +84,15 @@ uint64_t HashBytes(uint64_t hash, const void *data, size_t size)
 bool IsLeftDoor(_object_id type)
 {
 	return IsAnyOf(type, OBJ_L1LDOOR, OBJ_L2LDOOR, OBJ_L3LDOOR, OBJ_L5LDOOR);
+}
+
+bool ExternalDoorModel(_object_id type)
+{
+	constexpr _object_id Types[] = { OBJ_L1LDOOR, OBJ_L1RDOOR, OBJ_L2LDOOR, OBJ_L2RDOOR, OBJ_L3LDOOR, OBJ_L3RDOOR, OBJ_L5LDOOR, OBJ_L5RDOOR };
+	for (size_t i = 0; i < std::size(Types); ++i)
+		if (type == Types[i])
+			return (ExternalDoorModels & (1U << i)) != 0;
+	return false;
 }
 
 uint64_t ComputeStateHash()
@@ -804,11 +814,20 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 			const float fx = static_cast<float>(x);
 			const float fz = static_cast<float>(y);
 			const int floorSlot = FloorSlot(piece);
+			const uint8_t archFacing = tile_geometry::ArchFacing(leveltype, dSpecial[x][y]);
+			const DoorInfo &doorInfo = door(x, y);
+			const bool passage = archFacing != 0 || doorInfo.present;
+			const bool alongY = doorInfo.present ? doorInfo.left : archFacing == static_cast<uint8_t>(tile_geometry::Face::SE);
+			constexpr float PassagePadding = (fpv::kDungeonOpeningWidth - 1.0F) * 0.5F;
 			const int stairs = stairsAt[static_cast<size_t>(y) * kGridSize + x];
-			if (stairs == 0)
-				AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, 0.0F, true, floorSlot, 1.0F);
-			else
+			if (stairs == 0) {
+				if (!passage)
+					AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, 0.0F, true, floorSlot, 1.0F);
+			} else
 				AddStairs(geometry, mesh, x, y, stairs > 0, solid, floorSlot);
+			if (passage && stairs == 0)
+				AddHorizontal(mesh, fx - (alongY ? 0.0F : PassagePadding), fz - (alongY ? PassagePadding : 0.0F),
+				    fx + 1.0F + (alongY ? 0.0F : PassagePadding), fz + 1.0F + (alongY ? PassagePadding : 0.0F), 0.0F, true, floorSlot, 1.0F);
 			AddHorizontal(mesh, fx, fz, fx + 1.0F, fz + 1.0F, wallHeight, false, floorSlot, 0.45F, kVertexSoft);
 
 			// Walls of the solid (non-pillar) neighbours facing this cell.
@@ -836,19 +855,27 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 				if (slot >= 0)
 					++Atlas.wallUse[slot];
 				const float a0 = side.axis == 0 ? fz : fx;
-				AddWallFace(mesh, side.axis, side.c, a0, a0 + 1.0F, 0.0F, wallHeight, wallHeight, side.normal, slot, slotHeight, 1.0F);
+				// Move the jamb face into its solid neighbour rather than merely scaling
+				// a frame over a one-tile masonry hole. Native collision stays tile based.
+				const bool jamb = passage && side.axis == (alongY ? 1 : 0);
+				const float plane = side.c - (jamb ? PassagePadding * (side.axis == 0 ? side.normal.x : side.normal.z) : 0.0F);
+				AddWallFace(mesh, side.axis, plane, a0, a0 + 1.0F, 0.0F, wallHeight, wallHeight, side.normal, slot, slotHeight, 1.0F);
+				if (jamb) {
+					// Short reveals join the widened jamb to the unchanged wall faces
+					// on both sides of this one-tile-deep opening.
+					const float lo = std::min(side.c, plane);
+					const float hi = std::max(side.c, plane);
+					AddWallFace(mesh, 1 - side.axis, a0, lo, hi, 0.0F, wallHeight, wallHeight,
+					    alongY ? Vec3 { -1, 0, 0 } : Vec3 { 0, 0, -1 }, slot, slotHeight, 1.0F);
+					AddWallFace(mesh, 1 - side.axis, a0 + 1.0F, lo, hi, 0.0F, wallHeight, wallHeight,
+					    alongY ? Vec3 { 1, 0, 0 } : Vec3 { 0, 0, 1 }, slot, slotHeight, 1.0F);
+				}
 			}
 
-			// Arches: a lintel over the doorway cell.
-			const uint8_t archFacing = tile_geometry::ArchFacing(leveltype, dSpecial[x][y]);
-			const DoorInfo &doorInfo = door(x, y);
-			if (archFacing != 0 || doorInfo.present) {
-				// Open archways clear about twice the hero's height (kWarriorMetersToWorld); doors keep their shorter panels and
-				// the lintel comes down to meet them.
-				constexpr float ArchLintelBottom = 1.35F;
-				constexpr float DoorTop = 0.80F;
-				const float lintelBottom = doorInfo.present ? DoorTop : ArchLintelBottom;
-				const bool alongY = doorInfo.present ? doorInfo.left : archFacing == static_cast<uint8_t>(tile_geometry::Face::SE);
+			// Doors and open arches use the same hero-sized masonry aperture.
+			if (passage) {
+				constexpr float DoorTop = fpv::kDungeonOpeningHeight;
+				constexpr float lintelBottom = fpv::kDungeonOpeningHeight;
 				// The wall the doorway is cut into runs along y (plane x = const) for SE arches and left doors.
 				const int wallSide = alongY ? 0 : 1;
 				int slot = -1;
@@ -865,7 +892,8 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 				// its own frame.
 				const bool doorReplaced = doorInfo.present && !doorInfo.open && PlacementHidesObject(doorObject[static_cast<size_t>(y) * kGridSize + x]);
 				if (!PlacementHidesLintel(x, y) && !doorReplaced)
-					AddBox(mesh, { fx, lintelBottom, fz }, { fx + 1.0F, wallHeight, fz + 1.0F }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
+					AddBox(mesh, { fx - (alongY ? 0.0F : PassagePadding), lintelBottom, fz - (alongY ? PassagePadding : 0.0F) },
+					    { fx + 1.0F + (alongY ? 0.0F : PassagePadding), wallHeight, fz + 1.0F + (alongY ? PassagePadding : 0.0F) }, wallHeight, slot, slot, -1, slotHeight, 0.9F);
 				occluder = PackOccluder(lintelBottom, wallHeight);
 
 				if (doorInfo.present) {
@@ -880,20 +908,21 @@ void BuildDungeon(LevelGeometry &geometry, MeshBuilder &mesh)
 					if (doorSlot < 0)
 						doorSlot = slot;
 					const float panelTop = DoorTop;
+					const bool externalPanel = ExternalDoorModel(Objects[objectIndex]._otype);
 					if (!doorInfo.open) {
 						occluder = PackOccluder(0.0F, wallHeight);
-						if (PlacementHidesObject(objectIndex)) {
+						if (externalPanel || PlacementHidesObject(objectIndex)) {
 							// A door rule (show = closed, hide = self) draws this closed door instead.
 						} else if (alongY)
-							AddBox(mesh, { fx + 0.44F, 0.0F, fz }, { fx + 0.56F, panelTop, fz + 1.0F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
+							AddBox(mesh, { fx + 0.44F, 0.0F, fz - PassagePadding }, { fx + 0.56F, panelTop, fz + 1.0F + PassagePadding }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
 						else
-							AddBox(mesh, { fx, 0.0F, fz + 0.44F }, { fx + 1.0F, panelTop, fz + 0.56F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
-					} else {
+							AddBox(mesh, { fx - PassagePadding, 0.0F, fz + 0.44F }, { fx + 1.0F + PassagePadding, panelTop, fz + 0.56F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 1.0F);
+					} else if (!externalPanel) {
 						// Swung open against the jamb.
 						if (alongY)
-							AddBox(mesh, { fx + 0.5F, 0.0F, fz + 0.02F }, { fx + 1.45F, panelTop, fz + 0.12F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 0.9F);
+							AddBox(mesh, { fx + 0.5F, 0.0F, fz - PassagePadding + 0.02F }, { fx + 0.5F + fpv::kDungeonOpeningWidth, panelTop, fz - PassagePadding + 0.12F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 0.9F);
 						else
-							AddBox(mesh, { fx + 0.02F, 0.0F, fz + 0.5F }, { fx + 0.12F, panelTop, fz + 1.45F }, panelTop, doorSlot, doorSlot, -1, slotHeight, 0.9F);
+							AddBox(mesh, { fx - PassagePadding + 0.02F, 0.0F, fz + 0.5F }, { fx - PassagePadding + 0.12F, panelTop, fz + 0.5F + fpv::kDungeonOpeningWidth }, panelTop, doorSlot, doorSlot, -1, slotHeight, 0.9F);
 					}
 				}
 			}
@@ -1979,6 +2008,15 @@ void DumpAtlas(const LevelGeometry &geometry, const char *prefix)
 }
 
 } // namespace
+
+void SetExternalDoorModels(uint32_t mask)
+{
+	mask &= 0xFFU;
+	if (mask != ExternalDoorModels) {
+		ExternalDoorModels = mask;
+		ForceRebuild = true;
+	}
+}
 
 void InvalidateLevel()
 {

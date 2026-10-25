@@ -68,8 +68,8 @@
       "id": "arch_stone",
       "source": "stone+arch+3d+model.glb",
       "scale": [
-        1.26,
-        1.0,
+        3.4,
+        3.67,
         1.5
       ]
     },
@@ -77,8 +77,8 @@
       "id": "door_arch_wooden",
       "source": "wooden+arch+door+3d+model.glb",
       "scale": [
-        2.3,
-        0.95,
+        4.0,
+        3.65,
         1.2
       ]
     },

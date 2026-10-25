@@ -28,7 +28,11 @@ enum class Direction : std::uint8_t;
 namespace fpv {
 
 constexpr float kEyeHeight = 0.62F;          // world units above floor
-constexpr float kWallHeight = 1.6F;          // dungeon wall height in world units (~2.4x the hero)
+// Host heroes stand up to ~1.52 tiles tall. Architecture follows that contract;
+// changing a doorway must also change the surrounding masonry and lintel.
+constexpr float kDungeonOpeningHeight = 3.2F;
+constexpr float kDungeonOpeningWidth = 1.6F;
+constexpr float kWallHeight = 3.65F;
 constexpr float kWarriorMetersToWorld = 0.36F; // 1.85 m -> ~0.67 tiles tall
 constexpr float kDefaultFovYDeg = 70.0F;     // ~95 deg horizontal at 16:9
 

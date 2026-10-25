@@ -672,6 +672,9 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryZoomLevel zoomLevel;
 	/** @brief Screen pixels per in-game UI pixel in quarters (4 = 1x), independent of the zoom (ui_scale.hpp). */
 	OptionEntryQuarterScale uiScale;
+	/** @brief Host hover outlines and width in quarter screen pixels. */
+	OptionEntryBoolean hoverOutlines;
+	OptionEntryInt<int> outlineWidth;
 	/** @brief Use the HD art pack (an `hd` folder next to the game or its data) when the WebGPU renderer runs. */
 	OptionEntryBoolean hdArt;
 	/** @brief Draw the HD art pack when this run has one (hd_graphics.hpp); toggled in game with H. */
@@ -709,6 +712,8 @@ struct GraphicsOptions : OptionCategoryBase {
 #endif
 	/** @brief Show FPS, even without the -f command line flag. */
 	OptionEntryBoolean showFPS;
+	/** Application render FPS overlay, independent of native simulation timing. */
+	OptionEntryBoolean hostFPS;
 	/** @brief Isometric, first-person or third-person view (the 3D modes need WebGPU; T cycles, G toggles first person). */
 	OptionEntryEnum<CameraMode> cameraMode;
 	/** @brief Embedded only (Source/host/): how the host draws the game: 3D world, classic frame or HD 2D. */

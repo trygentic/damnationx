@@ -62,6 +62,8 @@ bool ShowFatalDialogs();
 bool PickedTile(Point &tile);
 /** CheckCursMove: turns the host's picked entity into the cursor target (pcursmonst, pcursitem, ...). */
 bool ApplyPickToCursor();
+/** Plain World3D walking approaches the closest reachable tile when a ray hits solid geometry. */
+Point WalkTarget(Point tile);
 /** plrctrls_after_check_curs_move: the host's 3D pick set this frame's target (the gamepad targeting keeps out). */
 bool PickedTarget();
 
@@ -113,6 +115,7 @@ inline void OnGameQuit(int) { }
 inline bool ShowFatalDialogs() { return true; }
 inline bool PickedTile(Point &) { return false; }
 inline bool ApplyPickToCursor() { return false; }
+inline Point WalkTarget(Point tile) { return tile; }
 inline void RequestClipboard(std::string) { }
 inline bool PickedTarget() { return false; }
 inline void QueueSfx(int16_t, bool, Point) { }

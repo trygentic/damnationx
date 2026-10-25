@@ -980,6 +980,8 @@ GraphicsOptions::GraphicsOptions()
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoomLevel("Zoom Level", OptionEntryFlags::None, N_("Zoom"), N_("Screen pixels per game pixel. Change it in game with Ctrl + mouse wheel (Cmd on macOS). In-between levels need the HD tiles and sprites; otherwise the nearest whole level is used."))
     , uiScale("UI Scale", OptionEntryFlags::None, N_("UI Scale"), N_("Screen pixels per pixel of the in-game interface (panels, belt, orbs, inventory, stores, text). Independent of the zoom. Large scales are limited so the interface still fits the screen."))
+    , hoverOutlines("Hover Outlines", OptionEntryFlags::Invisible, N_("Hover outlines"), N_("Outline the character, enemy, item or object under the pointer in the 3D view."), true)
+    , outlineWidth("Outline Width", OptionEntryFlags::Invisible, N_("Outline width"), N_("Hover outline width in quarter screen pixels."), 4, { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 })
     , hdArt("HD Art", HdArtOptionFlags(), N_("HD Art"), N_("Use the HD art pack (an \"hd\" folder next to the game or its data files) for sprites, tiles, floor and interface. Needs the WebGPU renderer. Takes effect after restarting the game."), true)
     , hdGraphics("HD Graphics", OptionEntryFlags::Invisible, N_("HD Graphics"), N_("Draw the high-resolution art pack (characters, monsters, tiles, floor and interface). Off shows the classic art. Toggle it in game with H. Only listed when the game was started with an HD pack."), true)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -1015,6 +1017,7 @@ GraphicsOptions::GraphicsOptions()
     , hardwareCursorMaxSize("Hardware Cursor Maximum Size", OptionEntryFlags::CantChangeInGame | OptionEntryFlags::RecreateUI | (HardwareCursorSupported() ? OptionEntryFlags::None : OptionEntryFlags::Invisible), N_("Hardware Cursor Maximum Size"), N_("Maximum width / height for the hardware cursor. Larger cursors fall back to software."), 128, { 0, 64, 128, 256, 512 })
 #endif
     , showFPS("Show FPS", OptionEntryFlags::None, N_("Show FPS"), N_("Displays the FPS in the upper left corner of the screen."), false)
+    , hostFPS("Host FPS", OptionEntryFlags::Invisible, N_("Show FPS"), N_("Displays application rendering frames per second."), true)
     , cameraMode("Camera Mode", HybridOptionFlags(), N_("Camera Mode"), N_("Isometric, first-person or third-person view over the 3D world (WebGPU builds only). In game, T cycles the modes and G toggles first person."), CameraMode::Isometric,
           {
               { CameraMode::Isometric, N_("Isometric") },
@@ -1060,9 +1063,12 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&brightness,
 		&zoomLevel,
 		&uiScale,
+		&hoverOutlines,
+		&outlineWidth,
 		&hdArt,
 		&hdGraphics,
 		&showFPS,
+		&hostFPS,
 		&cameraMode,
 		&hostRenderMode,
 		&firstPersonView,

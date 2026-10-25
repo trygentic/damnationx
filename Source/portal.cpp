@@ -35,10 +35,10 @@ Point PortalTownPosition[MAXPORTAL] = {
 	{ 63, 40 },
 };
 
-bool NearTrigger(Point position)
+bool NearTrigger(Point position, int distance = 2)
 {
 	for (int i = 0; i < numtrigs; ++i) {
-		if (trigs[i].position.WalkingDistance(position) < 2)
+		if (trigs[i].position.WalkingDistance(position) < distance)
 			return true;
 	}
 	return false;
@@ -112,13 +112,22 @@ Point CathedralPortalPosition()
 {
 	if (leveltype == DTYPE_TOWN)
 		return TownCathedralPortalPosition;
-	// Use geometry only: occupied player tiles must not change the shared location.
+	// Stairs reserve a 5x5 arrival area (Freeupstairs), and multiplayer arrivals
+	// can spread around it. Never put an automatic warp on that footprint.
+	// Geometry alone keeps the endpoint stable across players and saved games.
 	for (int i = 0; i < numtrigs; ++i) {
 		if (trigs[i]._tmsg != WM_DIABPREVLVL)
 			continue;
-		const auto position = FindClosestValidPosition([](Point p) {
-			return InDungeonBounds(p) && !TileHasAny(p, TileProperties::Solid | TileProperties::BlockMissile) && !NearTrigger(p);
-		}, trigs[i].position, 2, 5);
+		const Point stairs = trigs[i].position;
+		const auto valid = [stairs](Point p) {
+			if (!InDungeonBounds(p) || TileHasAny(p, TileProperties::Solid | TileProperties::BlockMissile) || TileContainsSetPiece(p) || NearTrigger(p, 6))
+				return false;
+			int8_t path[MaxPathLengthPlayer];
+			return FindPath(CanStep, IsTileNotSolid, stairs, p, path, MaxPathLengthPlayer) != 0;
+		};
+		// West is screen-left in the isometric projection. Prefer this side,
+		// then widen the search if a seed places a wall beside the stairs.
+		const auto position = FindClosestValidPosition(valid, stairs + Displacement { -6, 6 }, 0, 50);
 		if (position)
 			return *position;
 	}
@@ -285,10 +294,14 @@ void GetPortalLvlPos()
 {
 	if (IsFreeTownPortalWarp(portalindex)) {
 		// Arrive beside the portal to avoid immediately travelling back.
-		const auto landing = FindClosestValidPosition([](Point p) {
-			return InDungeonBounds(p) && !TileHasAny(p, TileProperties::Solid) && dPlayer[p.x][p.y] == 0 && !NearTrigger(p);
-		}, CathedralPortalPosition(), 1, 5);
-		ViewPosition = landing.value_or(CathedralPortalPosition() + Displacement { 1, 1 });
+		const Point portal = CathedralPortalPosition();
+		const auto landing = FindClosestValidPosition([portal](Point p) {
+			if (IsTileOccupied(p) || NearTrigger(p, 4))
+				return false;
+			int8_t path[MaxPathLengthPlayer];
+			return FindPath(CanStep, IsTileNotSolid, portal, p, path, MaxPathLengthPlayer) != 0;
+		}, portal, 2, 50);
+		ViewPosition = landing.value_or(portal + Displacement { 1, 1 });
 		return;
 	}
 	if (leveltype == DTYPE_TOWN) {

@@ -3253,13 +3253,6 @@ void ProcessPlayers()
 				CheckNewPath(player, tplayer);
 			} while (tplayer);
 
-			// Ease the drawn position back to the tile centre once the player stops walking (free-form movement).
-			// Chained steps start the next walk within the same tick, so they are never settled.
-			if (!player.isWalking() && player.position.freeformCarry != SubTileDisplacement {}) {
-				player.position.SettleFreeformCarry();
-				UpdatePlayerLightOffset(player);
-			}
-
 			player.previewCelSprite = std::nullopt;
 			if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
 				player.AnimInfo.processAnimation();

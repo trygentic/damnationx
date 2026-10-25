@@ -146,18 +146,6 @@ Displacement ActorPosition::GetDrawnLightOffset(bool walking, Direction dir, con
 	return SubTileToLight(GetDrawnSubTileOffset(walking, dir, animInfo));
 }
 
-void ActorPosition::SettleFreeformCarry()
-{
-	// Shrink by a quarter each tick (at least one unit) so a stop eases in over a few frames instead of snapping.
-	const auto settle = [](int32_t v) {
-		if (v == 0)
-			return v;
-		const int32_t shrink = std::max<int32_t>(std::abs(v) / 4, 1);
-		return v > 0 ? v - shrink : v + shrink;
-	};
-	freeformCarry = { settle(freeformCarry.deltaX), settle(freeformCarry.deltaY) };
-}
-
 void ActorPosition::ResetFreeform()
 {
 	freeform = {};

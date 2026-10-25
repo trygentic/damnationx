@@ -162,6 +162,103 @@ TEST(PathTest, LongPaths)
 	CheckPath(startingPosition, startingPosition + Displacement { 25, 25 }, {});
 }
 
+TEST(PathTest, ApproachBlockedAndDisconnectedTargets)
+{
+	const auto canStep = [](Point, Point) { return true; };
+	// An impenetrable building spans x=5..9, including its non-walkable roof target.
+	const auto posOk = [](Point tile) { return tile.x >= 0 && tile.x <= 12 && tile.y >= 0 && tile.y <= 12 && tile.x < 5; };
+	int8_t path[MaxPathLengthPlayer];
+	Point reached;
+	// Interaction paths retain the legacy final blocked step; plain walking never takes it.
+	EXPECT_EQ(FindPath(canStep, posOk, { 4, 6 }, { 5, 6 }, path, MaxPathLengthPlayer), 1);
+	EXPECT_EQ(FindPath(canStep, posOk, { 4, 6 }, { 5, 6 }, path, MaxPathLengthPlayer, &reached), 0);
+	EXPECT_EQ(reached, (Point { 4, 6 }));
+	EXPECT_EQ(FindPath(canStep, posOk, { 1, 6 }, { 8, 6 }, path, MaxPathLengthPlayer), 0);
+	EXPECT_GT(FindPath(canStep, posOk, { 1, 6 }, { 8, 6 }, path, MaxPathLengthPlayer, &reached), 0);
+	EXPECT_EQ(reached, (Point { 4, 6 }));
+	// Held walking at the boundary stays there instead of trying to enter the wall.
+	EXPECT_EQ(FindPath(canStep, posOk, reached, { 8, 6 }, path, MaxPathLengthPlayer, &reached), 0);
+	EXPECT_EQ(reached, (Point { 4, 6 }));
+	// A walkable but disconnected island must not win over the reachable boundary.
+	const auto disconnected = [&posOk](Point tile) { return posOk(tile) || tile == Point { 8, 6 }; };
+	EXPECT_GT(FindPath(canStep, disconnected, { 1, 6 }, { 8, 6 }, path, MaxPathLengthPlayer, &reached), 0);
+	EXPECT_EQ(reached, (Point { 4, 6 }));
+	// Moving the held pointer to accessible ground resumes ordinary movement.
+	EXPECT_GT(FindPath(canStep, posOk, reached, { 2, 3 }, path, MaxPathLengthPlayer, &reached), 0);
+	EXPECT_EQ(reached, (Point { 2, 3 }));
+}
+
+TEST(PathTest, ApproachHonorsStepConstraintsAndLengthLimit)
+{
+	int8_t path[8];
+	Point reached;
+	const auto posOk = [](Point tile) { return tile.x >= 0 && tile.x < 20 && tile.y >= 0 && tile.y < 20; };
+	const auto canStep = [](Point from, Point to) { return from.x == to.x; };
+	EXPECT_GT(FindPath(canStep, posOk, { 2, 2 }, { 10, 15 }, path, 8, &reached), 0);
+	EXPECT_EQ(reached, (Point { 2, 10 }));
+	EXPECT_EQ(FindPath([](Point, Point) { return false; }, posOk, { 2, 2 }, { 10, 15 }, path, 8, &reached), 0);
+	EXPECT_EQ(reached, (Point { 2, 2 }));
+}
+
+TEST(PathTest, DiagonalBlockedApproachDoesNotReverseWhileReplanning)
+{
+	const auto posOk = [](Point p) { return p.x >= 0 && p.y >= 0 && p.x + p.y < 16; };
+	const auto canStep = [](Point, Point) { return true; };
+	constexpr Displacement offsets[] = { { 0, -1 }, { -1, 0 }, { 1, 0 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
+	const Point desired { 12, 12 };
+	Point current { 2, 2 };
+	std::vector<Point> visited { current };
+	for (int tick = 0; tick < 30; ++tick) {
+		int8_t path[MaxPathLengthPlayer];
+		Point reached;
+		const int length = FindPath(canStep, posOk, current, desired, path, MaxPathLengthPlayer, &reached);
+		if (length == 0)
+			break;
+		const Point next = current + offsets[path[0] - 1];
+		EXPECT_TRUE(posOk(next));
+		EXPECT_LE(next.WalkingDistance(desired), current.WalkingDistance(desired));
+		EXPECT_EQ(std::find(visited.begin(), visited.end(), next), visited.end()) << "a held approach must not cycle";
+		visited.push_back(next);
+		current = next;
+	}
+	EXPECT_EQ(current.x + current.y, 15);
+}
+
+TEST(PathTest, UShapedWallApproachCanTemporarilyMoveAwayWithoutCycling)
+{
+	const auto posOk = [](Point p) {
+		return p.x >= 0 && p.y >= 0 && p.x <= 20 && p.y <= 20
+		    && !((p.x == 6 || p.x == 14) && p.y >= 6 && p.y <= 16)
+		    && !(p.y == 6 && p.x >= 6 && p.x <= 14);
+	};
+	const auto canStep = [&posOk](Point from, Point to) {
+		return from.x == to.x || from.y == to.y || (posOk(Point { from.x, to.y }) && posOk(Point { to.x, from.y }));
+	};
+	constexpr Displacement offsets[] = { { 0, -1 }, { -1, 0 }, { 1, 0 }, { 0, 1 }, { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
+	const Point desired { 10, 7 };
+	Point current { 10, 3 };
+	std::vector<Point> visited { current };
+	int previousRemaining = 100;
+	bool movedAway = false;
+	for (int tick = 0; tick < 80 && current != desired; ++tick) {
+		int8_t path[MaxPathLengthPlayer];
+		Point reached;
+		const int length = FindPath(canStep, posOk, current, desired, path, MaxPathLengthPlayer, &reached);
+		ASSERT_GT(length, 0);
+		EXPECT_EQ(reached, desired);
+		EXPECT_LT(length, previousRemaining);
+		previousRemaining = length;
+		const Point next = current + offsets[path[0] - 1];
+		movedAway |= next.WalkingDistance(desired) > current.WalkingDistance(desired);
+		EXPECT_TRUE(posOk(next));
+		EXPECT_EQ(std::find(visited.begin(), visited.end(), next), visited.end());
+		visited.push_back(next);
+		current = next;
+	}
+	EXPECT_TRUE(movedAway) << "the fixture must exercise a detour around the building";
+	EXPECT_EQ(current, desired);
+}
+
 TEST(PathTest, FindClosest)
 {
 	{

@@ -4,9 +4,13 @@ DamnationX is a build of [DevilutionX](https://github.com/diasurgical/devilution
 
 Download the game from [Releases](https://github.com/trygentic/damnationx/releases), or play the browser build at [damnationx.net](https://damnationx.net). You must supply your own Diablo game data.
 
-## Beta 8.1 hotfix
+## Beta 8.2 hotfix
 
-[Beta 8.1 is available](https://github.com/trygentic/damnationx/releases/tag/v1.6.0-beta.8.1). It fixes Windows asset paths and Python discovery, restores enemy and item hover information, improves 3D targeting, and keeps chests in the correct closed or open pose. D2R imports include the required Town Portal gradient and can resume after a failure or cancellation. Ground item labels follow the 3D camera; hold Alt or enable Show Item Labels to see them.
+[Beta 8.2 is available](https://github.com/trygentic/damnationx/releases/tag/v1.6.0-beta.8.2). It fixes walking toward buildings, repeated path changes while holding the mouse, and movement drift after stopping. Cathedral walls and archways fade around the hero when they block the camera. Dungeon doors and arches are larger, and permanent dungeon portals are farther from stair arrivals.
+
+The native Graphics menu includes a hover-outline toggle and thickness slider, with a thinner default outline. Show FPS is on by default and can be changed in that menu or with `--fps on` / `--fps off` when launching the packaged game. The 3D loading screen waits for models, meshes and textures to finish loading and reports progress. Town lighting uses the original trailer baseline again. Starting the legacy look with ray tracing disabled also avoids a render-target crash on ray-capable graphics devices.
+
+This release also includes the beta 8.1 fixes for Windows startup, Python discovery, resumable D2R imports, hover names, ground item labels and chest poses.
 
 The native game supports 3D, Classic and HD 2D rendering. Its Toxoid engine ships as compiled code with a license notice. This repository contains the game core and launcher; it does not contain the proprietary engine implementation.
 
@@ -14,14 +18,14 @@ The browser uses a separate C++ WASM/WebGPU renderer. It supports local HD packs
 
 ## Install the desktop game
 
-The table below lists the beta 8.1 downloads. Each desktop download contains the game and launcher. Extract the complete archive into a writable folder and keep its files together.
+The table below lists the beta 8.2 downloads. Each desktop download contains the game and launcher. Extract the complete archive into a writable folder and keep its files together.
 
 | Platform | Package | Requirements |
 | --- | --- | --- |
-| Windows | `damnationx-game-and-launcher-1.6.0-beta.8.1-windows-x64.zip` | 64-bit Windows 10 or later; Direct3D 12 or Vulkan GPU and driver |
-| Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8.1-linux-x64.tar.gz` | Ubuntu 24.04 or compatible; glibc 2.39 or later; X11 or Wayland; Vulkan driver |
-| Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8.1-linux-arm64.tar.gz` | The same Linux requirements on 64-bit ARM hardware |
-| macOS | `damnationx-game-and-launcher-1.6.0-beta.8.1-macos26.2-arm64.tar.gz` | Apple Silicon; macOS 26.2 or later |
+| Windows | `damnationx-game-and-launcher-1.6.0-beta.8.2-windows-x64.zip` | 64-bit Windows 10 or later; Direct3D 12 or Vulkan GPU and driver |
+| Linux x64 | `damnationx-game-and-launcher-1.6.0-beta.8.2-linux-x64.tar.gz` | Ubuntu 24.04 or compatible; glibc 2.39 or later; X11 or Wayland; Vulkan driver |
+| Linux ARM64 | `damnationx-game-and-launcher-1.6.0-beta.8.2-linux-arm64.tar.gz` | The same Linux requirements on 64-bit ARM hardware |
+| macOS | `damnationx-game-and-launcher-1.6.0-beta.8.2-macos26.2-arm64.tar.gz` | Apple Silicon; macOS 26.2 or later |
 
 Run `launcher.exe` on Windows. On Linux or macOS, open a terminal in the extracted folder and run `./launcher`. The launcher finds the neighboring game executable. Select your Diablo data folder, import any optional art or sound packs, then press Play.
 
@@ -63,14 +67,14 @@ At [damnationx.net](https://damnationx.net), choose your game files and press Pl
 
 To host the browser download yourself:
 
-1. Extract `DamnationX-1.6.0-beta.8.1-web.zip`.
+1. Extract `DamnationX-1.6.0-beta.8.2-web.zip`.
 2. Serve its folder over HTTP on localhost, or HTTPS on another host. Opening `index.html` directly from disk does not work.
 3. Open the page in Chrome or Edge and select your own game data.
 
 For a local server:
 
 ```sh
-cd DamnationX-1.6.0-beta.8.1-web
+cd DamnationX-1.6.0-beta.8.2-web
 python3 -m http.server 8000
 ```
 
