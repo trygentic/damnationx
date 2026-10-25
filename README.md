@@ -41,7 +41,7 @@ Keep your saves when updating. Extract a new release into a new folder and selec
 
 ## Optional art pack
 
-The prepared optional `damnationx-art-pack-20261024-hotfix1.zip` will accompany beta 8.1. It combines the base HD artwork, FREE 3D props, HD 3D props and character models. You do not need to choose a tier: the game selects the installed art automatically. You can play with classic art without downloading this pack.
+The prepared optional `damnationx-art-pack-20261024-hotfix1.zip` will accompany beta 8.1. It combines HD art, 3D props and character models. Import the single archive; the game selects the installed models automatically. You can play with classic art without downloading this pack.
 
 In the desktop launcher, open Asset library, choose Import ZIP under HD art pack, and select the archive. Existing packs can be selected with Use folder. If installing by hand, preserve the archive's `hd/` folder structure.
 
