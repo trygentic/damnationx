@@ -97,6 +97,7 @@ void AnimationInfo::setNewAnimation(OptionalClxSpriteList celSprite, int8_t numb
 		ticksPerFrame = 1;
 	}
 
+	repeatedAction_ = (flags & AnimationDistributionFlags::RepeatedAction) != 0;
 	this->sprites = celSprite;
 	this->numberOfFrames = numberOfFrames;
 	currentFrame = numSkippedFrames;

@@ -195,6 +195,30 @@ inline Mat4 ComposeTrs(Vec3 t, Quat q, Vec3 s)
 	return r;
 }
 
+/** The rotation in the upper 3x3 of `a` (orthonormal, no scale) as a unit quaternion. */
+inline Quat QuatFromRotation(const Mat4 &a)
+{
+	const float r00 = a(0, 0), r01 = a(0, 1), r02 = a(0, 2);
+	const float r10 = a(1, 0), r11 = a(1, 1), r12 = a(1, 2);
+	const float r20 = a(2, 0), r21 = a(2, 1), r22 = a(2, 2);
+	const float trace = r00 + r11 + r22;
+	Quat q;
+	if (trace > 0.0F) {
+		const float s = std::sqrt(trace + 1.0F) * 2.0F;
+		q = { (r21 - r12) / s, (r02 - r20) / s, (r10 - r01) / s, 0.25F * s };
+	} else if (r00 > r11 && r00 > r22) {
+		const float s = std::sqrt(1.0F + r00 - r11 - r22) * 2.0F;
+		q = { 0.25F * s, (r01 + r10) / s, (r02 + r20) / s, (r21 - r12) / s };
+	} else if (r11 > r22) {
+		const float s = std::sqrt(1.0F + r11 - r00 - r22) * 2.0F;
+		q = { (r01 + r10) / s, 0.25F * s, (r12 + r21) / s, (r02 - r20) / s };
+	} else {
+		const float s = std::sqrt(1.0F + r22 - r00 - r11) * 2.0F;
+		q = { (r02 + r20) / s, (r12 + r21) / s, 0.25F * s, (r10 - r01) / s };
+	}
+	return Normalize(q);
+}
+
 inline Mat4 Translation(Vec3 t) { return ComposeTrs(t, {}, { 1.0F, 1.0F, 1.0F }); }
 inline Mat4 Scale(float s) { return ComposeTrs({}, {}, { s, s, s }); }
 /** Rotation about +Y by `radians` (counter-clockwise seen from above: +Z turns toward +X). */

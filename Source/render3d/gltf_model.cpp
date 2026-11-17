@@ -278,29 +278,396 @@ void DecomposeMatrix(const cgltf_float *m, GltfNode &node)
 		axes[0] = axes[0] * -1.0F;
 	}
 	node.scale = { scale[0], scale[1], scale[2] };
-	// Rotation matrix (columns axes[]) to quaternion.
-	const float r00 = axes[0].x, r10 = axes[0].y, r20 = axes[0].z;
-	const float r01 = axes[1].x, r11 = axes[1].y, r21 = axes[1].z;
-	const float r02 = axes[2].x, r12 = axes[2].y, r22 = axes[2].z;
-	const float trace = r00 + r11 + r22;
-	Quat q;
-	if (trace > 0.0F) {
-		const float s = std::sqrt(trace + 1.0F) * 2.0F;
-		q = { (r21 - r12) / s, (r02 - r20) / s, (r10 - r01) / s, 0.25F * s };
-	} else if (r00 > r11 && r00 > r22) {
-		const float s = std::sqrt(1.0F + r00 - r11 - r22) * 2.0F;
-		q = { 0.25F * s, (r01 + r10) / s, (r02 + r20) / s, (r21 - r12) / s };
-	} else if (r11 > r22) {
-		const float s = std::sqrt(1.0F + r11 - r00 - r22) * 2.0F;
-		q = { (r01 + r10) / s, 0.25F * s, (r12 + r21) / s, (r02 - r20) / s };
-	} else {
-		const float s = std::sqrt(1.0F + r22 - r00 - r11) * 2.0F;
-		q = { (r02 + r20) / s, (r12 + r21) / s, 0.25F * s, (r10 - r01) / s };
+	Mat4 rotation;
+	for (int column = 0; column < 3; ++column) {
+		rotation(0, column) = axes[column].x;
+		rotation(1, column) = axes[column].y;
+		rotation(2, column) = axes[column].z;
 	}
-	node.rotation = skm::Normalize(q);
+	node.rotation = skm::QuatFromRotation(rotation);
+}
+
+// ponytail: a minimal JSON reader for the one extras block the loader reads (cgltf keeps its jsmn private); switch
+// to a JSON library if a second consumer appears. \u escapes become '?', fine for the ASCII keys and names used.
+struct Json {
+	enum class Type : uint8_t { Null, Bool, Number, String, Array, Object } type = Type::Null;
+	double number = 0.0;
+	std::string string;
+	std::vector<std::string> keys; // object keys, parallel to items
+	std::vector<Json> items;       // array elements or object values
+
+	[[nodiscard]] const Json *find(std::string_view key) const
+	{
+		for (size_t i = 0; i < keys.size(); ++i) {
+			if (keys[i] == key)
+				return &items[i];
+		}
+		return nullptr;
+	}
+};
+
+class JsonReader {
+public:
+	explicit JsonReader(std::string_view text)
+	    : text_(text)
+	{
+	}
+
+	bool Read(Json &out)
+	{
+		if (!Value(out, 0))
+			return false;
+		SkipSpace();
+		return pos_ == text_.size();
+	}
+
+private:
+	std::string_view text_;
+	size_t pos_ = 0;
+
+	[[nodiscard]] bool AtDigit() const { return pos_ < text_.size() && text_[pos_] >= '0' && text_[pos_] <= '9'; }
+
+	void SkipSpace()
+	{
+		while (pos_ < text_.size() && (text_[pos_] == ' ' || text_[pos_] == '\t' || text_[pos_] == '\n' || text_[pos_] == '\r'))
+			++pos_;
+	}
+
+	bool Eat(char c)
+	{
+		SkipSpace();
+		if (pos_ >= text_.size() || text_[pos_] != c)
+			return false;
+		++pos_;
+		return true;
+	}
+
+	bool String(std::string &out)
+	{
+		if (!Eat('"'))
+			return false;
+		while (pos_ < text_.size()) {
+			const char c = text_[pos_++];
+			if (c == '"')
+				return true;
+			if (c != '\\') {
+				out += c;
+				continue;
+			}
+			if (pos_ >= text_.size())
+				return false;
+			const char escaped = text_[pos_++];
+			switch (escaped) {
+			case 'n': out += '\n'; break;
+			case 't': out += '\t'; break;
+			case 'r': out += '\r'; break;
+			case 'b': out += '\b'; break;
+			case 'f': out += '\f'; break;
+			case 'u':
+				if (pos_ + 4 > text_.size())
+					return false;
+				pos_ += 4;
+				out += '?';
+				break;
+			default: out += escaped; break;
+			}
+		}
+		return false;
+	}
+
+	// Locale independent (strtod would read "0,5" under a comma locale).
+	bool Number(double &out)
+	{
+		double sign = 1.0;
+		if (text_[pos_] == '-') {
+			sign = -1.0;
+			++pos_;
+		}
+		double mantissa = 0.0;
+		int exponent = 0;
+		bool digits = false;
+		for (; AtDigit(); ++pos_, digits = true)
+			mantissa = mantissa * 10.0 + (text_[pos_] - '0');
+		if (pos_ < text_.size() && text_[pos_] == '.') {
+			++pos_;
+			for (; AtDigit(); ++pos_, digits = true, --exponent)
+				mantissa = mantissa * 10.0 + (text_[pos_] - '0');
+		}
+		if (!digits)
+			return false;
+		if (pos_ < text_.size() && (text_[pos_] == 'e' || text_[pos_] == 'E')) {
+			++pos_;
+			int exponentSign = 1;
+			if (pos_ < text_.size() && (text_[pos_] == '+' || text_[pos_] == '-'))
+				exponentSign = text_[pos_++] == '-' ? -1 : 1;
+			if (!AtDigit())
+				return false;
+			int value = 0;
+			for (; AtDigit(); ++pos_)
+				value = std::min(value * 10 + (text_[pos_] - '0'), 9999);
+			exponent += exponentSign * value;
+		}
+		out = sign * mantissa * std::pow(10.0, exponent);
+		return true;
+	}
+
+	bool Literal(std::string_view word)
+	{
+		if (text_.substr(pos_, word.size()) != word)
+			return false;
+		pos_ += word.size();
+		return true;
+	}
+
+	bool Value(Json &out, int depth)
+	{
+		SkipSpace();
+		if (pos_ >= text_.size() || depth > 64)
+			return false;
+		const char c = text_[pos_];
+		if (c == '{' || c == '[') {
+			const bool object = c == '{';
+			const char close = object ? '}' : ']';
+			++pos_;
+			out.type = object ? Json::Type::Object : Json::Type::Array;
+			if (Eat(close))
+				return true;
+			do {
+				if (object) {
+					out.keys.emplace_back();
+					if (!String(out.keys.back()) || !Eat(':'))
+						return false;
+				}
+				out.items.emplace_back();
+				if (!Value(out.items.back(), depth + 1))
+					return false;
+			} while (Eat(','));
+			return Eat(close);
+		}
+		if (c == '"') {
+			out.type = Json::Type::String;
+			return String(out.string);
+		}
+		if (Literal("true")) {
+			out.type = Json::Type::Bool;
+			out.number = 1.0;
+			return true;
+		}
+		if (Literal("false")) {
+			out.type = Json::Type::Bool;
+			return true;
+		}
+		if (Literal("null"))
+			return true;
+		out.type = Json::Type::Number;
+		return Number(out.number);
+	}
+};
+
+bool ReadFloat(const Json *value, float &out)
+{
+	if (value == nullptr || value->type != Json::Type::Number)
+		return false;
+	out = static_cast<float>(value->number);
+	return std::isfinite(out);
+}
+
+bool ReadFloats(const Json *value, float *out, size_t count)
+{
+	if (value == nullptr || value->type != Json::Type::Array || value->items.size() != count)
+		return false;
+	for (size_t i = 0; i < count; ++i) {
+		if (!ReadFloat(&value->items[i], out[i]))
+			return false;
+	}
+	return true;
+}
+
+bool ReadVec3(const Json *value, Vec3 &out)
+{
+	float v[3];
+	if (!ReadFloats(value, v, 3))
+		return false;
+	out = { v[0], v[1], v[2] };
+	return true;
+}
+
+bool ReadIndex(const Json *value, size_t count, int &out)
+{
+	if (value == nullptr || value->type != Json::Type::Number || value->number < 0.0 || value->number >= static_cast<double>(count)
+	    || value->number != std::floor(value->number))
+		return false;
+	out = static_cast<int>(value->number);
+	return true;
+}
+
+bool ReadArray(const Json *value, const std::vector<Json> *&out)
+{
+	if (value == nullptr || value->type != Json::Type::Array)
+		return false;
+	out = &value->items;
+	return true;
+}
+
+bool UnitScale(const GltfNode &node)
+{
+	return std::abs(node.scale.x - 1.0F) < 1e-3F && std::abs(node.scale.y - 1.0F) < 1e-3F && std::abs(node.scale.z - 1.0F) < 1e-3F;
+}
+
+bool ReadSpringBones(const Json &root, const std::vector<GltfNode> &nodes, SpringBones &springs, std::string &error)
+{
+	const Json *block = root.find("DAMNATIONX_springBone");
+	if (block == nullptr)
+		return true;
+	const std::vector<Json> *colliders;
+	const std::vector<Json> *groups;
+	const std::vector<Json> *chains;
+	if (!ReadArray(block->find("colliders"), colliders) || !ReadArray(block->find("colliderGroups"), groups) || !ReadArray(block->find("springs"), chains)) {
+		error = "colliders, colliderGroups and springs must be arrays";
+		return false;
+	}
+	if (const Json *floor = block->find("floor"); floor != nullptr && !ReadFloat(floor, springs.floor)) {
+		error = "floor must be a number";
+		return false;
+	}
+	for (const Json &collider : *colliders) {
+		const Json *shape = collider.find("shape");
+		const Json *capsule = shape != nullptr ? shape->find("capsule") : nullptr;
+		SpringCapsule &out = springs.capsules.emplace_back();
+		if (capsule == nullptr || !ReadIndex(collider.find("node"), nodes.size(), out.node) || !ReadVec3(capsule->find("offset"), out.offset)
+		    || !ReadVec3(capsule->find("tail"), out.tail) || !ReadFloat(capsule->find("radius"), out.radius) || out.radius < 0.0F) {
+			error = "collider " + std::to_string(springs.capsules.size() - 1) + " is not a capsule on a node";
+			return false;
+		}
+	}
+	std::vector<std::vector<int>> groupCapsules;
+	for (const Json &group : *groups) {
+		const std::vector<Json> *members;
+		if (!ReadArray(group.find("colliders"), members)) {
+			error = "a collider group has no colliders array";
+			return false;
+		}
+		std::vector<int> &out = groupCapsules.emplace_back();
+		for (const Json &member : *members) {
+			if (!ReadIndex(&member, springs.capsules.size(), out.emplace_back())) {
+				error = "a collider group names a missing collider";
+				return false;
+			}
+		}
+	}
+	for (const Json &chain : *chains) {
+		SpringChain &out = springs.chains.emplace_back();
+		const std::string name = "spring " + std::to_string(springs.chains.size() - 1);
+		const std::vector<Json> *joints;
+		if (!ReadIndex(chain.find("parentNode"), nodes.size(), out.parentNode) || !ReadArray(chain.find("joints"), joints) || joints->size() < 2) {
+			error = name + " needs a parentNode and at least two joints";
+			return false;
+		}
+		for (const Json &joint : *joints) {
+			SpringJoint &j = out.joints.emplace_back();
+			const bool tip = out.joints.size() == joints->size();
+			if (!ReadIndex(joint.find("node"), nodes.size(), j.node)) {
+				error = name + " has a joint without a valid node";
+				return false;
+			}
+			const int expectedParent = out.joints.size() == 1 ? out.parentNode : out.joints[out.joints.size() - 2].node;
+			if (nodes[j.node].parent != expectedParent) {
+				error = name + ": node " + std::to_string(j.node) + " is not the child of the joint before it";
+				return false;
+			}
+			if (tip)
+				continue;
+			if (!ReadFloat(joint.find("hitRadius"), j.hitRadius) || !ReadFloat(joint.find("stiffness"), j.stiffness)
+			    || !ReadFloat(joint.find("gravityPower"), j.gravityPower) || !ReadFloat(joint.find("dragForce"), j.dragForce)) {
+				error = name + " has a joint without hitRadius, stiffness, gravityPower and dragForce";
+				return false;
+			}
+			if (joint.find("gravityDir") != nullptr && !ReadVec3(joint.find("gravityDir"), j.gravityDir)) {
+				error = name + " has a bad gravityDir";
+				return false;
+			}
+			j.gravityDir = skm::Normalize(j.gravityDir);
+			if (const Json *maxAngle = joint.find("maxAngle"); maxAngle != nullptr) {
+				float degrees;
+				if (!ReadFloat(maxAngle, degrees) || degrees < 0.0F || degrees > 180.0F) {
+					error = name + " has a maxAngle outside 0..180";
+					return false;
+				}
+				j.cosMaxAngle = std::cos(degrees * 3.14159265F / 180.0F);
+			}
+			if (!UnitScale(nodes[j.node])) {
+				error = name + ": spring joints must have unit scale";
+				return false;
+			}
+		}
+		for (size_t k = 1; k < out.joints.size(); ++k) {
+			const Vec3 bone = nodes[out.joints[k].node].translation;
+			if (skm::Dot(bone, bone) < 1e-12F) {
+				error = name + " has a zero length bone";
+				return false;
+			}
+		}
+		const std::vector<Json> *chainGroups;
+		if (!ReadArray(chain.find("colliderGroups"), chainGroups)) {
+			error = name + " has no colliderGroups array";
+			return false;
+		}
+		for (const Json &group : *chainGroups) {
+			int index;
+			if (!ReadIndex(&group, groupCapsules.size(), index)) {
+				error = name + " names a missing collider group";
+				return false;
+			}
+			out.capsules.insert(out.capsules.end(), groupCapsules[index].begin(), groupCapsules[index].end());
+		}
+		const Json *blend = chain.find("parentBlend");
+		if (blend == nullptr || blend->type == Json::Type::Null)
+			continue;
+		const std::vector<Json> *entries;
+		if (!ReadArray(blend, entries) || entries->empty()) {
+			error = name + ": parentBlend must be a non-empty array";
+			return false;
+		}
+		float weightSum = 0.0F;
+		for (const Json &entry : *entries) {
+			SpringParentBlend &e = out.parentBlend.emplace_back();
+			const Json *offset = entry.find("restOffset");
+			float rotation[4];
+			if (!ReadIndex(entry.find("node"), nodes.size(), e.node) || !ReadFloat(entry.find("weight"), e.weight) || e.weight < 0.0F
+			    || offset == nullptr || !ReadVec3(offset->find("translation"), e.translation) || !ReadFloats(offset->find("rotation"), rotation, 4)) {
+				error = name + " has a bad parentBlend entry";
+				return false;
+			}
+			e.rotation = skm::Normalize(Quat { rotation[0], rotation[1], rotation[2], rotation[3] });
+			weightSum += e.weight;
+		}
+		if (std::abs(weightSum - 1.0F) > 1e-3F) {
+			error = name + ": parentBlend weights must sum to 1";
+			return false;
+		}
+		std::stable_sort(out.parentBlend.begin(), out.parentBlend.end(), [](const SpringParentBlend &a, const SpringParentBlend &b) { return a.weight > b.weight; });
+	}
+	return true;
 }
 
 } // namespace
+
+bool ParseSpringBones(std::string_view extrasJson, const std::vector<GltfNode> &nodes, SpringBones &springs, std::string &error)
+{
+	springs = {};
+	Json root;
+	if (!JsonReader(extrasJson).Read(root)) {
+		error = "the extras are not valid JSON";
+		return false;
+	}
+	if (root.type != Json::Type::Object)
+		return true;
+	if (ReadSpringBones(root, nodes, springs, error))
+		return true;
+	springs = {};
+	error = "DAMNATIONX_springBone: " + error;
+	return false;
+}
 
 bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error, const GltfLoadOptions &options)
 {
@@ -400,7 +767,7 @@ bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &
 		model.imageBytes = model.images[static_cast<size_t>(model.bodyImage)].bytes;
 		model.imageMimeType = model.images[static_cast<size_t>(model.bodyImage)].mimeType;
 	}
-	if (meshNodes.size() > (options.allowStatic ? 255U : 128U)) {
+	if (meshNodes.size() > (options.allowStatic ? 255U : 128U)) { // skinned: the shader's 7-bit part index and 128-bit visibility mask (MaxSkinnedParts)
 		error = "too many mesh nodes";
 		return false;
 	}
@@ -431,6 +798,11 @@ bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &
 		error = "no geometry";
 		return false;
 	}
+	// Bad spring data leaves springError set; the model still loads and its cloth follows the skeleton rigidly.
+	if (data.extras.data != nullptr)
+		ParseSpringBones(data.extras.data, model.nodes, model.springs, model.springError);
+	for (SpringCapsule &capsule : model.springs.capsules)
+		capsule.part = model.findPart(model.nodes[capsule.node].name);
 	return LoadClips(data, model);
 }
 
@@ -439,6 +811,11 @@ void SampleClip(const GltfModel &model, int clip, float time, bool loop, std::ve
 	pose.resize(model.nodes.size());
 	for (size_t i = 0; i < model.nodes.size(); ++i)
 		pose[i] = { model.nodes[i].translation, model.nodes[i].rotation, model.nodes[i].scale };
+	SampleClipChannels(model, clip, time, loop, pose);
+}
+
+void SampleClipChannels(const GltfModel &model, int clip, float time, bool loop, std::vector<NodePose> &pose)
+{
 	if (clip < 0 || static_cast<size_t>(clip) >= model.clips.size())
 		return;
 	const GltfClip &source = model.clips[clip];

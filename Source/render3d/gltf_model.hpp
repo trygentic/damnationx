@@ -16,6 +16,7 @@
  */
 
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -88,6 +89,54 @@ struct GltfClip {
 	std::vector<GltfChannel> channels;
 };
 
+/** A capsule collider fixed to a body node (offset and tail in the node's space); a sphere when offset == tail. */
+struct SpringCapsule {
+	int node = -1;
+	skm::Vec3 offset;
+	skm::Vec3 tail;
+	float radius = 0.0F;
+	/** The part when the node is a mesh node (a held staff): it only collides while that part is drawn. -1: always. */
+	int part = -1;
+};
+
+struct SpringJoint {
+	int node = -1;
+	float hitRadius = 0.0F;
+	float stiffness = 1.0F;
+	float gravityPower = 0.0F;
+	skm::Vec3 gravityDir { 0.0F, -1.0F, 0.0F }; // world, unit
+	float dragForce = 0.5F;
+	/** Optional `maxAngle` (degrees in the file): how far the bone may swing from its animated rest direction. */
+	float cosMaxAngle = -1.0F;
+};
+
+/** One parentBlend entry: the chain root's rest frame carried by `node` (restOffset = inv(restGlobal(node)) * restGlobal(root)). */
+struct SpringParentBlend {
+	int node = -1;
+	float weight = 0.0F;
+	skm::Vec3 translation;
+	skm::Quat rotation;
+};
+
+/**
+ * A spring chain: joints root to tip, each the glTF child of the one before; the last entry only names the tip node
+ * that gives the bone before it its length and direction.
+ */
+struct SpringChain {
+	int parentNode = -1; // the glTF parent of the root joint
+	std::vector<SpringJoint> joints;
+	std::vector<int> capsules;                   // indices into SpringBones::capsules (collider groups flattened)
+	std::vector<SpringParentBlend> parentBlend; // empty, or sorted by weight, highest first
+};
+
+/** Spring bones from the GLB's root extras `DAMNATIONX_springBone` (VRMC_springBone 1.0 shape, render3d/spring_bone.hpp). */
+struct SpringBones {
+	std::vector<SpringCapsule> capsules;
+	std::vector<SpringChain> chains;
+	/** Optional `floor`: model space height no spring tail goes below; the ground the body dies on. */
+	float floor = -std::numeric_limits<float>::infinity();
+};
+
 struct GltfModel {
 	std::vector<SkinnedVertex> vertices;
 	std::vector<uint32_t> indices;
@@ -110,6 +159,10 @@ struct GltfModel {
 	/** A copy of the body's base colour image bytes (images[bodyImage]); the renderer may release it after decoding. */
 	std::vector<uint8_t> imageBytes;
 	std::string imageMimeType;
+	/** Loose cloth simulated at runtime; empty when the file has none or they were rejected (see springError). */
+	SpringBones springs;
+	/** Why the spring data was rejected; the model still loads and its cloth follows the skeleton rigidly. */
+	std::string springError;
 
 	[[nodiscard]] size_t paletteSize() const { return joints.size() + rigidNodes.size(); }
 	[[nodiscard]] int findClip(std::string_view name) const;
@@ -120,13 +173,19 @@ struct GltfModel {
 struct GltfLoadOptions {
 	/**
 	 * Also accept models without a skin (static meshes for render3d/placement.hpp): every mesh node is then rigid, and
-	 * up to 255 mesh nodes are allowed instead of 24.
+	 * up to 255 mesh nodes are allowed instead of 128.
 	 */
 	bool allowStatic = false;
 };
 
 /** Parses a .glb held in memory. False (with `error` set) when the file is not a usable skinned (or, with allowStatic, static) model. */
 bool LoadGltfModel(std::span<const uint8_t> glb, GltfModel &model, std::string &error, const GltfLoadOptions &options = {});
+
+/**
+ * Reads the spring bones from the root `extras` JSON text (`springs` stays empty when the key is absent). False, with
+ * `error` set and `springs` empty, when the data is malformed or does not fit `nodes`.
+ */
+bool ParseSpringBones(std::string_view extrasJson, const std::vector<GltfNode> &nodes, SpringBones &springs, std::string &error);
 
 /** Local TRS of every node, the pose being built. */
 struct NodePose {
@@ -141,6 +200,8 @@ struct NodePose {
  * clip < 0 gives the rest pose.
  */
 void SampleClip(const GltfModel &model, int clip, float time, bool loop, std::vector<NodePose> &pose);
+/** Writes only the clip's own channels over `pose` (an overlay such as a bow's flex), keeping every other node. */
+void SampleClipChannels(const GltfModel &model, int clip, float time, bool loop, std::vector<NodePose> &pose);
 
 /** Global (model space) matrix of every node for `pose`. */
 void ComputeGlobalMatrices(const GltfModel &model, const std::vector<NodePose> &pose, std::vector<skm::Mat4> &globals);

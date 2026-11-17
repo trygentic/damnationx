@@ -441,9 +441,11 @@ target_link_dependencies(libdevilutionx_gbuffer PUBLIC
   DevilutionX::SDL
 )
 
-# glTF loading and pose sampling of the skinned 3D warrior (cgltf); gltf_model_test.
+# glTF loading and pose sampling of the skinned 3D warrior (cgltf), plus runtime spring bones; gltf_model_test,
+# spring_bone_test.
 add_devilutionx_object_library(libdevilutionx_gltf_model
   render3d/gltf_model.cpp
+  render3d/spring_bone.cpp
   render3d/static_mesh.cpp
 )
 target_link_dependencies(libdevilutionx_gltf_model PUBLIC cgltf)

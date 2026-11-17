@@ -576,3 +576,18 @@ TEST(AnimationInfo, Stand) // Distribution Logic shouldn't change anything here
 	        new RenderingData(0.6f, 0),
 	    });
 }
+
+TEST(AnimationInfo, QueuedRepeatIdentityResetsOnFreshSequence)
+{
+ AnimationInfo anim {};
+ anim.setNewAnimation(std::nullopt, 12, 1, AnimationDistributionFlags::RepeatedAction, 0, 7);
+ EXPECT_TRUE(anim.isRepeatedAction());
+ anim.processAnimation();
+ EXPECT_TRUE(anim.isRepeatedAction());
+ anim.changeAnimationData(std::nullopt, 12, 1);
+ EXPECT_TRUE(anim.isRepeatedAction());
+ anim.setNewAnimation(std::nullopt, 8, 4);
+ EXPECT_FALSE(anim.isRepeatedAction());
+ anim.setNewAnimation(std::nullopt, 12, 1, AnimationDistributionFlags::ProcessAnimationPending, 2, 7);
+ EXPECT_FALSE(anim.isRepeatedAction());
+}

@@ -297,7 +297,7 @@ public:
 	explicit NullRenderer(RendererBackend backend) : backend_(backend) {}
 	bool Initialize(const RendererConfig &config, const OutputSurface *surface) override
 	{
-		if (config.backend != backend_ || initialized_ || (backend_ == RendererBackend::WebGPU && surface == nullptr)) return false;
+		if (config.backend != backend_ || initialized_ || (backend_ == RendererBackend::WebGPU && (surface == nullptr || surface->nativeHandle == nullptr))) return false;
 		initialized_ = true;
 		return true;
 	}
@@ -357,9 +357,19 @@ private:
 
 std::unique_ptr<Renderer> CreateRenderer(RendererBackend backend)
 {
-	if (backend == RendererBackend::Legacy)
+	switch (backend) {
+	case RendererBackend::Legacy:
 		return std::make_unique<LegacyRenderer>();
-	return std::make_unique<NullRenderer>(backend);
+	case RendererBackend::Headless:
+		return std::make_unique<NullRenderer>(backend);
+	case RendererBackend::WebGPU:
+#if DEVILUTIONX_WEBGPU
+		return std::make_unique<NullRenderer>(backend);
+#else
+		return nullptr;
+#endif
+	}
+	return nullptr;
 }
 
 SDL_Renderer *renderer;

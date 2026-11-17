@@ -448,8 +448,6 @@ DerivedData/
 
 # Don't accidentally commit the diabdat.mpq or any other MPQ files
 *.mpq
-# ...except the synthetic test archive of the Diablo II sound importer.
-!test/fixtures/d2sound/test.mpq
 
 ### Nintendo Switch ###
 exefs/main

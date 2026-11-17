@@ -196,5 +196,81 @@ TEST(GltfModel, SwordFollowsTheRightHand)
 	}
 }
 
+// Nodes 0 and 4 are body nodes; 1 -> 2 -> 3 is a chain of two joints and a tip.
+std::vector<GltfNode> SpringNodes()
+{
+	std::vector<GltfNode> nodes(5);
+	for (int i = 1; i <= 3; ++i) {
+		nodes[i].parent = i - 1;
+		nodes[i].translation = { 0.0F, -0.1F, 0.0F };
+	}
+	return nodes;
+}
+
+const std::string SpringExtras = R"({"note": "a \"quoted\" é name", "flag": true, "off": false, "nothing": null,
+ "DAMNATIONX_springBone": {
+  "colliders": [{"node": 0, "shape": {"capsule": {"offset": [0, -1.5e-1, 0.03], "tail": [0.2, -0.15, 3E-2], "radius": 0.05}}}],
+  "colliderGroups": [{"name": "pelvis", "colliders": [0]}],
+  "springs": [{"parentNode": 0, "colliderGroups": [0, 0],
+   "joints": [{"node": 1, "hitRadius": 0.02, "stiffness": 2.5, "gravityPower": 0.1, "gravityDir": [0, -2, 0], "dragForce": 0.4},
+              {"node": 2, "hitRadius": 0.03, "stiffness": 1, "gravityPower": 0, "dragForce": 0.5}, {"node": 3}],
+   "parentBlend": [{"node": 0, "weight": 0.25, "restOffset": {"translation": [0, 0, 0], "rotation": [0, 0, 0, 1]}},
+                   {"node": 4, "weight": 0.75, "restOffset": {"translation": [0.1, 0, 0], "rotation": [0, 0, 0, 2]}}]}]}})";
+
+TEST(GltfModel, ReadsSpringBones)
+{
+	SpringBones springs;
+	std::string error;
+	ASSERT_TRUE(ParseSpringBones(SpringExtras, SpringNodes(), springs, error)) << error;
+	ASSERT_EQ(springs.capsules.size(), 1U);
+	EXPECT_FLOAT_EQ(springs.capsules[0].offset.y, -0.15F);
+	EXPECT_FLOAT_EQ(springs.capsules[0].tail.z, 0.03F);
+	EXPECT_FLOAT_EQ(springs.capsules[0].radius, 0.05F);
+	ASSERT_EQ(springs.chains.size(), 1U);
+	const SpringChain &chain = springs.chains[0];
+	EXPECT_EQ(chain.parentNode, 0);
+	EXPECT_EQ(chain.capsules, (std::vector<int> { 0, 0 }));
+	ASSERT_EQ(chain.joints.size(), 3U);
+	EXPECT_EQ(chain.joints[2].node, 3);
+	EXPECT_FLOAT_EQ(chain.joints[0].stiffness, 2.5F);
+	EXPECT_FLOAT_EQ(chain.joints[0].gravityDir.y, -1.0F); // normalised
+	EXPECT_FLOAT_EQ(chain.joints[1].hitRadius, 0.03F);
+	EXPECT_FLOAT_EQ(chain.joints[1].gravityDir.y, -1.0F); // default
+	ASSERT_EQ(chain.parentBlend.size(), 2U);
+	EXPECT_EQ(chain.parentBlend[0].node, 4); // highest weight first
+	EXPECT_FLOAT_EQ(chain.parentBlend[0].translation.x, 0.1F);
+	EXPECT_FLOAT_EQ(chain.parentBlend[0].rotation.w, 1.0F); // normalised
+
+	ASSERT_TRUE(ParseSpringBones(R"({"other": [1, 2]})", SpringNodes(), springs, error));
+	EXPECT_TRUE(springs.chains.empty());
+}
+
+TEST(GltfModel, RejectsBadSpringBones)
+{
+	const auto replaced = [](std::string_view from, std::string_view to) {
+		std::string text = SpringExtras;
+		const size_t at = text.find(from);
+		EXPECT_NE(at, std::string::npos) << from;
+		return text.replace(at, from.size(), to);
+	};
+	const std::string cases[] {
+		"{\"DAMNATIONX_springBone\": ",
+		replaced("{\"node\": 2, \"hitRadius\"", "{\"node\": 3, \"hitRadius\""), // skips a level of the chain
+		replaced("\"weight\": 0.75", "\"weight\": 0.5"),
+		replaced("\"colliderGroups\": [0, 0]", "\"colliderGroups\": [0, 1]"),
+		replaced("\"radius\": 0.05", "\"radius\": -1"),
+		replaced("\"stiffness\": 2.5, ", ""),
+		replaced("{\"node\": 3}", "{\"node\": 5}"),
+		replaced("\"node\": 1,", "\"node\": 1.5,"),
+	};
+	for (const std::string &text : cases) {
+		SpringBones springs;
+		std::string error;
+		EXPECT_FALSE(ParseSpringBones(text, SpringNodes(), springs, error)) << text;
+		EXPECT_FALSE(error.empty());
+		EXPECT_TRUE(springs.chains.empty() && springs.capsules.empty());
+	}
+}
+
 } // namespace
 } // namespace devilution::render3d

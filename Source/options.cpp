@@ -1031,7 +1031,9 @@ GraphicsOptions::GraphicsOptions()
               { GBufferDebugView::Volume, N_("Volume") },
               { GBufferDebugView::Emissive, N_("Emissive") },
           })
-    , warrior3dModel("3D Warrior Model", HybridOptionFlags(), N_("3D Character Models"), N_("Draw the Warrior and the Rogue as lit, animated 3D models instead of prerendered HD sprites (needs the HD pack)."), true)
+    , warrior3dModel("3D Warrior Model", HybridOptionFlags(), N_("3D Warrior Model"), N_("Draw the Warrior as a lit, animated 3D model instead of prerendered HD sprites (needs the HD pack)."), true)
+    , rogue3dModel("3D Rogue Model", HybridOptionFlags(), N_("3D Rogue Model"), N_("Draw supported Rogue animations as a lit 3D model; missing animations and equipment use HD sprites (needs the HD pack)."), true)
+    , sorcerer3dModel("3D Sorcerer Model", HybridOptionFlags(), N_("3D Sorcerer Model (WIP)"), N_("Work in progress: draw the Sorcerer's walk and attack as a lit 3D model with simulated cloth and no weapon shown; other animations use HD sprites (needs the HD pack)."), false)
     , colorCycling("Color Cycling", OptionEntryFlags::None, N_("Color Cycling"), N_("Color cycling effect used for water, lava, and acid animation."), true)
     , alternateNestArt("Alternate nest art", OptionEntryFlags::OnlyHellfire | OptionEntryFlags::CantChangeInGame, N_("Alternate nest art"), N_("The game will use an alternative palette for Hellfire’s nest tileset."), false)
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -1113,6 +1115,8 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&hybridAmbient,
 		&hybridDebugView,
 		&warrior3dModel,
+		&rogue3dModel,
+		&sorcerer3dModel,
 		&colorCycling,
 		&alternateNestArt,
 #if SDL_VERSION_ATLEAST(2, 0, 0)

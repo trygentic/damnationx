@@ -1,0 +1,16 @@
+{
+  "about": "Release-only binaries kept out of git. package_host.py reads them from --release-inputs (DAMNATIONX_RELEASE_INPUTS) and checks these SHA-256 sums.",
+  "required": {
+    "assets/frontend/camp-background.png": "798319fe0a2c8e9246b8167e5d0c2d4f6f8b19bd276c8b0de3496852d598c950",
+    "assets/frontend/damnationx-logo.png": "90cff1467155f4f15893fe7356e61dabb5db56b3299f21a09bb34330c74520cb",
+    "assets/frontend/intro-malyx.mp3": "c312ae09f909f49caec152af30e7bbe550560093a2eb8aa3de9cfda06b8d18b8",
+    "assets/frontend/logo-idle-0.png": "c2e0429bbbfbdb8e29e1cce5ee5e5b5ee51c4d93520c67196b1fd70effe02173",
+    "assets/frontend/queen-idle-0.png": "caadfc521264ccf83ed25374f1aa911157bf5d27cebd092a1dd56523d0afb187",
+    "assets/frontend/queen-portrait.png": "b44629f43ef2d561ada91948ec3450e83fe4a4f211c64e349c931e8684253887",
+    "assets/frontend/queen-standing-idle-0.png": "53a5242e602e9a77f06fb7aaee5ace2733b32264429477caece21b546a4adf44",
+    "assets/frontend/queen-standing-portrait.png": "a0a37977f7f65ffd81950ee090b887da450ebcd0b947e7290fb8b9919a36fdef"
+  },
+  "optional": {
+    "references/graphics/demon-queen/lilith-editable.tar.gz": null
+  }
+}

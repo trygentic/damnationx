@@ -397,7 +397,7 @@ bool HdSpritesDrawPlayer(const Surface &out, const Player &player, Point targetB
 		// rather than flashing the classic one. A failed index or a pass without HD sprites keeps the classic body.
 		return WorldPassAllowed && CurrentIndexState == IndexState::Loading && player._pClass == HeroClass::Warrior;
 	}
-	// The skinned 3D warrior (option "3D Warrior Model"), rendered this frame as an imposter through an external clip;
+	// Supported skinned Warrior/Rogue states render as imposters through an external clip;
 	// the prerendered clips below stay the fallback when the model cannot draw this player.
 	if (render3d::SkinnedPlayerWanted(player)) {
 		const int clip = ImposterClip(player.getId());

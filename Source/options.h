@@ -695,6 +695,10 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryEnum<GBufferDebugView> hybridDebugView;
 	/** @brief Draw the Warrior as the skinned 3D model (render3d/skinned_renderer.hpp) instead of its prerendered HD sprites (WebGPU builds only). */
 	OptionEntryBoolean warrior3dModel;
+	/** Draw supported Rogue states with the HD pack skinned model; other states retain sprites. */
+	OptionEntryBoolean rogue3dModel;
+	/** WIP: draw the Sorcerer's walk and attack with the HD pack skinned model (spring-bone cloth, no weapon mesh). */
+	OptionEntryBoolean sorcerer3dModel;
 	/** @brief Enable color cycling animations. */
 	OptionEntryBoolean colorCycling;
 	/** @brief Use alternate nest palette. */

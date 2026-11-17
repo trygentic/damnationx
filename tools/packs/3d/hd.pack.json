@@ -113,8 +113,8 @@
   "characters": [
     {
       "class": "warrior",
-      "version": "v10b",
-      "source": "damnationx_3d_characters_20261018/Warrior/warrior.glb",
+      "version": "W2m-p",
+      "source": "beta12/warrior.glb",
       "install": "hd/3d/warrior/warrior.glb",
       "variants": {
         "_1024": 1024
@@ -122,9 +122,18 @@
     },
     {
       "class": "rogue",
-      "version": "v24d",
-      "source": "damnationx_3d_characters_20261018/Rogue/rogue.glb",
+      "version": "r2c",
+      "source": "beta12/rogue.glb",
       "install": "hd/3d/rogue/rogue.glb",
+      "variants": {
+        "_1024": 1024
+      }
+    },
+    {
+      "class": "sorcerer",
+      "version": "48i",
+      "source": "beta12/sorcerer.glb",
+      "install": "hd/3d/sorcerer/sorcerer.glb",
       "variants": {
         "_1024": 1024
       }

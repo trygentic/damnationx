@@ -90,6 +90,9 @@ public:
 		return relevantFramesForDistributing_ > 0;
 	}
 
+	/** Whether this sequence was started as a queued repeat by the game simulation. */
+	[[nodiscard]] bool isRepeatedAction() const { return repeatedAction_; }
+
 	/**
 	 * @brief Sets the new Animation with all relevant information for rendering
 	 * @param sprites Animation sprites
@@ -122,6 +125,7 @@ public:
 	constexpr static uint8_t baseValueFraction = 128;
 
 private:
+	bool repeatedAction_ = false;
 	/**
 	 * @brief returns the progress as a fraction in time to the next game tick or no progress if the animation is frozen (see baseValueFraction)
 	 */

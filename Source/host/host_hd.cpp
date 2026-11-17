@@ -342,7 +342,7 @@ void InitHdPack()
 		Packs |= kPackFree3D;
 	if (FileExists(StrCat(HdDir, "3d/hd/manifest.json")) || DirectoryExists(StrCat(HdDir, "3d/hd/placements").c_str()))
 		Packs |= kPackHd3D;
-	for (const char *model : { "3d/warrior/warrior.glb", "3d/rogue/rogue.glb" }) {
+	for (const char *model : { "3d/warrior/warrior.glb", "3d/rogue/rogue.glb", "3d/sorcerer/sorcerer.glb" }) {
 		if (FileExists(StrCat(HdDir, model)))
 			Packs |= kPackCharacters3D;
 	}

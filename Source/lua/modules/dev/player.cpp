@@ -8,11 +8,14 @@
 
 #include "debug.h"
 #include "engine/assets.hpp"
+#include "levels/gendung.h"
 #include "lua/metadoc.hpp"
 #include "lua/modules/dev/player/gold.hpp"
 #include "lua/modules/dev/player/spells.hpp"
 #include "lua/modules/dev/player/stats.hpp"
+#include "msg.h"
 #include "player.h"
+#include "tables/spelldat.h"
 
 namespace devilution {
 
@@ -90,6 +93,28 @@ sol::table LuaDevPlayerTrnModule(sol::state_view &lua)
 	return table;
 }
 
+std::string DebugCmdCast(int spell, int dx, int dy)
+{
+	const Point target = MyPlayer->position.tile + Displacement { dx, dy };
+	NetSendCmdLocParam3(true, CMD_SPELLXY, target, static_cast<int8_t>(spell), static_cast<uint8_t>(SpellType::Spell), 0);
+	return StrCat("Cast ", spell, " at ", target.x, ",", target.y);
+}
+
+std::string DebugCmdAttack(int dx, int dy)
+{
+	const Point target = MyPlayer->position.tile + Displacement { dx, dy };
+	NetSendCmdLoc(MyPlayerId, true, CMD_SATTACKXY, target);
+	return StrCat("Attack at ", target.x, ",", target.y);
+}
+
+std::string DebugCmdHit()
+{
+	if (leveltype == DTYPE_TOWN)
+		return "No hit graphics in town";
+	StartPlrHit(*MyPlayer, 0, true);
+	return "Hit";
+}
+
 std::string DebugCmdInvisible(std::optional<bool> on)
 {
 	DebugInvisible = on.value_or(!DebugInvisible);
@@ -108,6 +133,9 @@ sol::table LuaDevPlayerModule(sol::state_view &lua)
 	LuaSetDoc(table, "spells", "", "Adjust player spells.", LuaDevPlayerSpellsModule(lua));
 	LuaSetDoc(table, "stats", "", "Adjust player stats (Strength, HP, etc).", LuaDevPlayerStatsModule(lua));
 	LuaSetDoc(table, "trn", "", "Set player TRN to '${name}.trn'", LuaDevPlayerTrnModule(lua));
+	LuaSetDocFn(table, "cast", "(spell: number, dx: number, dy: number)", "Cast a known spell at a tile offset.", &DebugCmdCast);
+	LuaSetDocFn(table, "attack", "(dx: number, dy: number)", "Attack in place toward a tile offset.", &DebugCmdAttack);
+	LuaSetDocFn(table, "hit", "()", "Play the hit reaction.", &DebugCmdHit);
 	LuaSetDocFn(table, "invisible", "(on: boolean = nil)", "Toggle invisibility.", &DebugCmdInvisible);
 	return table;
 }

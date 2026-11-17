@@ -155,6 +155,8 @@ set(standalone_tests
   hd_objects_test
   hd_view_transform_test
   gltf_model_test
+  skinned_animation_test
+  spring_bone_test
   placement_test
   ui_scale_test
   dun_render_golden_test
@@ -390,6 +392,7 @@ target_link_dependencies(hd_items_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(hd_objects_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(hd_view_transform_test PRIVATE libdevilutionx_hd_sprites_core)
 target_link_dependencies(gltf_model_test PRIVATE libdevilutionx_gltf_model)
+target_link_dependencies(spring_bone_test PRIVATE libdevilutionx_gltf_model)
 target_link_dependencies(placement_test PRIVATE libdevilutionx_placement)
 target_compile_definitions(gltf_model_test PRIVATE "WARRIOR_GLB_PATH=\"${PROJECT_SOURCE_DIR}/assets/3d/warrior/warrior.glb\"")
 add_hybrid_test_fixtures(hybrid_reference_test hybrid README.md volume_synthetic.bin planes_synthetic.bin)
